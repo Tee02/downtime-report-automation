@@ -20,6 +20,8 @@ export type DowntimeRecord = {
   technicalMinutes: number;
   operationsMinutes: number;
   evacuationMinutes: number;
+  downtimePercentage: number;
+  isClosed: boolean;
   status: "matched" | "unmatched";
   matchNote: string;
 };
@@ -31,22 +33,27 @@ export type ProcessingResult = {
   totalTechnicalMinutes: number;
   totalOperationsMinutes: number;
   totalEvacuationMinutes: number;
+  totalNetworkPercentage: number;
+  closedRideCount: number;
   summaryByRide: Array<{
     rideCode: string;
     attraction: string;
     minutes: number;
     events: number;
     evacuationMinutes: number;
+    percentage: number;
+    isClosed: boolean;
   }>;
   outputBuffer: Buffer;
   outputFileName: string;
 };
 
-const SHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-const TECHNICAL_FILL_STYLE = "183";
-const OPERATIONS_FILL_STYLE = "184";
-const EVACUATION_FILL_STYLE = "181";
+const TECHNICAL_FILL_ID = "3";
+const OPERATIONS_FILL_ID = "4";
+const EVACUATION_FILL_ID = "17";
+const CLOSED_FILL_ID = "10";
 const DAILY_OPERATING_MINUTES = 480;
+const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 18;
 
 const ATTRACTION_CODES: Record<string, string> = {
   ACR: "ACR",
@@ -249,8 +256,9 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
   const rows = parseRows(recordsSheet.xml, sharedStrings);
   const results: DowntimeRecord[] = [];
   for (const row of rows) {
-    const code = row.cells.get("D")?.value.trim();
-    if (code !== "11-1") continue;
+    const code = row.cells.get("D")?.value.trim() ?? "";
+    const isClosed = code.toUpperCase() === "CLOSED";
+    if (code !== "11-1" && !isClosed) continue;
     const rawDate = row.cells.get("A")?.value ?? "";
     const recordDateKey = excelDateToKey(rawDate);
     const attraction = row.cells.get("B")?.value.trim() ?? "";
@@ -277,6 +285,8 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
       technicalMinutes: durationMinutes(technicalStart, technicalEnd),
       operationsMinutes: durationMinutes(technicalEnd, operationsEnd),
       evacuationMinutes: durationMinutes(evacuationStart, evacuationEnd),
+      downtimePercentage: isClosed ? 0 : (durationMinutes(technicalStart, technicalEnd) / DAILY_OPERATING_MINUTES) * 100,
+      isClosed,
       status: "unmatched",
       matchNote: "Awaiting template match",
     };
@@ -290,6 +300,7 @@ type TemplateMaps = {
   summarySheet?: SheetInfo;
   timeStartColumn: number;
   timelineRows: Map<string, number>;
+  dayRows: Map<string, { start: number; end: number }>;
   summaryRows: Map<string, number>;
   summaryDateColumns: Map<string, number>;
 };
@@ -310,12 +321,17 @@ function buildTemplateMaps(sheets: SheetInfo[], sharedStrings: string[]): Templa
   );
   if (!Number.isFinite(timeStartColumn)) throw new Error("The technical template does not expose a minute-by-minute timeline in row 3.");
   const timelineMap = new Map<string, number>();
+  const dayRows = new Map<string, { start: number; end: number }>();
   let activeDate: string | undefined;
   for (const row of timelineRows) {
     const candidateDate = timelineDateKey(row.cells.get("A")?.value ?? "");
     if (candidateDate) activeDate = candidateDate;
     const code = row.cells.get("B")?.value.trim();
-    if (activeDate && code) timelineMap.set(`${activeDate}|${code}`, row.number);
+    if (activeDate && code) {
+      timelineMap.set(`${activeDate}|${code}`, row.number);
+      const range = dayRows.get(activeDate);
+      dayRows.set(activeDate, range ? { start: range.start, end: row.number } : { start: row.number, end: row.number });
+    }
   }
   const summaryRows = new Map<string, number>();
   const summaryDateColumns = new Map<string, number>();
@@ -331,7 +347,7 @@ function buildTemplateMaps(sheets: SheetInfo[], sharedStrings: string[]): Templa
       if (code) summaryRows.set(code, row.number);
     }
   }
-  return { timelineSheet, summarySheet, timeStartColumn, timelineRows: timelineMap, summaryRows, summaryDateColumns };
+  return { timelineSheet, summarySheet, timeStartColumn, timelineRows: timelineMap, dayRows, summaryRows, summaryDateColumns };
 }
 
 function styleFromCell(cell: string): string | undefined {
@@ -359,11 +375,103 @@ function setText(rowXml: string, reference: string, value: string): string {
   return replaceCell(rowXml, reference, ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is>`);
 }
 
+function setFormula(rowXml: string, reference: string, formula: string, cachedValue: number): string {
+  return replaceCell(rowXml, reference, `><f>${escapeXml(formula)}</f><v>${Number.isFinite(cachedValue) ? cachedValue : 0}</v>`);
+}
+
 function setStyle(rowXml: string, reference: string, style: string): string {
   const existing = findCell(rowXml, reference);
   if (!existing) return replaceCell(rowXml, reference, `><v></v>`, style);
   const body = /<c\b[^>]*>([\s\S]*?)<\/c>/.exec(existing)?.[1] ?? "";
   return replaceCell(rowXml, reference, `>${body}`, style);
+}
+
+type TimelineStyleKind = "technical" | "operations" | "evacuation" | "closed";
+type StyleVariants = {
+  stylesheetXml: string;
+  timeline: Record<TimelineStyleKind, Map<string, string>>;
+  percentage: Map<string, string>;
+};
+
+function withXfAttributes(xf: string, attributes: Record<string, string>): string {
+  const openTag = /<xf\b[^>]*(?:\/>|>)/.exec(xf)?.[0];
+  if (!openTag) return xf;
+  let updatedTag = openTag;
+  for (const [name, value] of Object.entries(attributes)) {
+    const attributePattern = new RegExp(`\\s${name}="[^"]*"`);
+    updatedTag = attributePattern.test(updatedTag)
+      ? updatedTag.replace(attributePattern, ` ${name}="${value}"`)
+      : updatedTag.endsWith("/>")
+        ? updatedTag.replace(/\/>$/, ` ${name}="${value}"/>`)
+        : updatedTag.replace(/>$/, ` ${name}="${value}">`);
+  }
+  return xf.replace(openTag, updatedTag);
+}
+
+function extractCellXfs(content: string): string[] {
+  const xfs: string[] = [];
+  let cursor = 0;
+  while (cursor < content.length) {
+    const start = content.indexOf("<xf", cursor);
+    if (start < 0) break;
+    const tagEnd = content.indexOf(">", start);
+    if (tagEnd < 0) break;
+    const openTag = content.slice(start, tagEnd + 1);
+    if (openTag.endsWith("/>")) {
+      xfs.push(openTag);
+      cursor = tagEnd + 1;
+      continue;
+    }
+    const close = content.indexOf("</xf>", tagEnd);
+    if (close < 0) break;
+    xfs.push(content.slice(start, close + 5));
+    cursor = close + 5;
+  }
+  return xfs;
+}
+
+function createStyleVariants(stylesheetXml: string): StyleVariants {
+  const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(stylesheetXml);
+  if (!container) throw new Error("The Technical template does not expose cell formatting definitions.");
+  const xfs = extractCellXfs(container[2]);
+  if (xfs.length === 0) throw new Error("The Technical template does not expose reusable cell formatting.");
+  const fillIds: Record<TimelineStyleKind, string> = {
+    technical: TECHNICAL_FILL_ID,
+    operations: OPERATIONS_FILL_ID,
+    evacuation: EVACUATION_FILL_ID,
+    closed: CLOSED_FILL_ID,
+  };
+  const timeline = {
+    technical: new Map<string, string>(),
+    operations: new Map<string, string>(),
+    evacuation: new Map<string, string>(),
+    closed: new Map<string, string>(),
+  };
+  const percentage = new Map<string, string>();
+  const additions: string[] = [];
+  let nextStyle = xfs.length;
+  xfs.forEach((xf, index) => {
+    const base = String(index);
+    (Object.keys(fillIds) as TimelineStyleKind[]).forEach(kind => {
+      timeline[kind].set(base, String(nextStyle++));
+      additions.push(withXfAttributes(xf, { fillId: fillIds[kind], applyFill: "1" }));
+    });
+    percentage.set(base, String(nextStyle++));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
+  });
+  const updatedOpen = /\bcount="\d+"/.test(container[1])
+    ? container[1].replace(/\bcount="\d+"/, `count="${nextStyle}"`)
+    : container[1].replace(">", ` count="${nextStyle}">`);
+  return {
+    stylesheetXml: stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
+    timeline,
+    percentage,
+  };
+}
+
+function deriveStyle(existingCell: string | undefined, variants: Map<string, string>): string {
+  const originalStyle = existingCell ? styleFromCell(existingCell) ?? "0" : "0";
+  return variants.get(originalStyle) ?? variants.get("0") ?? originalStyle;
 }
 
 function changeRows(xml: string, updates: Map<number, (rowXml: string) => string>): string {
@@ -373,9 +481,9 @@ function changeRows(xml: string, updates: Map<number, (rowXml: string) => string
   });
 }
 
-function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps): Map<number, (rowXml: string) => string> {
+function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
   const byRow = new Map<number, DowntimeRecord[]>();
-  for (const record of records.filter(item => item.status === "matched" && item.rideCode && item.technicalStart !== undefined && item.technicalEnd !== undefined)) {
+  for (const record of records.filter(item => item.status === "matched" && item.rideCode && (item.isClosed || (item.technicalStart !== undefined && item.technicalEnd !== undefined)))) {
     const key = `${timelineDateKey(record.dateKey)}|${record.rideCode}`;
     const row = maps.timelineRows.get(key);
     if (!row) continue;
@@ -384,9 +492,9 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps): 
   const updates = new Map<number, (rowXml: string) => string>();
   for (const [rowNumber, rowRecords] of Array.from(byRow.entries())) {
     updates.set(rowNumber, rowXml => {
-      const cellStyles = new Map<string, { style: string; priority: number }>();
+      const cellStyles = new Map<string, { kind: TimelineStyleKind; priority: number }>();
       const descriptions: Array<{ reference: string; value: string }> = [];
-      const setRange = (start: number | undefined, end: number | undefined, style: string, priority: number) => {
+      const setRange = (start: number | undefined, end: number | undefined, kind: TimelineStyleKind, priority: number) => {
         if (start === undefined || end === undefined) return;
         const finalEnd = end >= start ? end : end + 1440;
         for (let minute = start; minute <= finalEnd; minute++) {
@@ -394,21 +502,28 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps): 
           if (column < maps.timeStartColumn) continue;
           const reference = `${numberToColumn(column)}${rowNumber}`;
           const previous = cellStyles.get(reference);
-          if (!previous || priority >= previous.priority) cellStyles.set(reference, { style, priority });
+          if (!previous || priority >= previous.priority) cellStyles.set(reference, { kind, priority });
         }
       };
       for (const record of rowRecords) {
-        setRange(record.technicalStart, record.technicalEnd, TECHNICAL_FILL_STYLE, 1);
-        if (record.operationsEnd !== undefined && record.technicalEnd !== undefined) {
-          setRange(record.technicalEnd + 1, record.operationsEnd, OPERATIONS_FILL_STYLE, 2);
+        if (record.isClosed) {
+          setRange(600, 1079, "closed", 4);
+          descriptions.push({ reference: `${numberToColumn(maps.timeStartColumn)}${rowNumber}`, value: `Closed — ${record.description}` });
+          continue;
         }
-        setRange(record.evacuationStart, record.evacuationEnd, EVACUATION_FILL_STYLE, 3);
+        setRange(record.technicalStart, record.technicalEnd, "technical", 1);
+        if (record.operationsEnd !== undefined && record.technicalEnd !== undefined) {
+          setRange(record.technicalEnd + 1, record.operationsEnd, "operations", 2);
+        }
+        setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 3);
         const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (record.technicalStart! % 1440) - 605);
         descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
       }
       let revised = rowXml;
       for (const description of descriptions) revised = setText(revised, description.reference, description.value);
-      for (const [reference, detail] of Array.from(cellStyles.entries())) revised = setStyle(revised, reference, detail.style);
+      for (const [reference, detail] of Array.from(cellStyles.entries())) {
+        revised = setStyle(revised, reference, deriveStyle(findCell(revised, reference), variants.timeline[detail.kind]));
+      }
       return revised;
     });
   }
@@ -429,7 +544,7 @@ type DailyAggregate = {
 
 function aggregateRecords(records: DowntimeRecord[]): Map<string, DailyAggregate> {
   const aggregates = new Map<string, DailyAggregate>();
-  for (const record of records.filter(item => item.status === "matched" && item.rideCode)) {
+  for (const record of records.filter(item => item.status === "matched" && item.rideCode && !item.isClosed)) {
     const key = `${record.dateKey}|${record.rideCode}`;
     const current = aggregates.get(key) ?? {
       dateKey: record.dateKey,
@@ -475,18 +590,28 @@ function prepareSummaryUpdates(aggregates: Map<string, DailyAggregate>, maps: Te
   return new Map(Array.from(updates.entries()).map(([row, operations]) => [row, (xml: string) => operations.reduce((output, operation) => operation(output), xml)]));
 }
 
-function prepareDailyRatioUpdates(aggregates: Map<string, DailyAggregate>, maps: TemplateMaps): Map<number, (rowXml: string) => string> {
+function prepareDailyPercentageUpdates(aggregates: Map<string, DailyAggregate>, maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
   const entries = new Map<number, DailyAggregate>();
   for (const aggregate of Array.from(aggregates.values())) {
     const row = maps.timelineRows.get(`${timelineDateKey(aggregate.dateKey)}|${aggregate.rideCode}`);
     if (row) entries.set(row, aggregate);
   }
-  return new Map(Array.from(entries.entries()).map(([row, aggregate]) => [row, (xml: string) => setNumber(xml, `D${row}`, aggregate.technicalMinutes / DAILY_OPERATING_MINUTES)]));
-}
-
-function markWorkbookForRecalculation(xml: string): string {
-  if (/<calcPr\b/.test(xml)) return xml.replace(/<calcPr\b([^>]*)\/?\s*>/, (_match, attrs) => `<calcPr${attrs} fullCalcOnLoad="1" forceFullCalc="1"/>`);
-  return xml.replace("</workbook>", `<calcPr calcId="0" fullCalcOnLoad="1" forceFullCalc="1"/></workbook>`);
+  return new Map(Array.from(entries.entries()).map(([row, aggregate]) => [row, (xml: string) => {
+    const percentageReference = `D${row}`;
+    let revised = setFormula(xml, percentageReference, `${aggregate.technicalMinutes}/${DAILY_OPERATING_MINUTES}`, aggregate.technicalMinutes / DAILY_OPERATING_MINUTES);
+    revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), variants.percentage));
+    const dayKey = timelineDateKey(aggregate.dateKey);
+    const dayRange = dayKey ? maps.dayRows.get(dayKey) : undefined;
+    if (dayRange?.start === row) {
+      const totalMinutes = Array.from(aggregates.values())
+        .filter(item => timelineDateKey(item.dateKey) === dayKey)
+        .reduce((total, item) => total + item.technicalMinutes, 0);
+      const totalReference = `E${row}`;
+      revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/18`, totalMinutes / FLEET_OPERATING_MINUTES);
+      revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), variants.percentage));
+    }
+    return revised;
+  }]));
 }
 
 export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templateBuffer: Buffer): Promise<ProcessingResult> {
@@ -497,9 +622,16 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const records = parseOperations(operationsSheet, operationWorkbook.sharedStrings);
   if (records.length === 0) throw new Error("No downtime records with the 11-1 code were found in the Operations workbook.");
   const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings);
+  const styleVariants = createStyleVariants(await textFromZip(templateZip, "xl/styles.xml"));
+  templateZip.file("xl/styles.xml", styleVariants.stylesheetXml);
   for (const record of records) {
     if (!record.dateKey) record.matchNote = "The source row does not include a usable date.";
     else if (!record.rideCode) record.matchNote = "The attraction is not mapped to a Technical template ride code.";
+    else if (record.isClosed && !maps.timelineRows.has(`${timelineDateKey(record.dateKey)}|${record.rideCode}`)) record.matchNote = "No matching date and ride row exists in the supplied Technical template.";
+    else if (record.isClosed) {
+      record.status = "matched";
+      record.matchNote = "Closed ride detected; the full 10:00–18:00 operating period will receive the template’s closure color.";
+    }
     else if (record.technicalStart === undefined || record.technicalEnd === undefined) record.matchNote = "A downtime start or ride-readiness time is missing.";
     else if (!maps.timelineRows.has(`${timelineDateKey(record.dateKey)}|${record.rideCode}`)) record.matchNote = "No matching date and ride row exists in the supplied Technical template.";
     else {
@@ -508,9 +640,9 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     }
   }
   const aggregates = aggregateRecords(records);
-  const timelineUpdates = prepareTimelineUpdates(records, maps);
-  const dailyRatioUpdates = prepareDailyRatioUpdates(aggregates, maps);
-  for (const [row, update] of Array.from(dailyRatioUpdates.entries())) {
+  const timelineUpdates = prepareTimelineUpdates(records, maps, styleVariants);
+  const dailyPercentageUpdates = prepareDailyPercentageUpdates(aggregates, maps, styleVariants);
+  for (const [row, update] of Array.from(dailyPercentageUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
@@ -523,28 +655,33 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     const summaryXml = changeRows(maps.summarySheet.xml, prepareSummaryUpdates(aggregates, maps));
     templateZip.file(maps.summarySheet.path, summaryXml);
   }
-  templateZip.file("xl/workbook.xml", markWorkbookForRecalculation(await textFromZip(templateZip, "xl/workbook.xml")));
   const summaryByRide = Array.from(
-    Array.from(aggregates.values())
-    .reduce((summary, aggregate) => {
-      const current = summary.get(aggregate.rideCode) ?? { rideCode: aggregate.rideCode, attraction: aggregate.attraction, minutes: 0, events: 0, evacuationMinutes: 0 };
-      current.minutes += aggregate.technicalMinutes;
-      current.events += aggregate.events;
-      current.evacuationMinutes += aggregate.evacuationMinutes;
-      summary.set(aggregate.rideCode, current);
+    records.filter(record => record.status === "matched" && record.rideCode)
+    .reduce((summary, record) => {
+      const current = summary.get(record.rideCode!) ?? { rideCode: record.rideCode!, attraction: record.attraction, minutes: 0, events: 0, evacuationMinutes: 0, percentage: 0, isClosed: false };
+      if (record.isClosed) current.isClosed = true;
+      else {
+        current.minutes += record.technicalMinutes;
+        current.events += 1;
+        current.evacuationMinutes += record.evacuationMinutes;
+      }
+      current.percentage = (current.minutes / DAILY_OPERATING_MINUTES) * 100;
+      summary.set(record.rideCode!, current);
       return summary;
-    }, new Map<string, { rideCode: string; attraction: string; minutes: number; events: number; evacuationMinutes: number }>())
+    }, new Map<string, { rideCode: string; attraction: string; minutes: number; events: number; evacuationMinutes: number; percentage: number; isClosed: boolean }>())
     .values()
   );
   const outputBuffer = await templateZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
   const outputDate = records.find(record => record.dateKey)?.dateKey ?? "downtime";
   return {
     records,
-    matchedCount: records.filter(record => record.status === "matched").length,
+    matchedCount: records.filter(record => record.status === "matched" && !record.isClosed).length,
     unmatchedCount: records.filter(record => record.status === "unmatched").length,
-    totalTechnicalMinutes: records.reduce((total, record) => total + (record.status === "matched" ? record.technicalMinutes : 0), 0),
-    totalOperationsMinutes: records.reduce((total, record) => total + (record.status === "matched" ? record.operationsMinutes : 0), 0),
-    totalEvacuationMinutes: records.reduce((total, record) => total + (record.status === "matched" ? record.evacuationMinutes : 0), 0),
+    totalTechnicalMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.technicalMinutes : 0), 0),
+    totalOperationsMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.operationsMinutes : 0), 0),
+    totalEvacuationMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.evacuationMinutes : 0), 0),
+    totalNetworkPercentage: (records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.technicalMinutes : 0), 0) / FLEET_OPERATING_MINUTES) * 100,
+    closedRideCount: records.filter(record => record.status === "matched" && record.isClosed).length,
     summaryByRide: [...summaryByRide].sort((a, b) => b.minutes - a.minutes),
     outputBuffer,
     outputFileName: `Technical_Downtime_${outputDate}.xlsx`,

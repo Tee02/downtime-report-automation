@@ -1,19 +1,23 @@
 import type { Express, Request, Response } from "express";
 import multer from "multer";
-import { storagePut } from "./storage";
+import { storageGetSignedUrl, storagePut } from "./storage";
 import { processDowntimeWorkbooks } from "./downtimeProcessor";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { files: 2, fileSize: 15 * 1024 * 1024 },
+  limits: { files: 1, fileSize: 15 * 1024 * 1024 },
   fileFilter: (_request, file, callback) => {
     callback(null, file.originalname.toLowerCase().endsWith(".xlsx"));
   },
 });
 
-function readFile(request: Request, field: string): Express.Multer.File | undefined {
-  const files = request.files as Record<string, Express.Multer.File[]> | undefined;
-  return files?.[field]?.[0];
+const FIXED_TEMPLATE_KEY = "WKtemplate_07a613e1.xlsx";
+
+async function getFixedTemplate(): Promise<Buffer> {
+  const signedUrl = await storageGetSignedUrl(FIXED_TEMPLATE_KEY);
+  const response = await fetch(signedUrl);
+  if (!response.ok) throw new Error("The fixed Technical template could not be retrieved. Please contact the report administrator.");
+  return Buffer.from(await response.arrayBuffer());
 }
 
 function failure(response: Response, status: number, message: string) {
@@ -23,16 +27,12 @@ function failure(response: Response, status: number, message: string) {
 export function registerDowntimeRoutes(app: Express) {
   app.post(
     "/api/downtime/analyze",
-    upload.fields([
-      { name: "operationsFile", maxCount: 1 },
-      { name: "templateFile", maxCount: 1 },
-    ]),
+    upload.single("operationsFile"),
     async (request, response) => {
-      const operationsFile = readFile(request, "operationsFile");
-      const templateFile = readFile(request, "templateFile");
-      if (!operationsFile || !templateFile) return failure(response, 400, "Upload one Operations downtime XLSX file and one Technical template XLSX file.");
+      const operationsFile = request.file;
+      if (!operationsFile) return failure(response, 400, "Upload an Operations downtime XLSX file.");
       try {
-        const result = await processDowntimeWorkbooks(operationsFile.buffer, templateFile.buffer);
+        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate());
         const stored = await storagePut(
           `downtime-reports/${crypto.randomUUID()}/${result.outputFileName}`,
           result.outputBuffer,

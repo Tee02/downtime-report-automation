@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
+import { XMLParser } from "fast-xml-parser";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { __testables, durationMinutes, formatTime, parseTimeToMinutes, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
@@ -38,25 +39,37 @@ describe("downtime transformation rules", () => {
 
 describe("supplied workbook integration", () => {
   const operationsFixture = "/home/ubuntu/upload/26.08.2026Tech-SkyWorldsDowntimeLog.xlsx";
-  const templateFixture = "/home/ubuntu/upload/WK36.xlsx";
+  const templateFixture = "/home/ubuntu/upload/WKtemplate.xlsx";
   const canRunFixture = existsSync(operationsFixture) && existsSync(templateFixture);
 
-  it.skipIf(!canRunFixture)("preserves the technical template while applying the ESD technical, Operations, and evacuation timeline colors", async () => {
+  it.skipIf(!canRunFixture)("preserves the fixed Technical template while adding percentages, timeline highlights, and closed-ride output", async () => {
     const result = await processDowntimeWorkbooks(await readFile(operationsFixture), await readFile(templateFixture));
 
-    expect(result.records).toHaveLength(15);
+    expect(result.records).toHaveLength(17);
     expect(result.matchedCount).toBe(15);
     expect(result.unmatchedCount).toBe(0);
+    expect(result.closedRideCount).toBe(2);
     expect(result.totalTechnicalMinutes).toBe(343);
+    expect(result.totalNetworkPercentage).toBeCloseTo((343 / 8640) * 100, 8);
     expect(result.outputBuffer.length).toBeGreaterThan(100_000);
 
     const output = await JSZip.loadAsync(result.outputBuffer);
     expect(Object.keys(output.files)).toContain("xl/worksheets/sheet1.xml");
-    expect(Object.keys(output.files)).toContain("xl/worksheets/sheet2.xml");
-    const timelineXml = await output.file("xl/worksheets/sheet2.xml")?.async("string");
-    expect(timelineXml).toContain('<c r="BH92" s="183"');
-    expect(timelineXml).toContain('<c r="BV92" s="184"');
-    expect(timelineXml).toContain('<c r="BB88" s="181"');
+    const xmlParser = new XMLParser({ ignoreAttributes: false });
+    for (const path of Object.keys(output.files).filter(path => path.endsWith(".xml") || path.endsWith(".rels"))) {
+      const file = output.file(path);
+      if (!file) continue;
+      const xml = await file.async("string");
+      expect(() => xmlParser.parse(xml)).not.toThrow();
+    }
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string");
+    expect(timelineXml).toContain('<c r="BH92" s="1997"');
+    expect(timelineXml).toContain('<c r="BV92" s="1998"');
+    expect(timelineXml).toContain('<c r="BB88" s="1969"');
+    expect(timelineXml).toContain('<c r="F107" s="515"');
+    expect(timelineXml).toContain("<f>68/480</f>");
+    expect(timelineXml).toContain("<f>SUM(D88:D108)/18</f>");
+    expect(timelineXml).toContain("Closed — Unplanned Closure Due To Technical Issue (Motor Issue)");
     expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
   }, 30_000);
 });
