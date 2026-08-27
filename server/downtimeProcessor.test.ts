@@ -42,15 +42,17 @@ describe("supplied workbook integration", () => {
   const templateFixture = "/home/ubuntu/upload/WKtemplate.xlsx";
   const canRunFixture = existsSync(operationsFixture) && existsSync(templateFixture);
 
-  it.skipIf(!canRunFixture)("preserves the fixed Technical template while adding percentages, timeline highlights, and closed-ride output", async () => {
+  it.skipIf(!canRunFixture)("preserves the fixed template while filtering AVL records, resetting inactive percentages, and applying the requested closure fill", async () => {
     const result = await processDowntimeWorkbooks(await readFile(operationsFixture), await readFile(templateFixture));
 
-    expect(result.records).toHaveLength(17);
-    expect(result.matchedCount).toBe(15);
+    expect(result.records).toHaveLength(14);
+    expect(result.matchedCount).toBe(12);
     expect(result.unmatchedCount).toBe(0);
     expect(result.closedRideCount).toBe(2);
-    expect(result.totalTechnicalMinutes).toBe(343);
-    expect(result.totalNetworkPercentage).toBeCloseTo((343 / 8640) * 100, 8);
+    expect(result.records.filter(record => !record.isClosed).every(record => record.department === "Technical")).toBe(true);
+    expect(result.records.some(record => /AVL/i.test(record.description))).toBe(false);
+    expect(result.totalTechnicalMinutes).toBe(229);
+    expect(result.totalNetworkPercentage).toBeCloseTo((229 / 8640) * 100, 8);
     expect(result.outputBuffer.length).toBeGreaterThan(100_000);
 
     const output = await JSZip.loadAsync(result.outputBuffer);
@@ -63,12 +65,19 @@ describe("supplied workbook integration", () => {
       expect(() => xmlParser.parse(xml)).not.toThrow();
     }
     const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string");
+    const stylesXml = await output.file("xl/styles.xml")?.async("string");
     expect(timelineXml).toContain('<c r="BH92" s="1997"');
     expect(timelineXml).toContain('<c r="BV92" s="1998"');
     expect(timelineXml).toContain('<c r="BB88" s="1969"');
     expect(timelineXml).toContain('<c r="F107" s="515"');
+    const styles = xmlParser.parse(stylesXml ?? "") as any;
+    const closedFillId = Number(styles.styleSheet?.cellXfs?.xf?.[515]?.["@_fillId"]);
+    expect(styles.styleSheet?.fills?.fill?.[closedFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFF8CBAD");
     expect(timelineXml).toContain("<f>68/480</f>");
     expect(timelineXml).toContain("<f>SUM(D88:D108)/18</f>");
+    expect(timelineXml).toMatch(/<c r="D4"(?: s="\d+")?><v>0<\/v><\/c>/);
+    expect(timelineXml).toMatch(/<c r="E4"(?: s="\d+")?><v>0<\/v><\/c>/);
+    expect(timelineXml).toMatch(/<c r="D103"(?: s="\d+")?><v>0<\/v><\/c>/);
     expect(timelineXml).toContain("Closed — Unplanned Closure Due To Technical Issue (Motor Issue)");
     expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
   }, 30_000);

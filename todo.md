@@ -17,3 +17,9 @@
 - [x] Detect Operations workbook closed-ride entries and represent closures with the required template color conventions.
 - [x] Revise the interface for one-file input, downtime percentages, and closed-ride status review.
 - [x] Add regression tests confirming the workbook opens and contains the revised formulas, percentages, and closure markings.
+- [x] Restrict shared 11-1 downtime records to Technical classification and exclude AVL issues.
+- [x] Change closed-ride workbook and interface color to #F8CBAD.
+- [x] Clear every daily percentage cell in the fixed template and populate only affected Technical ride cells for the uploaded date.
+- [x] Refresh the dashboard with a compact, theme-park-inspired color code and visual system.
+- [x] Add regression tests for Technical-only filtering, reset daily percentages, and revised closure color.
+- [x] Validate the revised export, calculations, colors, and interface before saving the update checkpoint.
