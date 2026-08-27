@@ -1,0 +1,62 @@
+import { describe, expect, it } from "vitest";
+import JSZip from "jszip";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { __testables, durationMinutes, formatTime, parseTimeToMinutes, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
+
+describe("downtime transformation rules", () => {
+  it("uses downtime start through ride readiness for technical minutes", () => {
+    const start = parseTimeToMinutes("0.45416666666666666");
+    const readiness = parseTimeToMinutes("0.46319444444444446");
+    expect(formatTime(start)).toBe("10:54");
+    expect(formatTime(readiness)).toBe("11:07");
+    expect(durationMinutes(start, readiness)).toBe(13);
+  });
+
+  it("handles overnight timing defensively", () => {
+    expect(durationMinutes(23 * 60 + 55, 5)).toBe(10);
+    expect(parseTimeToMinutes("")).toBeUndefined();
+  });
+
+  it("maps source attractions to technical template ride codes", () => {
+    expect(resolveRideCode("ESD : Global Defender")).toBe("ESD");
+    expect(resolveRideCode("Terraform Tower Challenge")).toBe("TTC");
+    expect(resolveRideCode("Invasion Of The Planet of the Apes")).toBe("PTA");
+    expect(resolveRideCode("Unknown Demonstration Ride")).toBeUndefined();
+  });
+
+  it("retains a populated cell immediately after a blank template cell", () => {
+    const rows = __testables.parseRows(
+      '<worksheet><sheetData><row r="92"><c r="A92" s="245"/><c r="B92" s="114" t="s"><v>0</v></c><c r="C92" t="s"><v>1</v></c></row></sheetData></worksheet>',
+      ["ESD", "A"]
+    );
+    expect(rows[0]?.cells.get("A")?.value).toBe("");
+    expect(rows[0]?.cells.get("B")?.value).toBe("ESD");
+    expect(rows[0]?.cells.get("C")?.value).toBe("A");
+  });
+});
+
+describe("supplied workbook integration", () => {
+  const operationsFixture = "/home/ubuntu/upload/26.08.2026Tech-SkyWorldsDowntimeLog.xlsx";
+  const templateFixture = "/home/ubuntu/upload/WK36.xlsx";
+  const canRunFixture = existsSync(operationsFixture) && existsSync(templateFixture);
+
+  it.skipIf(!canRunFixture)("preserves the technical template while applying the ESD technical, Operations, and evacuation timeline colors", async () => {
+    const result = await processDowntimeWorkbooks(await readFile(operationsFixture), await readFile(templateFixture));
+
+    expect(result.records).toHaveLength(15);
+    expect(result.matchedCount).toBe(15);
+    expect(result.unmatchedCount).toBe(0);
+    expect(result.totalTechnicalMinutes).toBe(343);
+    expect(result.outputBuffer.length).toBeGreaterThan(100_000);
+
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    expect(Object.keys(output.files)).toContain("xl/worksheets/sheet1.xml");
+    expect(Object.keys(output.files)).toContain("xl/worksheets/sheet2.xml");
+    const timelineXml = await output.file("xl/worksheets/sheet2.xml")?.async("string");
+    expect(timelineXml).toContain('<c r="BH92" s="183"');
+    expect(timelineXml).toContain('<c r="BV92" s="184"');
+    expect(timelineXml).toContain('<c r="BB88" s="181"');
+    expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
+  }, 30_000);
+});
