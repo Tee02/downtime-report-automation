@@ -38,3 +38,13 @@
 - [x] Update the review dashboard color key and wording for the revised availability rules.
 - [x] Add and run regressions for full mapping, availability formatting, closed rides, and interrupted technical downtime intervals.
 - [x] Validate the revised XLSX output and interface before saving the update checkpoint.
+- [x] Reproduce and diagnose the 3 August workbook timeline defects for AFP, ACR, ESD, and RCC.
+- [x] Add a pre-review all-rides handover selector so users can mark rides as closed when Operations does not list a CLOSED record.
+- [x] Repair Bigweld's Zeppelins/BWZ alias matching and add regression coverage.
+- [x] Ensure technical blue resumes after evacuation, Operations pink stays confined to the correct uptime interval, and no unintended orange fill appears.
+- [x] Correct Weekly Availability Report regular cells: white 0.00% for no downtime, purple 0.00% for closed rides, red pale-yellow non-zero downtime.
+- [x] Preserve blue-and-yellow Average % and Overall Average % special rows without applying regular pale-yellow cell fills.
+- [x] Update the review dashboard to send manual closure selections and display selected handover closures before generation.
+- [x] Validate the 3 August live export, native template styles, interaction flow, and automated tests before saving the update checkpoint.
+- [x] Download the 3 August route-generated workbook through the correct preview storage URL and verify ZIP, XML, and spreadsheet readability.
+- [x] Add a route-level regression that validates the generated download response and workbook readability path.

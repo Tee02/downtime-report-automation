@@ -25,7 +25,7 @@ describe("downtime transformation rules", () => {
       ["Epic Hummingbird Flyers", "EHF"], ["Epic Voyage to Moonhaven", "VTM"], ["Acorn Adventure", "ACR"], ["Expedition Thin Ice", "ETI"], ["Mammoth Fun Zone", "MFZ"],
       ["Sid's Rock 'N' Slide", "SRS"], ["Alpha Fighter Pilots", "AFP"], ["Terraform Tower Challenge", "TTC"], ["Boot Camp Training - Extreme Vert", "BCT (EV)"],
       ["Boot Camp Training - Ropes Course", "BCT (RC)"], ["Boot Camp Training - Unharnessed Zones", "BCT (UZ)"], ["Boot Camp Training - Zip Coaster", "BCT (ZC)"],
-      ["Bigweld's Zeppelins", "BWZ"], ["Rivet Town Roller", "RTR"], ["Invasion Of The Planet of the Apes", "PTA"],
+      ["Bigweld's Zeppelins", "BWZ"], ["Big Weld's Zeppelin", "BWZ"], ["Rivet Town Roller", "RTR"], ["Invasion Of The Planet of the Apes", "PTA"],
     ] as const;
     expectedMappings.forEach(([attraction, rideCode]) => expect(resolveRideCode(attraction)).toBe(rideCode));
     expect(resolveRideCode("BCT", "Zip Coaster restraint check")).toBe("BCT (ZC)");
@@ -120,8 +120,52 @@ describe("supplied workbook integration", () => {
     const evacuationRow = timelineRows[evacuation?.rideCode ?? ""];
     const evacuationCell = `${toColumn(6 + (evacuation?.evacuationStart ?? 600) - 600)}${evacuationRow}`;
     const resumedTechnicalCell = `${toColumn(6 + (evacuation?.evacuationEnd ?? 600) + 1 - 600)}${evacuationRow}`;
-    expect(Number(xfs[cellStyle(evacuationCell)]?.["@_fillId"])).toBe(17);
+    expect(Number(xfs[cellStyle(evacuationCell)]?.["@_fillId"])).toBe(7);
     expect(Number(xfs[cellStyle(resumedTechnicalCell)]?.["@_fillId"])).toBe(3);
     expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
+  }, 30_000);
+
+  const aug03Fixture = "/home/ubuntu/upload/03.08.2026Tech-SkyWorldsDowntimeLog.xlsx";
+
+  it.skipIf(!existsSync(aug03Fixture) || !existsSync(templateFixture))("keeps 3 August intervals bounded, maps Big Weld's Zeppelin, and applies manual handover closures without changing summary-row fills", async () => {
+    const result = await processDowntimeWorkbooks(await readFile(aug03Fixture), await readFile(templateFixture), { manualClosedRideCodes: ["NATM"] });
+    expect(result.unmatchedCount).toBe(0);
+    expect(result.records.find(record => record.attraction === "Big Weld's Zeppelin")?.rideCode).toBe("BWZ");
+    expect(result.records.find(record => record.attraction === "Big Weld's Zeppelin")?.status).toBe("matched");
+    expect(result.records.some(record => record.sourceRow === 0 && record.rideCode === "NTM" && record.isClosed)).toBe(true);
+    expect(result.records.filter(record => ["ACR", "ESD", "AFP"].includes(record.rideCode ?? "")).every(record => record.evacuationStart === undefined)).toBe(true);
+
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const xmlParser = new XMLParser({ ignoreAttributes: false });
+    const styles = xmlParser.parse(await output.file("xl/styles.xml")?.async("string") ?? "") as any;
+    const xfs = styles.styleSheet?.cellXfs?.xf ?? [];
+    const fills = styles.styleSheet?.fills?.fill ?? [];
+    const fonts = styles.styleSheet?.fonts?.font ?? [];
+    const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    const cellStyle = (reference: string) => Number(/\bs="(\d+)"/.exec(cell(reference))?.[1]);
+    const fillId = (reference: string) => Number(xfs[cellStyle(reference)]?.["@_fillId"]);
+    const fillColor = (reference: string) => fills[fillId(reference)]?.patternFill?.fgColor?.["@_rgb"];
+    const fontColor = (reference: string) => fonts[Number(xfs[cellStyle(reference)]?.["@_fontId"])]?.color?.["@_rgb"];
+
+    expect(fillId("CT4")).toBe(3);
+    expect(fillId("DA4")).toBe(3);
+    expect(fillId("DE4")).toBe(4);
+    expect(fillId("BV8")).toBe(3);
+    expect(fillId("CF8")).toBe(4);
+    expect(fillId("FV7")).toBe(3);
+    expect(fillId("GC7")).toBe(4);
+    expect(fillId("F20")).toBe(0);
+    expect(fillId("EZ20")).toBe(3);
+    expect(fillId("GX20")).toBe(4);
+    expect(fillColor("F18")).toBe("FFF8CBAD");
+    expect(cell("BZ113")).toContain("<f>D20</f>");
+    expect(fontColor("BZ113")).toBe("FFFF0000");
+    expect(fillColor("BZ113")).toBe("FFFFF2CC");
+    expect(cell("BZ116")).toContain("<f>D22</f>");
+    expect(fillId("BZ116")).toBe(0);
+    expect(fillColor("BZ88")).not.toBe("FFFFF2CC");
+    expect(fillColor("BZ119")).not.toBe("FFFFF2CC");
+    expect(fillColor("BZ123")).not.toBe("FFFFF2CC");
   }, 30_000);
 });

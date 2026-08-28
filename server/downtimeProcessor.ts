@@ -48,9 +48,13 @@ export type ProcessingResult = {
   outputFileName: string;
 };
 
+export type ProcessingOptions = {
+  manualClosedRideCodes?: string[];
+};
+
 const TECHNICAL_FILL_ID = "3";
 const OPERATIONS_FILL_ID = "4";
-const EVACUATION_FILL_ID = "17";
+const EVACUATION_FILL_ID = "7";
 const CLOSED_FILL_HEX = "FFF8CBAD";
 const DAILY_OPERATING_MINUTES = 480;
 const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 18;
@@ -68,6 +72,7 @@ const ATTRACTION_CODES: Record<string, string> = {
   BLUESKYCAROUSEL: "BSC",
   BWZ: "BWZ",
   BIGWELDSZEPPELINS: "BWZ",
+  BIGWELDSZEPPELIN: "BWZ",
   EHF: "EHF",
   EPICHUMMINGBIRDFLYERS: "EHF",
   ESD: "ESD",
@@ -308,7 +313,7 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
     const operationsEnd = parseTimeToMinutes(row.cells.get("J")?.value ?? "");
     const providedEvacuationStart = parseTimeToMinutes(row.cells.get("M")?.value ?? "");
     const evacuationEnd = parseTimeToMinutes(row.cells.get("N")?.value ?? "");
-    const evacuationStart = evacuationEnd === undefined ? undefined : providedEvacuationStart ?? technicalStart;
+    const evacuationStart = providedEvacuationStart;
     const record: DowntimeRecord = {
       sourceRow: row.number,
       dateKey: recordDateKey ?? "",
@@ -431,7 +436,7 @@ function setFormula(rowXml: string, reference: string, formula: string, cachedVa
 function setStyle(rowXml: string, reference: string, style: string): string {
   const existing = findCell(rowXml, reference);
   if (!existing) return replaceCell(rowXml, reference, `><v></v>`, style);
-  const body = /<c\b[^>]*>([\s\S]*?)<\/c>/.exec(existing)?.[1] ?? "";
+  const body = existing.endsWith("/>") ? "" : /<c\b[^>]*>([\s\S]*?)<\/c>/.exec(existing)?.[1] ?? "";
   return replaceCell(rowXml, reference, `>${body}`, style);
 }
 
@@ -559,12 +564,12 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     const redFontId = withRedFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1" }));
     availability.standard.set(base, String(nextStyle++));
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" }));
     availability.downtime.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: withAvailabilityFill.fillId, applyFill: "1" }));
     availability.closed.set(base, String(nextStyle++));
     const purpleFontId = withPurpleFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: purpleFontId, applyFont: "1" }));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: purpleFontId, applyFont: "1", fillId: "0", applyFill: "1" }));
   });
   const updatedOpen = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${nextStyle}"`)
@@ -621,7 +626,7 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
           continue;
         }
         setRange(record.technicalStart, record.technicalEnd, "technical", 1);
-        if (record.operationsEnd !== undefined && record.technicalEnd !== undefined) {
+        if (record.operationsEnd !== undefined && record.technicalEnd !== undefined && record.operationsEnd > record.technicalEnd) {
           setRange(record.technicalEnd + 1, record.operationsEnd, "operations", 2);
         }
         setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 3);
@@ -822,7 +827,7 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
   const total = averageDowntime(aggregateByRide, closedRides, 52, 116);
   const updateTotal = (reference: string, formula: string, value: number) => (xml: string) => {
     const revised = setFormula(xml, reference, formula, value);
-    return setStyle(revised, reference, deriveStyle(findCell(revised, reference), value > 0 ? variants.availability.downtime : variants.availability.standard));
+    return setStyle(revised, reference, deriveStyle(findCell(revised, reference), value > 0 ? variants.percentageAlert : variants.percentage));
   };
   add(88, updateTotal("BZ88", "SUM(BZ52:CT87)/12", zoneA));
   add(119, updateTotal("BZ119", "SUM(BZ92:CT118)/9", zoneB));
@@ -833,7 +838,35 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
   return new Map(Array.from(updates.entries()).map(([row, operations]) => [row, (xml: string) => operations.reduce((result, operation) => operation(result), xml)]));
 }
 
-export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templateBuffer: Buffer): Promise<ProcessingResult> {
+function normalizeManualRideCode(value: string): string | undefined {
+  const normalized = normalizeText(value);
+  if (normalized === "NATM") return "NTM";
+  return TIMELINE_ROWS[value] ? value : ATTRACTION_CODES[normalized];
+}
+
+function manualClosureRecord(rideCode: string, reportDateKey: string): DowntimeRecord {
+  return {
+    sourceRow: 0,
+    dateKey: reportDateKey,
+    dateLabel: dateLabel(reportDateKey),
+    attraction: rideCode,
+    rideCode,
+    department: "Handover selection",
+    description: "Marked closed during handover review",
+    technicalStart: 600,
+    technicalEnd: 1080,
+    operationsEnd: 1080,
+    technicalMinutes: 480,
+    operationsMinutes: 0,
+    evacuationMinutes: 0,
+    downtimePercentage: 0,
+    isClosed: true,
+    status: "unmatched",
+    matchNote: "Awaiting template match",
+  };
+}
+
+export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templateBuffer: Buffer, options: ProcessingOptions = {}): Promise<ProcessingResult> {
   const [operationsZip, templateZip] = await Promise.all([JSZip.loadAsync(operationsBuffer), JSZip.loadAsync(templateBuffer)]);
   const [operationWorkbook, templateWorkbook] = await Promise.all([getSheets(operationsZip), getSheets(templateZip)]);
   const operationsSheet = operationWorkbook.sheets[0];
@@ -842,6 +875,9 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   if (records.length === 0) throw new Error("No downtime records with the 11-1 code were found in the Operations workbook.");
   const outputDate = records.find(record => record.dateKey)?.dateKey;
   if (!outputDate) throw new Error("The Operations log does not include a usable report date.");
+  const existingClosures = new Set(records.filter(record => record.isClosed && record.rideCode).map(record => record.rideCode!));
+  const manualRideCodes = Array.from(new Set((options.manualClosedRideCodes ?? []).map(normalizeManualRideCode).filter((rideCode): rideCode is string => Boolean(rideCode))));
+  manualRideCodes.filter(rideCode => !existingClosures.has(rideCode)).forEach(rideCode => records.push(manualClosureRecord(rideCode, outputDate)));
   const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings, outputDate);
   const styleVariants = createStyleVariants(await textFromZip(templateZip, "xl/styles.xml"));
   templateZip.file("xl/styles.xml", styleVariants.stylesheetXml);

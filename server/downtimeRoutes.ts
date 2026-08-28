@@ -24,6 +24,16 @@ function failure(response: Response, status: number, message: string) {
   return response.status(status).json({ error: message });
 }
 
+function parseManualClosures(value: unknown): string[] {
+  if (value === undefined || value === "") return [];
+  if (typeof value !== "string") throw new Error("The handover closure selection is invalid.");
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.length > 24 || parsed.some(item => typeof item !== "string" || item.length > 50)) {
+    throw new Error("The handover closure selection is invalid.");
+  }
+  return parsed;
+}
+
 export function registerDowntimeRoutes(app: Express) {
   app.post(
     "/api/downtime/analyze",
@@ -32,7 +42,8 @@ export function registerDowntimeRoutes(app: Express) {
       const operationsFile = request.file;
       if (!operationsFile) return failure(response, 400, "Upload an Operations downtime XLSX file.");
       try {
-        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate());
+        const manualClosedRideCodes = parseManualClosures(request.body.closedRideCodes);
+        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes });
         const stored = await storagePut(
           `downtime-reports/${crypto.randomUUID()}/${result.outputFileName}`,
           result.outputBuffer,
