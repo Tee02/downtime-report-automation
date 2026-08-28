@@ -48,3 +48,8 @@
 - [x] Validate the 3 August live export, native template styles, interaction flow, and automated tests before saving the update checkpoint.
 - [x] Download the 3 August route-generated workbook through the correct preview storage URL and verify ZIP, XML, and spreadsheet readability.
 - [x] Add a route-level regression that validates the generated download response and workbook readability path.
+- [x] Reproduce the 29 May ETI record and confirm the exact source attraction name causing its unmapped state.
+- [x] Map Ice Age: Expedition Thin Ice and related aliases to ETI, and label NATM as Night At The Museum in the review.
+- [x] Keep AFP blank by default as a planned closure; apply closure highlighting only when AFP is in the downtime log or selected during handover.
+- [x] Add regressions for the 29 May ETI match, NATM label, and conditional AFP row behavior.
+- [x] Validate the generated 29 May workbook, review interface, tests, and live download before saving the update checkpoint.

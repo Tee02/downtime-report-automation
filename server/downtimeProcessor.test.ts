@@ -22,12 +22,13 @@ describe("downtime transformation rules", () => {
   it("maps source attractions to technical template ride codes", () => {
     const expectedMappings = [
       ["ESD : Global Defender", "ESD"], ["Independence Day : Defiance", "IDD"], ["Blue Sky Carousel", "BSC"], ["Samba Gliders", "SAG"], ["Rio Carnaval Chaos", "RCC"],
-      ["Epic Hummingbird Flyers", "EHF"], ["Epic Voyage to Moonhaven", "VTM"], ["Acorn Adventure", "ACR"], ["Expedition Thin Ice", "ETI"], ["Mammoth Fun Zone", "MFZ"],
+      ["Epic Hummingbird Flyers", "EHF"], ["Epic Voyage to Moonhaven", "VTM"], ["Acorn Adventure", "ACR"], ["Expedition Thin Ice", "ETI"], ["Ice Age: Expedition Thin Ice", "ETI"], ["Mammoth Fun Zone", "MFZ"],
       ["Sid's Rock 'N' Slide", "SRS"], ["Alpha Fighter Pilots", "AFP"], ["Terraform Tower Challenge", "TTC"], ["Boot Camp Training - Extreme Vert", "BCT (EV)"],
       ["Boot Camp Training - Ropes Course", "BCT (RC)"], ["Boot Camp Training - Unharnessed Zones", "BCT (UZ)"], ["Boot Camp Training - Zip Coaster", "BCT (ZC)"],
       ["Bigweld's Zeppelins", "BWZ"], ["Big Weld's Zeppelin", "BWZ"], ["Rivet Town Roller", "RTR"], ["Invasion Of The Planet of the Apes", "PTA"],
     ] as const;
     expectedMappings.forEach(([attraction, rideCode]) => expect(resolveRideCode(attraction)).toBe(rideCode));
+    expect(resolveRideCode("Night At The Museum")).toBe("NTM");
     expect(resolveRideCode("BCT", "Zip Coaster restraint check")).toBe("BCT (ZC)");
     expect(resolveRideCode("Unknown Demonstration Ride")).toBeUndefined();
   });
@@ -123,6 +124,33 @@ describe("supplied workbook integration", () => {
     expect(Number(xfs[cellStyle(evacuationCell)]?.["@_fillId"])).toBe(7);
     expect(Number(xfs[cellStyle(resumedTechnicalCell)]?.["@_fillId"])).toBe(3);
     expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
+  }, 30_000);
+
+  it.skipIf(!canRunFixture)("clears the planned-closure AFP row only when AFP is neither in the log nor selected during handover", async () => {
+    const operationsZip = await JSZip.loadAsync(await readFile(operationsFixture));
+    const sharedStringsPath = "xl/sharedStrings.xml";
+    const sharedStrings = await operationsZip.file(sharedStringsPath)?.async("string") ?? "";
+    operationsZip.file(sharedStringsPath, sharedStrings.replace(/Alpha Fighter Pilots/g, "Planned AFP placeholder"));
+    const withoutAfpLog = await operationsZip.generateAsync({ type: "nodebuffer" });
+    const result = await processDowntimeWorkbooks(withoutAfpLog, await readFile(templateFixture));
+    expect(result.records.some(record => record.rideCode === "AFP")).toBe(false);
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    expect(cell("D7")).toMatch(/^<c r="D7"(?: s="\d+")?\/>$/);
+    expect(cell("F7")).toMatch(/^<c r="F7"(?: s="\d+")?\/>$/);
+    expect(cell("BZ82")).toMatch(/^<c r="BZ82"(?: s="\d+")?\/>$/);
+  }, 30_000);
+
+  const may29Fixture = "/home/ubuntu/upload/29.05.2026Tech-SkyWorldsDowntimeLog.xlsx";
+
+  it.skipIf(!existsSync(may29Fixture) || !existsSync(templateFixture))("maps the 29 May Ice Age: Expedition Thin Ice record into ETI while retaining AFP when the source log includes it", async () => {
+    const result = await processDowntimeWorkbooks(await readFile(may29Fixture), await readFile(templateFixture));
+    const eti = result.records.find(record => record.attraction === "Ice Age: Expedition Thin Ice");
+    const afp = result.records.find(record => record.rideCode === "AFP");
+    expect(eti).toMatchObject({ rideCode: "ETI", status: "matched", technicalMinutes: 4, operationsMinutes: 1 });
+    expect(result.unmatchedCount).toBe(0);
+    expect(afp).toMatchObject({ status: "matched", isClosed: false });
   }, 30_000);
 
   const aug03Fixture = "/home/ubuntu/upload/03.08.2026Tech-SkyWorldsDowntimeLog.xlsx";

@@ -64,6 +64,7 @@ const ATTRACTION_CODES: Record<string, string> = {
   ACORNADVENTURE: "ACR",
   ETI: "ETI",
   EXPEDITIONTHINICE: "ETI",
+  ICEAGEEXPEDITIONTHINICE: "ETI",
   MFZ: "MFZ",
   MAMMOTHFUNZONE: "MFZ",
   AFP: "AFP",
@@ -84,6 +85,8 @@ const ATTRACTION_CODES: Record<string, string> = {
   EPICVOYAGETOMOONHAVEN: "VTM",
   VTM: "VTM",
   NTM: "NTM",
+  NATM: "NTM",
+  NIGHTATTHEMUSEUM: "NTM",
   NIGHTTIMEWONDERLAND: "NTM",
   PTA: "PTA",
   INVASIONOFTHEPLANETOFTHEAPES: "PTA",
@@ -440,7 +443,7 @@ function setStyle(rowXml: string, reference: string, style: string): string {
   return replaceCell(rowXml, reference, `>${body}`, style);
 }
 
-type TimelineStyleKind = "technical" | "operations" | "evacuation" | "closed";
+type TimelineStyleKind = "technical" | "operations" | "evacuation" | "closed" | "blank";
 type StyleVariants = {
   stylesheetXml: string;
   timeline: Record<TimelineStyleKind, Map<string, string>>;
@@ -540,12 +543,14 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     operations: OPERATIONS_FILL_ID,
     evacuation: EVACUATION_FILL_ID,
     closed: withClosedFill.fillId,
+    blank: "0",
   };
   const timeline = {
     technical: new Map<string, string>(),
     operations: new Map<string, string>(),
     evacuation: new Map<string, string>(),
     closed: new Map<string, string>(),
+    blank: new Map<string, string>(),
   };
   const percentage = new Map<string, string>();
   const percentageAlert = new Map<string, string>();
@@ -642,6 +647,22 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
     });
   }
   return updates;
+}
+
+function prepareDefaultAfpBlankUpdates(records: DowntimeRecord[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
+  const hasAfpRecord = records.some(record => record.status === "matched" && record.rideCode === "AFP");
+  if (hasAfpRecord) return new Map();
+  const row = maps.timelineRows.get(`${timelineDateKey(records[0]?.dateKey ?? "")}|AFP`);
+  if (!row) return new Map();
+  return new Map([[row, (xml: string) => {
+    let revised = clearCell(xml, `D${row}`);
+    for (let minute = 600; minute < 1080; minute++) {
+      const reference = `${numberToColumn(maps.timeStartColumn + minute - 600)}${row}`;
+      revised = setStyle(revised, reference, deriveStyle(findCell(revised, reference), variants.timeline.blank));
+      revised = clearCell(revised, reference);
+    }
+    return revised;
+  }]]);
 }
 
 type DailyAggregate = {
@@ -795,6 +816,7 @@ function averageDowntime(aggregates: Map<string, DailyAggregate>, closedRides: S
 function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<string, DailyAggregate>, reportDateKey: string, variants: StyleVariants): Map<number, (rowXml: string) => string> {
   const aggregateByRide = new Map(Array.from(aggregates.values()).map(item => [item.rideCode, item]));
   const closedRides = new Set(records.filter(item => item.status === "matched" && item.isClosed && item.rideCode).map(item => item.rideCode!));
+  const hasAfpRecord = records.some(record => record.status === "matched" && record.rideCode === "AFP");
   const updates = new Map<number, Array<(rowXml: string) => string>>();
   const add = (row: number, operation: (xml: string) => string) => updates.set(row, [...(updates.get(row) ?? []), operation]);
   AVAILABILITY_COLUMNS.forEach((column, index) => {
@@ -807,6 +829,7 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
     }
     Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
       if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`));
+      else if (rideCode === "AFP" && !hasAfpRecord) add(row, xml => clearCell(xml, `${column}${row}`));
       else {
         const downtime = downtimeForRide(rideCode, aggregateByRide, closedRides);
         add(row, xml => {
@@ -910,6 +933,11 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
   for (const [row, update] of Array.from(availabilityUpdates.entries())) {
+    const previousUpdate = timelineUpdates.get(row);
+    timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
+  }
+  const defaultAfpBlankUpdates = prepareDefaultAfpBlankUpdates(records, maps, styleVariants);
+  for (const [row, update] of Array.from(defaultAfpBlankUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
