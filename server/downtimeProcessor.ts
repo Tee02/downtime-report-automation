@@ -308,7 +308,7 @@ type TemplateMaps = {
   summaryDateColumns: Map<string, number>;
 };
 
-function buildTemplateMaps(sheets: SheetInfo[], sharedStrings: string[]): TemplateMaps {
+function buildTemplateMaps(sheets: SheetInfo[], sharedStrings: string[], reportDateKey: string): TemplateMaps {
   const timelineSheet = sheets.find(sheet => /R&A Tech[\s\S]{0,100}Downtime/i.test(sheet.xml)) ?? sheets.at(-1);
   if (!timelineSheet) throw new Error("The technical template does not contain a worksheet.");
   const summarySheet = sheets.find(sheet => /Weekly Average Downtime/i.test(sheet.xml));
@@ -326,14 +326,16 @@ function buildTemplateMaps(sheets: SheetInfo[], sharedStrings: string[]): Templa
   const timelineMap = new Map<string, number>();
   const dayRows = new Map<string, { start: number; end: number }>();
   let activeDate: string | undefined;
+  const fallbackDate = timelineDateKey(reportDateKey);
   for (const row of timelineRows) {
     const candidateDate = timelineDateKey(row.cells.get("A")?.value ?? "");
     if (candidateDate) activeDate = candidateDate;
     const code = row.cells.get("B")?.value.trim();
-    if (activeDate && code) {
-      timelineMap.set(`${activeDate}|${code}`, row.number);
-      const range = dayRows.get(activeDate);
-      dayRows.set(activeDate, range ? { start: range.start, end: row.number } : { start: row.number, end: row.number });
+    const rowDate = activeDate ?? fallbackDate;
+    if (rowDate && code && row.number >= 4) {
+      timelineMap.set(`${rowDate}|${code}`, row.number);
+      const range = dayRows.get(rowDate);
+      dayRows.set(rowDate, range ? { start: range.start, end: row.number } : { start: row.number, end: row.number });
     }
   }
   const summaryRows = new Map<string, number>();
@@ -378,6 +380,13 @@ function setText(rowXml: string, reference: string, value: string): string {
   return replaceCell(rowXml, reference, ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is>`);
 }
 
+function clearCell(rowXml: string, reference: string): string {
+  const existing = findCell(rowXml, reference);
+  if (!existing) return rowXml;
+  const style = styleFromCell(existing);
+  return rowXml.replace(existing, `<c r="${reference}"${style ? ` s="${style}"` : ""}/>`);
+}
+
 function setFormula(rowXml: string, reference: string, formula: string, cachedValue: number): string {
   return replaceCell(rowXml, reference, `><f>${escapeXml(formula)}</f><v>${Number.isFinite(cachedValue) ? cachedValue : 0}</v>`);
 }
@@ -394,6 +403,7 @@ type StyleVariants = {
   stylesheetXml: string;
   timeline: Record<TimelineStyleKind, Map<string, string>>;
   percentage: Map<string, string>;
+  percentageAlert: Map<string, string>;
 };
 
 function withXfAttributes(xf: string, attributes: Record<string, string>): string {
@@ -447,9 +457,32 @@ function addClosedRideFill(stylesheetXml: string): { stylesheetXml: string; fill
   };
 }
 
+function addAlertFonts(stylesheetXml: string): { stylesheetXml: string; fontIds: Map<string, string> } {
+  const container = /(<fonts\b[^>]*>)([\s\S]*?)(<\/fonts>)/.exec(stylesheetXml);
+  if (!container) throw new Error("The Technical template does not expose font definitions.");
+  const fonts = Array.from(container[2].matchAll(/<font\b[^>]*(?:\/>|>[\s\S]*?<\/font>)/g)).map(match => match[0]);
+  if (fonts.length === 0) throw new Error("The Technical template does not expose reusable font definitions.");
+  const fontIds = new Map<string, string>();
+  const additions: string[] = [];
+  fonts.forEach((font, index) => {
+    const redFont = /<color\b[^>]*\/?\s*>/.test(font)
+      ? font.replace(/<color\b[^>]*\/?\s*>/, '<color rgb="FFFF0000"/>')
+      : font.endsWith("/>")
+        ? `<font><color rgb="FFFF0000"/></font>`
+        : font.replace(/<font\b([^>]*)>/, '<font$1><color rgb="FFFF0000"/>');
+    fontIds.set(String(index), String(fonts.length + index));
+    additions.push(redFont);
+  });
+  const open = /\bcount="\d+"/.test(container[1])
+    ? container[1].replace(/\bcount="\d+"/, `count="${fonts.length * 2}"`)
+    : container[1].replace(">", ` count="${fonts.length * 2}">`);
+  return { stylesheetXml: stylesheetXml.replace(container[0], `${open}${container[2]}${additions.join("")}${container[3]}`), fontIds };
+}
+
 function createStyleVariants(stylesheetXml: string): StyleVariants {
   const withClosedFill = addClosedRideFill(stylesheetXml);
-  const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withClosedFill.stylesheetXml);
+  const withAlertFonts = addAlertFonts(withClosedFill.stylesheetXml);
+  const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withAlertFonts.stylesheetXml);
   if (!container) throw new Error("The Technical template does not expose cell formatting definitions.");
   const xfs = extractCellXfs(container[2]);
   if (xfs.length === 0) throw new Error("The Technical template does not expose reusable cell formatting.");
@@ -466,6 +499,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     closed: new Map<string, string>(),
   };
   const percentage = new Map<string, string>();
+  const percentageAlert = new Map<string, string>();
   const additions: string[] = [];
   let nextStyle = xfs.length;
   xfs.forEach((xf, index) => {
@@ -476,14 +510,18 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     });
     percentage.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
+    percentageAlert.set(base, String(nextStyle++));
+    const redFontId = withAlertFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1" }));
   });
   const updatedOpen = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${nextStyle}"`)
     : container[1].replace(">", ` count="${nextStyle}">`);
   return {
-    stylesheetXml: withClosedFill.stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
+    stylesheetXml: withAlertFonts.stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
     timeline,
     percentage,
+    percentageAlert,
   };
 }
 
@@ -635,7 +673,8 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
       let revised = previousUpdate ? previousUpdate(xml) : xml;
     const percentageReference = `D${row}`;
     revised = setFormula(revised, percentageReference, `${aggregate.technicalMinutes}/${DAILY_OPERATING_MINUTES}`, aggregate.technicalMinutes / DAILY_OPERATING_MINUTES);
-    revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), variants.percentage));
+    const percentageStyle = aggregate.technicalMinutes / DAILY_OPERATING_MINUTES > 0.01 ? variants.percentageAlert : variants.percentage;
+    revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), percentageStyle));
     const dayKey = timelineDateKey(aggregate.dateKey);
     const dayRange = dayKey ? maps.dayRows.get(dayKey) : undefined;
     if (dayRange?.start === row) {
@@ -644,12 +683,92 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
         .reduce((total, item) => total + item.technicalMinutes, 0);
       const totalReference = `E${row}`;
       revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/18`, totalMinutes / FLEET_OPERATING_MINUTES);
-      revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), variants.percentage));
+      const totalStyle = totalMinutes / FLEET_OPERATING_MINUTES > 0.01 ? variants.percentageAlert : variants.percentage;
+      revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), totalStyle));
     }
     return revised;
     });
   }
   return updates;
+}
+
+function formatReportDate(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${date.getUTCDate()} ${months[date.getUTCMonth()]}\n${weekdays[date.getUTCDay()]}`;
+}
+
+function formatSheetName(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  const end = new Date(date.getTime() + 6 * 86400000);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${date.getUTCDate()} ${months[date.getUTCMonth()]}-${end.getUTCDate()} ${months[end.getUTCMonth()]} ${end.getUTCFullYear()}`.slice(0, 31);
+}
+
+function updateSheetName(workbookXml: string, previousName: string, nextName: string): string {
+  const escapedPrevious = previousName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return workbookXml.replace(new RegExp(`(<sheet\\b[^>]*\\bname=")${escapedPrevious}("[^>]*>)`), `$1${escapeXml(nextName)}$2`);
+}
+
+function prepareReportDateUpdates(reportDateKey: string, maps: TemplateMaps): Map<number, (rowXml: string) => string> {
+  const dayKey = timelineDateKey(reportDateKey);
+  const range = dayKey ? maps.dayRows.get(dayKey) : undefined;
+  return range ? new Map([[range.start, (xml: string) => setText(xml, `A${range.start}`, formatReportDate(reportDateKey))]]) : new Map();
+}
+
+const AVAILABILITY_COLUMNS = ["BZ", "CU", "DP", "EK", "FF", "GA", "GV"];
+const AVAILABILITY_ROWS: Record<string, number> = {
+  BWZ: 52, RTR: 55, ESD: 58, IDD: 61, NTM: 64, PTA: 67, "BCT (EV)": 70, "BCT (RC)": 73, "BCT (UZ)": 76, "BCT (ZC)": 79,
+  AFP: 82, TTC: 85, MFZ: 92, ACR: 95, SRS: 98, ETI: 101, EHF: 104, VTM: 107, BSC: 110, RCC: 113, SAG: 116,
+};
+const TIMELINE_ROWS: Record<string, number> = { ACR: 4, BWZ: 5, BSC: 6, AFP: 7, ESD: 8, EHF: 9, VTM: 10, ETI: 11, IDD: 12, MFZ: 13, "BCT (EV)": 14, "BCT (RC)": 15, "BCT (UZ)": 16, "BCT (ZC)": 17, NTM: 18, PTA: 19, RCC: 20, RTR: 21, SAG: 22, SRS: 23, TTC: 24 };
+const AVAILABILITY_AVERAGE_ROWS = [88, 119, 123];
+
+function availabilityForRide(rideCode: string, aggregates: Map<string, DailyAggregate>, closedRides: Set<string>): number {
+  return closedRides.has(rideCode) ? 0 : 1 - (aggregates.get(rideCode)?.technicalMinutes ?? 0) / DAILY_OPERATING_MINUTES;
+}
+
+function averageAvailability(aggregates: Map<string, DailyAggregate>, closedRides: Set<string>, start: number, end: number): number {
+  const rides = Object.entries(AVAILABILITY_ROWS).filter(([, row]) => row >= start && row <= end).map(([ride]) => ride);
+  return rides.reduce((sum, ride) => sum + availabilityForRide(ride, aggregates, closedRides), 0) / rides.length;
+}
+
+function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<string, DailyAggregate>, reportDateKey: string): Map<number, (rowXml: string) => string> {
+  const aggregateByRide = new Map(Array.from(aggregates.values()).map(item => [item.rideCode, item]));
+  const closedRides = new Set(records.filter(item => item.status === "matched" && item.isClosed && item.rideCode).map(item => item.rideCode!));
+  const updates = new Map<number, Array<(rowXml: string) => string>>();
+  const add = (row: number, operation: (xml: string) => string) => updates.set(row, [...(updates.get(row) ?? []), operation]);
+  AVAILABILITY_COLUMNS.forEach((column, index) => {
+    if (index === 0) {
+      add(48, xml => setNumber(xml, `${column}48`, Number(reportDateKey.slice(-2))));
+      add(50, xml => setText(xml, `${column}50`, formatReportDate(reportDateKey).split("\n")[1]));
+    } else {
+      add(48, xml => clearCell(xml, `${column}48`));
+      add(50, xml => clearCell(xml, `${column}50`));
+    }
+    Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
+      if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`));
+      else {
+        const availability = availabilityForRide(rideCode, aggregateByRide, closedRides);
+        add(row, xml => closedRides.has(rideCode) ? setNumber(xml, `${column}${row}`, 0) : setFormula(xml, `${column}${row}`, `1-D${TIMELINE_ROWS[rideCode]}`, availability));
+      }
+    });
+    AVAILABILITY_AVERAGE_ROWS.forEach(row => { if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`)); });
+  });
+  Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
+    add(row, xml => clearCell(xml, `HQ${row}`));
+  });
+  const zoneA = averageAvailability(aggregateByRide, closedRides, 52, 85);
+  const zoneB = averageAvailability(aggregateByRide, closedRides, 92, 116);
+  const total = averageAvailability(aggregateByRide, closedRides, 52, 116);
+  add(88, xml => setFormula(xml, "BZ88", "SUM(BZ52:CT87)/12", zoneA));
+  add(119, xml => setFormula(xml, "BZ119", "SUM(BZ92:CT118)/9", zoneB));
+  add(123, xml => setFormula(xml, "BZ123", "SUM(BZ52:CT87,BZ92:CT118)/19", total));
+  add(88, xml => clearCell(xml, "HQ88"));
+  add(119, xml => clearCell(xml, "HQ119"));
+  add(123, xml => clearCell(xml, "HQ123"));
+  return new Map(Array.from(updates.entries()).map(([row, operations]) => [row, (xml: string) => operations.reduce((result, operation) => operation(result), xml)]));
 }
 
 export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templateBuffer: Buffer): Promise<ProcessingResult> {
@@ -659,7 +778,9 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   if (!operationsSheet) throw new Error("The Operations workbook does not contain a downtime worksheet.");
   const records = parseOperations(operationsSheet, operationWorkbook.sharedStrings);
   if (records.length === 0) throw new Error("No downtime records with the 11-1 code were found in the Operations workbook.");
-  const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings);
+  const outputDate = records.find(record => record.dateKey)?.dateKey;
+  if (!outputDate) throw new Error("The Operations log does not include a usable report date.");
+  const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings, outputDate);
   const styleVariants = createStyleVariants(await textFromZip(templateZip, "xl/styles.xml"));
   templateZip.file("xl/styles.xml", styleVariants.stylesheetXml);
   for (const record of records) {
@@ -680,7 +801,17 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const aggregates = aggregateRecords(records);
   const timelineUpdates = prepareTimelineUpdates(records, maps, styleVariants);
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
+  const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
+  const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate);
   for (const [row, update] of Array.from(dailyPercentageUpdates.entries())) {
+    const previousUpdate = timelineUpdates.get(row);
+    timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
+  }
+  for (const [row, update] of Array.from(reportDateUpdates.entries())) {
+    const previousUpdate = timelineUpdates.get(row);
+    timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
+  }
+  for (const [row, update] of Array.from(availabilityUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
@@ -689,6 +820,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     timelineUpdates
   );
   templateZip.file(maps.timelineSheet.path, timelineXml);
+  templateZip.file("xl/workbook.xml", updateSheetName(await textFromZip(templateZip, "xl/workbook.xml"), maps.timelineSheet.name, formatSheetName(outputDate)));
   if (maps.summarySheet) {
     const summaryXml = changeRows(maps.summarySheet.xml, prepareSummaryUpdates(aggregates, maps));
     templateZip.file(maps.summarySheet.path, summaryXml);
@@ -710,7 +842,6 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     .values()
   );
   const outputBuffer = await templateZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
-  const outputDate = records.find(record => record.dateKey)?.dateKey ?? "downtime";
   return {
     records,
     matchedCount: records.filter(record => record.status === "matched" && !record.isClosed).length,

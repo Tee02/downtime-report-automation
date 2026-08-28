@@ -23,3 +23,11 @@
 - [x] Refresh the dashboard with a compact, theme-park-inspired color code and visual system.
 - [x] Add regression tests for Technical-only filtering, reset daily percentages, and revised closure color.
 - [x] Validate the revised export, calculations, colors, and interface before saving the update checkpoint.
+- [x] Inspect the cleared WK_template_v2.xlsx date fields, day ranges, weekly availability section, and existing native styles.
+- [x] Use the uploaded Operations log date to populate the cleared Technical template automatically for any report date.
+- [x] Highlight Technical downtime percentages above 1% in red in the template’s daily percentage and total-percentage cells.
+- [x] Clear the weekly availability report and populate only its first large day row with the uploaded report date’s availability percentage.
+- [x] Add the specified reporting note describing weather exclusion, red below-target rides, purple closures, and green amendments.
+- [x] Update the fixed-template asset, processor, review interface, and regression tests for the new V2 workflow.
+- [x] Validate date-independent workbook generation, availability formulas, styles, and interface before saving the revised checkpoint.
+- [x] Clear all unused weekly-availability date headers, weekday labels, ride cells, and weekly-average cells while retaining only the first report-day column.

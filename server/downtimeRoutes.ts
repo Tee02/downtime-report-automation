@@ -11,7 +11,7 @@ const upload = multer({
   },
 });
 
-const FIXED_TEMPLATE_KEY = "WKtemplate_07a613e1.xlsx";
+const FIXED_TEMPLATE_KEY = "WK_template_v2_46a53c64.xlsx";
 
 async function getFixedTemplate(): Promise<Buffer> {
   const signedUrl = await storageGetSignedUrl(FIXED_TEMPLATE_KEY);
