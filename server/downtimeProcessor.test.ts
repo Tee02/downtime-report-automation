@@ -20,9 +20,15 @@ describe("downtime transformation rules", () => {
   });
 
   it("maps source attractions to technical template ride codes", () => {
-    expect(resolveRideCode("ESD : Global Defender")).toBe("ESD");
-    expect(resolveRideCode("Terraform Tower Challenge")).toBe("TTC");
-    expect(resolveRideCode("Invasion Of The Planet of the Apes")).toBe("PTA");
+    const expectedMappings = [
+      ["ESD : Global Defender", "ESD"], ["Independence Day : Defiance", "IDD"], ["Blue Sky Carousel", "BSC"], ["Samba Gliders", "SAG"], ["Rio Carnaval Chaos", "RCC"],
+      ["Epic Hummingbird Flyers", "EHF"], ["Epic Voyage to Moonhaven", "VTM"], ["Acorn Adventure", "ACR"], ["Expedition Thin Ice", "ETI"], ["Mammoth Fun Zone", "MFZ"],
+      ["Sid's Rock 'N' Slide", "SRS"], ["Alpha Fighter Pilots", "AFP"], ["Terraform Tower Challenge", "TTC"], ["Boot Camp Training - Extreme Vert", "BCT (EV)"],
+      ["Boot Camp Training - Ropes Course", "BCT (RC)"], ["Boot Camp Training - Unharnessed Zones", "BCT (UZ)"], ["Boot Camp Training - Zip Coaster", "BCT (ZC)"],
+      ["Bigweld's Zeppelins", "BWZ"], ["Rivet Town Roller", "RTR"], ["Invasion Of The Planet of the Apes", "PTA"],
+    ] as const;
+    expectedMappings.forEach(([attraction, rideCode]) => expect(resolveRideCode(attraction)).toBe(rideCode));
+    expect(resolveRideCode("BCT", "Zip Coaster restraint check")).toBe("BCT (ZC)");
     expect(resolveRideCode("Unknown Demonstration Ride")).toBeUndefined();
   });
 
@@ -76,20 +82,46 @@ describe("supplied workbook integration", () => {
     const closedFillId = Number(xfs[cellStyle("F23")]?.["@_fillId"]);
     expect(styles.styleSheet?.fills?.fill?.[closedFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFF8CBAD");
     expect(fills[closedFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFF8CBAD");
-    expect(fonts[Number(xfs[cellStyle("D8")]?.["@_fontId"])]?.color?.["@_rgb"]).toBe("FFFF0000");
-    expect(fonts[Number(xfs[cellStyle("E4")]?.["@_fontId"])]?.color?.["@_rgb"]).toBe("FFFF0000");
+    const fontColor = (reference: string) => fonts[Number(xfs[cellStyle(reference)]?.["@_fontId"])]?.color?.["@_rgb"];
+    const fillColor = (reference: string) => fills[Number(xfs[cellStyle(reference)]?.["@_fillId"])]?.patternFill?.fgColor?.["@_rgb"];
+    expect(fontColor("D8")).toBe("FFFF0000");
+    expect(fontColor("E4")).toBe("FFFF0000");
     expect(timelineXml).toContain("26 Aug\nWed");
     expect(workbookXml).toContain('name="26 Aug-1 Sep 2026"');
     expect(cell("D8")).toContain("<f>68/480</f>");
     expect(cell("E4")).toContain("<f>SUM(D4:D24)/18</f>");
     expect(cell("BZ48")).toContain("<v>26</v>");
     expect(cell("BZ50")).toContain(">Wed</t>");
-    expect(cell("BZ58")).toContain("<f>1-D8</f>");
+    expect(cell("BZ58")).toContain("<f>D8</f>");
+    expect(cell("BZ110")).toContain("<f>D6</f>");
+    expect(cell("BZ82")).toContain("<v>0</v>");
+    expect(fontColor("BZ58")).toBe("FFFF0000");
+    expect(fillColor("BZ58")).toBe("FFFFF2CC");
+    expect(cell("BZ61")).toContain("<f>D12</f>");
+    expect(fontColor("BZ61")).not.toBe("FFFF0000");
+    expect(fontColor("BZ82")).toBe("FF7030A0");
     expect(cell("CU48")).toMatch(/^<c r="CU48"(?: s="\d+")?\/>$/);
     expect(cell("CU50")).toMatch(/^<c r="CU50"(?: s="\d+")?\/>$/);
     expect(cell("CU58")).toMatch(/^<c r="CU58"(?: s="\d+")?\/>$/);
     expect(cell("HQ58")).toMatch(/^<c r="HQ58"(?: s="\d+")?\/>$/);
     expect(timelineXml).toContain("Closed — Unplanned Closure Due To Technical Issue (Motor Issue)");
+    const evacuation = result.records.find(record => !record.isClosed && record.evacuationStart !== undefined && record.evacuationEnd !== undefined);
+    expect(evacuation).toBeDefined();
+    const timelineRows: Record<string, number> = { ACR: 4, EHF: 9, TTC: 24 };
+    const toColumn = (number: number) => {
+      let value = number;
+      let column = "";
+      while (value > 0) {
+        column = String.fromCharCode(65 + ((value - 1) % 26)) + column;
+        value = Math.floor((value - 1) / 26);
+      }
+      return column;
+    };
+    const evacuationRow = timelineRows[evacuation?.rideCode ?? ""];
+    const evacuationCell = `${toColumn(6 + (evacuation?.evacuationStart ?? 600) - 600)}${evacuationRow}`;
+    const resumedTechnicalCell = `${toColumn(6 + (evacuation?.evacuationEnd ?? 600) + 1 - 600)}${evacuationRow}`;
+    expect(Number(xfs[cellStyle(evacuationCell)]?.["@_fillId"])).toBe(17);
+    expect(Number(xfs[cellStyle(resumedTechnicalCell)]?.["@_fillId"])).toBe(3);
     expect(timelineXml).toContain('Technical Inspection On RV1 (Lap Bar Toggle Loose)');
   }, 30_000);
 });

@@ -58,27 +58,55 @@ const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 18;
 const ATTRACTION_CODES: Record<string, string> = {
   ACR: "ACR",
   ACORNADVENTURE: "ACR",
+  ETI: "ETI",
+  EXPEDITIONTHINICE: "ETI",
+  MFZ: "MFZ",
+  MAMMOTHFUNZONE: "MFZ",
   AFP: "AFP",
   ALPHAFIGHTERPILOTS: "AFP",
   BSC: "BSC",
   BLUESKYCAROUSEL: "BSC",
+  BWZ: "BWZ",
+  BIGWELDSZEPPELINS: "BWZ",
   EHF: "EHF",
   EPICHUMMINGBIRDFLYERS: "EHF",
   ESD: "ESD",
   ESDGLOBALDEFENDER: "ESD",
+  GLOBALDEFENDER: "ESD",
+  IDD: "IDD",
+  INDEPENDENCEDAYDEFIANCE: "IDD",
+  DEFIANCE: "IDD",
   EPICVOYAGETOMOONHAVEN: "VTM",
   VTM: "VTM",
+  NTM: "NTM",
+  NIGHTTIMEWONDERLAND: "NTM",
   PTA: "PTA",
   INVASIONOFTHEPLANETOFTHEAPES: "PTA",
   RCC: "RCC",
+  RIOCARNAVALCHAOS: "RCC",
   RTR: "RTR",
   RIVETTOWNROLLER: "RTR",
   SAG: "SAG",
+  SAMBAGLIDERS: "SAG",
   SIDESHOWGAMES: "SAG",
   SRS: "SRS",
   SIDSROCKNSLIDE: "SRS",
   TTC: "TTC",
   TERRAFORMTOWERCHALLENGE: "TTC",
+  BCTEV: "BCT (EV)",
+  BOOTCAMPTRAININGEXTREMEVERT: "BCT (EV)",
+  EXTREMEVERT: "BCT (EV)",
+  BCTRC: "BCT (RC)",
+  BOOTCAMPTRAININGROPESCOURSE: "BCT (RC)",
+  ROPESCOURSE: "BCT (RC)",
+  BCTUZ: "BCT (UZ)",
+  BOOTCAMPTRAININGUNHARNESSZONES: "BCT (UZ)",
+  BOOTCAMPTRAININGUNHARNESSEDZONES: "BCT (UZ)",
+  UNHARNESSZONES: "BCT (UZ)",
+  UNHARNESSEDZONES: "BCT (UZ)",
+  BCTZC: "BCT (ZC)",
+  BOOTCAMPTRAININGZIPCOASTER: "BCT (ZC)",
+  ZIPCOASTER: "BCT (ZC)",
 };
 
 function attribute(xml: string, name: string): string | undefined {
@@ -248,8 +276,17 @@ export function formatTime(minutes?: number): string {
   return `${String(Math.floor(normalised / 60)).padStart(2, "0")}:${String(normalised % 60).padStart(2, "0")}`;
 }
 
-export function resolveRideCode(attraction: string): string | undefined {
-  return ATTRACTION_CODES[normalizeText(attraction)];
+export function resolveRideCode(attraction: string, description = ""): string | undefined {
+  const direct = ATTRACTION_CODES[normalizeText(attraction)];
+  if (direct) return direct;
+  const context = normalizeText(`${attraction} ${description}`);
+  if (context.includes("BOOTCAMP") || context.includes("BCT")) {
+    if (context.includes("EXTREMEVERT")) return "BCT (EV)";
+    if (context.includes("ROPESCOURSE")) return "BCT (RC)";
+    if (context.includes("UNHARNESSZONES")) return "BCT (UZ)";
+    if (context.includes("ZIPCOASTER")) return "BCT (ZC)";
+  }
+  return ATTRACTION_CODES[context];
 }
 
 function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): DowntimeRecord[] {
@@ -277,7 +314,7 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
       dateKey: recordDateKey ?? "",
       dateLabel: recordDateKey ? dateLabel(recordDateKey) : "Unknown date",
       attraction,
-      rideCode: resolveRideCode(attraction),
+      rideCode: resolveRideCode(attraction, description),
       department,
       description,
       technicalStart,
@@ -404,6 +441,7 @@ type StyleVariants = {
   timeline: Record<TimelineStyleKind, Map<string, string>>;
   percentage: Map<string, string>;
   percentageAlert: Map<string, string>;
+  availability: Record<"standard" | "downtime" | "closed", Map<string, string>>;
 };
 
 function withXfAttributes(xf: string, attributes: Record<string, string>): string {
@@ -444,20 +482,24 @@ function extractCellXfs(content: string): string[] {
 }
 
 function addClosedRideFill(stylesheetXml: string): { stylesheetXml: string; fillId: string } {
+  return addSolidFill(stylesheetXml, CLOSED_FILL_HEX);
+}
+
+function addSolidFill(stylesheetXml: string, rgb: string): { stylesheetXml: string; fillId: string } {
   const container = /(<fills\b[^>]*>)([\s\S]*?)(<\/fills>)/.exec(stylesheetXml);
   if (!container) throw new Error("The Technical template does not expose fill definitions.");
   const existingFill = Array.from(container[2].matchAll(/<fill\b/g)).length;
   const open = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${existingFill + 1}"`)
     : container[1].replace(">", ` count="${existingFill + 1}">`);
-  const fill = `<fill><patternFill patternType="solid"><fgColor rgb="${CLOSED_FILL_HEX}"/><bgColor indexed="64"/></patternFill></fill>`;
+  const fill = `<fill><patternFill patternType="solid"><fgColor rgb="${rgb}"/><bgColor indexed="64"/></patternFill></fill>`;
   return {
     stylesheetXml: stylesheetXml.replace(container[0], `${open}${container[2]}${fill}${container[3]}`),
     fillId: String(existingFill),
   };
 }
 
-function addAlertFonts(stylesheetXml: string): { stylesheetXml: string; fontIds: Map<string, string> } {
+function addColorFonts(stylesheetXml: string, color: string): { stylesheetXml: string; fontIds: Map<string, string> } {
   const container = /(<fonts\b[^>]*>)([\s\S]*?)(<\/fonts>)/.exec(stylesheetXml);
   if (!container) throw new Error("The Technical template does not expose font definitions.");
   const fonts = Array.from(container[2].matchAll(/<font\b[^>]*(?:\/>|>[\s\S]*?<\/font>)/g)).map(match => match[0]);
@@ -465,13 +507,13 @@ function addAlertFonts(stylesheetXml: string): { stylesheetXml: string; fontIds:
   const fontIds = new Map<string, string>();
   const additions: string[] = [];
   fonts.forEach((font, index) => {
-    const redFont = /<color\b[^>]*\/?\s*>/.test(font)
-      ? font.replace(/<color\b[^>]*\/?\s*>/, '<color rgb="FFFF0000"/>')
+    const coloredFont = /<color\b[^>]*\/?\s*>/.test(font)
+      ? font.replace(/<color\b[^>]*\/?\s*>/, `<color rgb="${color}"/>`)
       : font.endsWith("/>")
-        ? `<font><color rgb="FFFF0000"/></font>`
-        : font.replace(/<font\b([^>]*)>/, '<font$1><color rgb="FFFF0000"/>');
+        ? `<font><color rgb="${color}"/></font>`
+        : font.replace(/<font\b([^>]*)>/, `<font$1><color rgb="${color}"/>`);
     fontIds.set(String(index), String(fonts.length + index));
-    additions.push(redFont);
+    additions.push(coloredFont);
   });
   const open = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${fonts.length * 2}"`)
@@ -481,8 +523,10 @@ function addAlertFonts(stylesheetXml: string): { stylesheetXml: string; fontIds:
 
 function createStyleVariants(stylesheetXml: string): StyleVariants {
   const withClosedFill = addClosedRideFill(stylesheetXml);
-  const withAlertFonts = addAlertFonts(withClosedFill.stylesheetXml);
-  const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withAlertFonts.stylesheetXml);
+  const withAvailabilityFill = addSolidFill(withClosedFill.stylesheetXml, "FFFFF2CC");
+  const withRedFonts = addColorFonts(withAvailabilityFill.stylesheetXml, "FFFF0000");
+  const withPurpleFonts = addColorFonts(withRedFonts.stylesheetXml, "FF7030A0");
+  const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withPurpleFonts.stylesheetXml);
   if (!container) throw new Error("The Technical template does not expose cell formatting definitions.");
   const xfs = extractCellXfs(container[2]);
   if (xfs.length === 0) throw new Error("The Technical template does not expose reusable cell formatting.");
@@ -500,6 +544,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
   };
   const percentage = new Map<string, string>();
   const percentageAlert = new Map<string, string>();
+  const availability = { standard: new Map<string, string>(), downtime: new Map<string, string>(), closed: new Map<string, string>() };
   const additions: string[] = [];
   let nextStyle = xfs.length;
   xfs.forEach((xf, index) => {
@@ -511,17 +556,25 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     percentage.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
     percentageAlert.set(base, String(nextStyle++));
-    const redFontId = withAlertFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
+    const redFontId = withRedFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1" }));
+    availability.standard.set(base, String(nextStyle++));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
+    availability.downtime.set(base, String(nextStyle++));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: withAvailabilityFill.fillId, applyFill: "1" }));
+    availability.closed.set(base, String(nextStyle++));
+    const purpleFontId = withPurpleFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: purpleFontId, applyFont: "1" }));
   });
   const updatedOpen = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${nextStyle}"`)
     : container[1].replace(">", ` count="${nextStyle}">`);
   return {
-    stylesheetXml: withAlertFonts.stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
+    stylesheetXml: withPurpleFonts.stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
     timeline,
     percentage,
     percentageAlert,
+    availability,
   };
 }
 
@@ -673,7 +726,7 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
       let revised = previousUpdate ? previousUpdate(xml) : xml;
     const percentageReference = `D${row}`;
     revised = setFormula(revised, percentageReference, `${aggregate.technicalMinutes}/${DAILY_OPERATING_MINUTES}`, aggregate.technicalMinutes / DAILY_OPERATING_MINUTES);
-    const percentageStyle = aggregate.technicalMinutes / DAILY_OPERATING_MINUTES > 0.01 ? variants.percentageAlert : variants.percentage;
+    const percentageStyle = aggregate.technicalMinutes / DAILY_OPERATING_MINUTES >= 0.01 ? variants.percentageAlert : variants.percentage;
     revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), percentageStyle));
     const dayKey = timelineDateKey(aggregate.dateKey);
     const dayRange = dayKey ? maps.dayRows.get(dayKey) : undefined;
@@ -683,7 +736,7 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
         .reduce((total, item) => total + item.technicalMinutes, 0);
       const totalReference = `E${row}`;
       revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/18`, totalMinutes / FLEET_OPERATING_MINUTES);
-      const totalStyle = totalMinutes / FLEET_OPERATING_MINUTES > 0.01 ? variants.percentageAlert : variants.percentage;
+      const totalStyle = totalMinutes / FLEET_OPERATING_MINUTES >= 0.01 ? variants.percentageAlert : variants.percentage;
       revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), totalStyle));
     }
     return revised;
@@ -725,16 +778,16 @@ const AVAILABILITY_ROWS: Record<string, number> = {
 const TIMELINE_ROWS: Record<string, number> = { ACR: 4, BWZ: 5, BSC: 6, AFP: 7, ESD: 8, EHF: 9, VTM: 10, ETI: 11, IDD: 12, MFZ: 13, "BCT (EV)": 14, "BCT (RC)": 15, "BCT (UZ)": 16, "BCT (ZC)": 17, NTM: 18, PTA: 19, RCC: 20, RTR: 21, SAG: 22, SRS: 23, TTC: 24 };
 const AVAILABILITY_AVERAGE_ROWS = [88, 119, 123];
 
-function availabilityForRide(rideCode: string, aggregates: Map<string, DailyAggregate>, closedRides: Set<string>): number {
-  return closedRides.has(rideCode) ? 0 : 1 - (aggregates.get(rideCode)?.technicalMinutes ?? 0) / DAILY_OPERATING_MINUTES;
+function downtimeForRide(rideCode: string, aggregates: Map<string, DailyAggregate>, closedRides: Set<string>): number {
+  return closedRides.has(rideCode) ? 0 : (aggregates.get(rideCode)?.technicalMinutes ?? 0) / DAILY_OPERATING_MINUTES;
 }
 
-function averageAvailability(aggregates: Map<string, DailyAggregate>, closedRides: Set<string>, start: number, end: number): number {
+function averageDowntime(aggregates: Map<string, DailyAggregate>, closedRides: Set<string>, start: number, end: number): number {
   const rides = Object.entries(AVAILABILITY_ROWS).filter(([, row]) => row >= start && row <= end).map(([ride]) => ride);
-  return rides.reduce((sum, ride) => sum + availabilityForRide(ride, aggregates, closedRides), 0) / rides.length;
+  return rides.reduce((sum, ride) => sum + downtimeForRide(ride, aggregates, closedRides), 0) / rides.length;
 }
 
-function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<string, DailyAggregate>, reportDateKey: string): Map<number, (rowXml: string) => string> {
+function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<string, DailyAggregate>, reportDateKey: string, variants: StyleVariants): Map<number, (rowXml: string) => string> {
   const aggregateByRide = new Map(Array.from(aggregates.values()).map(item => [item.rideCode, item]));
   const closedRides = new Set(records.filter(item => item.status === "matched" && item.isClosed && item.rideCode).map(item => item.rideCode!));
   const updates = new Map<number, Array<(rowXml: string) => string>>();
@@ -750,8 +803,13 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
     Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
       if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`));
       else {
-        const availability = availabilityForRide(rideCode, aggregateByRide, closedRides);
-        add(row, xml => closedRides.has(rideCode) ? setNumber(xml, `${column}${row}`, 0) : setFormula(xml, `${column}${row}`, `1-D${TIMELINE_ROWS[rideCode]}`, availability));
+        const downtime = downtimeForRide(rideCode, aggregateByRide, closedRides);
+        add(row, xml => {
+          const reference = `${column}${row}`;
+          let revised = closedRides.has(rideCode) ? setNumber(xml, reference, 0) : setFormula(xml, reference, `D${TIMELINE_ROWS[rideCode]}`, downtime);
+          const kind = closedRides.has(rideCode) ? "closed" : downtime > 0 ? "downtime" : "standard";
+          return setStyle(revised, reference, deriveStyle(findCell(revised, reference), variants.availability[kind]));
+        });
       }
     });
     AVAILABILITY_AVERAGE_ROWS.forEach(row => { if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`)); });
@@ -759,12 +817,16 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
   Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
     add(row, xml => clearCell(xml, `HQ${row}`));
   });
-  const zoneA = averageAvailability(aggregateByRide, closedRides, 52, 85);
-  const zoneB = averageAvailability(aggregateByRide, closedRides, 92, 116);
-  const total = averageAvailability(aggregateByRide, closedRides, 52, 116);
-  add(88, xml => setFormula(xml, "BZ88", "SUM(BZ52:CT87)/12", zoneA));
-  add(119, xml => setFormula(xml, "BZ119", "SUM(BZ92:CT118)/9", zoneB));
-  add(123, xml => setFormula(xml, "BZ123", "SUM(BZ52:CT87,BZ92:CT118)/19", total));
+  const zoneA = averageDowntime(aggregateByRide, closedRides, 52, 85);
+  const zoneB = averageDowntime(aggregateByRide, closedRides, 92, 116);
+  const total = averageDowntime(aggregateByRide, closedRides, 52, 116);
+  const updateTotal = (reference: string, formula: string, value: number) => (xml: string) => {
+    const revised = setFormula(xml, reference, formula, value);
+    return setStyle(revised, reference, deriveStyle(findCell(revised, reference), value > 0 ? variants.availability.downtime : variants.availability.standard));
+  };
+  add(88, updateTotal("BZ88", "SUM(BZ52:CT87)/12", zoneA));
+  add(119, updateTotal("BZ119", "SUM(BZ92:CT118)/9", zoneB));
+  add(123, updateTotal("BZ123", "SUM(BZ52:CT87,BZ92:CT118)/19", total));
   add(88, xml => clearCell(xml, "HQ88"));
   add(119, xml => clearCell(xml, "HQ119"));
   add(123, xml => clearCell(xml, "HQ123"));
@@ -802,7 +864,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const timelineUpdates = prepareTimelineUpdates(records, maps, styleVariants);
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
   const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
-  const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate);
+  const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate, styleVariants);
   for (const [row, update] of Array.from(dailyPercentageUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));

@@ -31,3 +31,10 @@
 - [x] Update the fixed-template asset, processor, review interface, and regression tests for the new V2 workflow.
 - [x] Validate date-independent workbook generation, availability formulas, styles, and interface before saving the revised checkpoint.
 - [x] Clear all unused weekly-availability date headers, weekday labels, ride cells, and weekly-average cells while retaining only the first report-day column.
+- [x] Add the complete attraction-name and ride-abbreviation mapping from the supplied reference, including all Boot Camp Training variants.
+- [x] Inspect WK31.xlsx to identify the exact technical, evacuation, resumed-technical, and percentage highlight styles.
+- [x] Change weekly availability output to 0.00% for no downtime, purple 0.00% for closed rides, and red pale-yellow values for every non-zero downtime result.
+- [x] Preserve light-blue technical segments before and after dark-blue evacuation segments in generated ride timelines.
+- [x] Update the review dashboard color key and wording for the revised availability rules.
+- [x] Add and run regressions for full mapping, availability formatting, closed rides, and interrupted technical downtime intervals.
+- [x] Validate the revised XLSX output and interface before saving the update checkpoint.
