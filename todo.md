@@ -53,3 +53,9 @@
 - [x] Keep AFP blank by default as a planned closure; apply closure highlighting only when AFP is in the downtime log or selected during handover.
 - [x] Add regressions for the 29 May ETI match, NATM label, and conditional AFP row behavior.
 - [x] Validate the generated 29 May workbook, review interface, tests, and live download before saving the update checkpoint.
+- [x] Inspect the fixed template and export writer for all remaining default AFP row fills.
+- [x] Remove default AFP closed-row color so AFP is uncoloured unless the log or handover selection includes it.
+- [x] Add regression coverage for an uncoloured default AFP row and retained AFP source/handover formatting.
+- [x] Validate the corrected AFP export and live workflow before saving the update checkpoint.
+- [x] Run a post-fix live workbook export that verifies the default AFP row has no fill or closure text while handover-selected AFP still receives closure formatting.
+- [x] Download a live AFP handover-closure export and verify its row-7 peach fill and closure label end to end.

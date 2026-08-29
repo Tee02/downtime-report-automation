@@ -136,10 +136,25 @@ describe("supplied workbook integration", () => {
     expect(result.records.some(record => record.rideCode === "AFP")).toBe(false);
     const output = await JSZip.loadAsync(result.outputBuffer);
     const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const styles = new XMLParser({ ignoreAttributes: false }).parse(await output.file("xl/styles.xml")?.async("string") ?? "") as any;
+    const xfs = styles.styleSheet?.cellXfs?.xf ?? [];
+    const fills = styles.styleSheet?.fills?.fill ?? [];
     const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    const fillId = (reference: string) => Number(xfs[Number(/\bs="(\d+)"/.exec(cell(reference))?.[1])]?.["@_fillId"]);
     expect(cell("D7")).toMatch(/^<c r="D7"(?: s="\d+")?\/>$/);
     expect(cell("F7")).toMatch(/^<c r="F7"(?: s="\d+")?\/>$/);
+    expect(fillId("F7")).toBe(0);
     expect(cell("BZ82")).toMatch(/^<c r="BZ82"(?: s="\d+")?\/>$/);
+
+    const handoverResult = await processDowntimeWorkbooks(withoutAfpLog, await readFile(templateFixture), { manualClosedRideCodes: ["AFP"] });
+    const handoverOutput = await JSZip.loadAsync(handoverResult.outputBuffer);
+    const handoverTimeline = await handoverOutput.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const handoverStyles = new XMLParser({ ignoreAttributes: false }).parse(await handoverOutput.file("xl/styles.xml")?.async("string") ?? "") as any;
+    const handoverCell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(handoverTimeline)?.[0] ?? "";
+    const handoverXfs = handoverStyles.styleSheet?.cellXfs?.xf ?? [];
+    const handoverFills = handoverStyles.styleSheet?.fills?.fill ?? [];
+    const handoverFillId = Number(handoverXfs[Number(/\bs="(\d+)"/.exec(handoverCell("F7"))?.[1])]?.["@_fillId"]);
+    expect(handoverFills[handoverFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFF8CBAD");
   }, 30_000);
 
   const may29Fixture = "/home/ubuntu/upload/29.05.2026Tech-SkyWorldsDowntimeLog.xlsx";

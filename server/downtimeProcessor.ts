@@ -650,8 +650,6 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
 }
 
 function prepareDefaultAfpBlankUpdates(records: DowntimeRecord[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
-  const hasAfpRecord = records.some(record => record.status === "matched" && record.rideCode === "AFP");
-  if (hasAfpRecord) return new Map();
   const row = maps.timelineRows.get(`${timelineDateKey(records[0]?.dateKey ?? "")}|AFP`);
   if (!row) return new Map();
   return new Map([[row, (xml: string) => {
@@ -736,11 +734,23 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
     const row = maps.timelineRows.get(`${timelineDateKey(aggregate.dateKey)}|${aggregate.rideCode}`);
     if (row) entries.set(row, aggregate);
   }
+  const hasAfpRecord = records.some(record => record.status === "matched" && record.rideCode === "AFP");
+  const blankAfpRows = new Set(
+    hasAfpRecord
+      ? []
+      : Array.from(maps.timelineRows.entries())
+          .filter(([key]) => key.endsWith("|AFP"))
+          .map(([, row]) => row)
+  );
   const updates = new Map<number, (rowXml: string) => string>();
   for (const [dayKey, range] of Array.from(maps.dayRows.entries())) {
     for (let row = range.start; row <= range.end; row++) {
       updates.set(row, xml => {
-        let revised = closedRows.has(row) ? setText(xml, `D${row}`, "CLOSED") : setNumber(xml, `D${row}`, 0);
+        let revised = blankAfpRows.has(row)
+          ? clearCell(xml, `D${row}`)
+          : closedRows.has(row)
+            ? setText(xml, `D${row}`, "CLOSED")
+            : setNumber(xml, `D${row}`, 0);
         if (row === range.start) revised = setNumber(revised, `E${row}`, 0);
         return revised;
       });
@@ -924,6 +934,11 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
   const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
   const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate, styleVariants);
+  const defaultAfpBlankUpdates = prepareDefaultAfpBlankUpdates(records, maps, styleVariants);
+  for (const [row, update] of Array.from(defaultAfpBlankUpdates.entries())) {
+    const previousUpdate = timelineUpdates.get(row);
+    timelineUpdates.set(row, (xml: string) => previousUpdate ? previousUpdate(update(xml)) : update(xml));
+  }
   for (const [row, update] of Array.from(dailyPercentageUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
@@ -933,11 +948,6 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
   for (const [row, update] of Array.from(availabilityUpdates.entries())) {
-    const previousUpdate = timelineUpdates.get(row);
-    timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
-  }
-  const defaultAfpBlankUpdates = prepareDefaultAfpBlankUpdates(records, maps, styleVariants);
-  for (const [row, update] of Array.from(defaultAfpBlankUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));
   }
