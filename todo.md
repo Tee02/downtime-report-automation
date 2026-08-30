@@ -59,3 +59,5 @@
 - [x] Validate the corrected AFP export and live workflow before saving the update checkpoint.
 - [x] Run a post-fix live workbook export that verifies the default AFP row has no fill or closure text while handover-selected AFP still receives closure formatting.
 - [x] Download a live AFP handover-closure export and verify its row-7 peach fill and closure label end to end.
+- [x] Change the total downtime percentage formula divisor from 18 to 19 without altering any other report rule.
+- [x] Update regression assertions and validate the generated total-percentage formula through the live export.

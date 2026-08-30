@@ -59,7 +59,7 @@ describe("supplied workbook integration", () => {
     expect(result.records.filter(record => !record.isClosed).every(record => record.department === "Technical")).toBe(true);
     expect(result.records.some(record => /AVL/i.test(record.description))).toBe(false);
     expect(result.totalTechnicalMinutes).toBe(229);
-    expect(result.totalNetworkPercentage).toBeCloseTo((229 / 8640) * 100, 8);
+    expect(result.totalNetworkPercentage).toBeCloseTo((229 / 9120) * 100, 8);
     expect(result.outputBuffer.length).toBeGreaterThan(100_000);
 
     const output = await JSZip.loadAsync(result.outputBuffer);
@@ -90,7 +90,7 @@ describe("supplied workbook integration", () => {
     expect(timelineXml).toContain("26 Aug\nWed");
     expect(workbookXml).toContain('name="26 Aug-1 Sep 2026"');
     expect(cell("D8")).toContain("<f>68/480</f>");
-    expect(cell("E4")).toContain("<f>SUM(D4:D24)/18</f>");
+    expect(cell("E4")).toContain("<f>SUM(D4:D24)/19</f>");
     expect(cell("BZ48")).toContain("<v>26</v>");
     expect(cell("BZ50")).toContain(">Wed</t>");
     expect(cell("BZ58")).toContain("<f>D8</f>");

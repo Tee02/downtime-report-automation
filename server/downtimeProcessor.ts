@@ -57,7 +57,7 @@ const OPERATIONS_FILL_ID = "4";
 const EVACUATION_FILL_ID = "7";
 const CLOSED_FILL_HEX = "FFF8CBAD";
 const DAILY_OPERATING_MINUTES = 480;
-const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 18;
+const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 19;
 
 const ATTRACTION_CODES: Record<string, string> = {
   ACR: "ACR",
@@ -771,7 +771,7 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
         .filter(item => timelineDateKey(item.dateKey) === dayKey)
         .reduce((total, item) => total + item.technicalMinutes, 0);
       const totalReference = `E${row}`;
-      revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/18`, totalMinutes / FLEET_OPERATING_MINUTES);
+      revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/19`, totalMinutes / FLEET_OPERATING_MINUTES);
       const totalStyle = totalMinutes / FLEET_OPERATING_MINUTES >= 0.01 ? variants.percentageAlert : variants.percentage;
       revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), totalStyle));
     }
