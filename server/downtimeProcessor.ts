@@ -35,6 +35,7 @@ export type ProcessingResult = {
   totalEvacuationMinutes: number;
   totalNetworkPercentage: number;
   closedRideCount: number;
+  weatherIntervalCount: number;
   summaryByRide: Array<{
     rideCode: string;
     attraction: string;
@@ -50,12 +51,14 @@ export type ProcessingResult = {
 
 export type ProcessingOptions = {
   manualClosedRideCodes?: string[];
+  weatherText?: string;
 };
 
 const TECHNICAL_FILL_ID = "3";
 const OPERATIONS_FILL_ID = "4";
 const EVACUATION_FILL_ID = "7";
 const CLOSED_FILL_HEX = "FFF8CBAD";
+const WEATHER_FILL_HEX = "FFFFC000";
 const DAILY_OPERATING_MINUTES = 480;
 const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 19;
 
@@ -297,6 +300,98 @@ export function resolveRideCode(attraction: string, description = ""): string | 
   return ATTRACTION_CODES[context];
 }
 
+export type WeatherInterval = {
+  dateKey: string;
+  rideCode: string;
+  startedAt: number;
+  resumedAt: number;
+  minutes: number;
+  condition: string;
+};
+
+type WeatherUpdateKind = "start" | "resume";
+
+const WEATHER_CONDITIONS: Record<string, string> = {
+  BLUE: "10-13 Blue — Clearing",
+  GREEN: "10-13 Green — Light rain",
+  ORANGE: "10-13 Orange — Moderate to heavy rain",
+  PURPLE: "10-13 Purple — Fog",
+};
+
+function parseWeatherTime(value: string): number | undefined {
+  const match = /@\s*:?[\s]*(\d{1,2}:?\d{2})\s*H?\b/i.exec(value);
+  return match ? parseTimeToMinutes(match[1]) : undefined;
+}
+
+function weatherConditionFromText(value: string): string | undefined {
+  const color = /10\s*-\s*13\s*(blue|green|orange|purple)\b/i.exec(value)?.[1]?.toUpperCase();
+  return color ? WEATHER_CONDITIONS[color] : undefined;
+}
+
+function weatherKindFromText(value: string): WeatherUpdateKind | undefined {
+  const code = /\b11\s*-\s*([38])\s*:/i.exec(value)?.[1];
+  return code === "3" ? "start" : code === "8" ? "resume" : undefined;
+}
+
+function rideFromWeatherLine(value: string): string | undefined {
+  const codeMatch = /\b11\s*-\s*[38]\s*:/i.exec(value);
+  const timeIndex = value.search(/@\s*:?[\s]*\d{1,2}:?\d{2}\s*H?\b/i);
+  const beforeTime = timeIndex >= 0 ? value.slice(0, timeIndex) : value;
+  const candidates = codeMatch
+    ? [value.slice(0, codeMatch.index), value.slice(codeMatch.index + codeMatch[0].length, timeIndex >= 0 ? timeIndex : undefined), beforeTime]
+    : [beforeTime];
+  return candidates.map(candidate => resolveRideCode(candidate)).find((rideCode): rideCode is string => Boolean(rideCode));
+}
+
+/**
+ * Pairs pasted 11-3 weather starts and 11-8 resume updates for recognised rides.
+ * An unlabelled 11-8 update is applied only when exactly one weather start is pending.
+ */
+export function parseWeatherIntervals(value: string, dateKey: string): WeatherInterval[] {
+  const pending = new Map<string, { startedAt: number; condition: string }>();
+  const intervals: WeatherInterval[] = [];
+  let activeKind: WeatherUpdateKind | undefined;
+  let activeCondition: string | undefined;
+
+  const closeInterval = (rideCode: string, resumedAt: number) => {
+    const start = pending.get(rideCode);
+    if (!start) return;
+    pending.delete(rideCode);
+    intervals.push({
+      dateKey,
+      rideCode,
+      startedAt: start.startedAt,
+      resumedAt,
+      minutes: durationMinutes(start.startedAt, resumedAt),
+      condition: start.condition,
+    });
+  };
+
+  for (const rawLine of value.replace(/\r/g, "").split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const lineKind = weatherKindFromText(line);
+    if (lineKind) {
+      activeKind = lineKind;
+      activeCondition = weatherConditionFromText(line) ?? activeCondition;
+    }
+    if (!activeKind) continue;
+
+    const time = parseWeatherTime(line);
+    if (time === undefined) continue;
+    const rideCode = rideFromWeatherLine(line);
+    if (activeKind === "start" && rideCode) {
+      pending.set(rideCode, { startedAt: time, condition: weatherConditionFromText(line) ?? activeCondition ?? "Inclement Weather" });
+      continue;
+    }
+    if (activeKind === "resume") {
+      if (rideCode) closeInterval(rideCode, time);
+      else if (pending.size === 1) closeInterval(Array.from(pending.keys())[0]!, time);
+    }
+  }
+  return intervals;
+}
+
 function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): DowntimeRecord[] {
   const rows = parseRows(recordsSheet.xml, sharedStrings);
   const results: DowntimeRecord[] = [];
@@ -443,7 +538,7 @@ function setStyle(rowXml: string, reference: string, style: string): string {
   return replaceCell(rowXml, reference, `>${body}`, style);
 }
 
-type TimelineStyleKind = "technical" | "operations" | "evacuation" | "closed" | "blank";
+type TimelineStyleKind = "technical" | "operations" | "evacuation" | "weather" | "closed" | "blank";
 type StyleVariants = {
   stylesheetXml: string;
   timeline: Record<TimelineStyleKind, Map<string, string>>;
@@ -531,7 +626,8 @@ function addColorFonts(stylesheetXml: string, color: string): { stylesheetXml: s
 
 function createStyleVariants(stylesheetXml: string): StyleVariants {
   const withClosedFill = addClosedRideFill(stylesheetXml);
-  const withAvailabilityFill = addSolidFill(withClosedFill.stylesheetXml, "FFFFF2CC");
+  const withWeatherFill = addSolidFill(withClosedFill.stylesheetXml, WEATHER_FILL_HEX);
+  const withAvailabilityFill = addSolidFill(withWeatherFill.stylesheetXml, "FFFFF2CC");
   const withRedFonts = addColorFonts(withAvailabilityFill.stylesheetXml, "FFFF0000");
   const withPurpleFonts = addColorFonts(withRedFonts.stylesheetXml, "FF7030A0");
   const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withPurpleFonts.stylesheetXml);
@@ -542,6 +638,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     technical: TECHNICAL_FILL_ID,
     operations: OPERATIONS_FILL_ID,
     evacuation: EVACUATION_FILL_ID,
+    weather: withWeatherFill.fillId,
     closed: withClosedFill.fillId,
     blank: "0",
   };
@@ -549,6 +646,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     technical: new Map<string, string>(),
     operations: new Map<string, string>(),
     evacuation: new Map<string, string>(),
+    weather: new Map<string, string>(),
     closed: new Map<string, string>(),
     blank: new Map<string, string>(),
   };
@@ -600,7 +698,7 @@ function changeRows(xml: string, updates: Map<number, (rowXml: string) => string
   });
 }
 
-function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
+function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: WeatherInterval[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
   const byRow = new Map<number, DowntimeRecord[]>();
   for (const record of records.filter(item => item.status === "matched" && item.rideCode && (item.isClosed || (item.technicalStart !== undefined && item.technicalEnd !== undefined)))) {
     const key = `${timelineDateKey(record.dateKey)}|${record.rideCode}`;
@@ -608,8 +706,15 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
     if (!row) continue;
     byRow.set(row, [...(byRow.get(row) ?? []), record]);
   }
+  const weatherByRow = new Map<number, WeatherInterval[]>();
+  for (const interval of weatherIntervals) {
+    const row = maps.timelineRows.get(`${timelineDateKey(interval.dateKey)}|${interval.rideCode}`);
+    if (row) weatherByRow.set(row, [...(weatherByRow.get(row) ?? []), interval]);
+  }
   const updates = new Map<number, (rowXml: string) => string>();
-  for (const [rowNumber, rowRecords] of Array.from(byRow.entries())) {
+  for (const rowNumber of Array.from(new Set([...Array.from(byRow.keys()), ...Array.from(weatherByRow.keys())]))) {
+    const rowRecords = byRow.get(rowNumber) ?? [];
+    const rowWeather = weatherByRow.get(rowNumber) ?? [];
     updates.set(rowNumber, rowXml => {
       const cellStyles = new Map<string, { kind: TimelineStyleKind; priority: number }>();
       const descriptions: Array<{ reference: string; value: string }> = [];
@@ -624,6 +729,11 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
           if (!previous || priority >= previous.priority) cellStyles.set(reference, { kind, priority });
         }
       };
+      for (const interval of rowWeather) {
+        setRange(interval.startedAt, interval.resumedAt, "weather", 3);
+        const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (interval.startedAt % 1440) - 605);
+        descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: `Weather — ${interval.condition} (${formatTime(interval.startedAt)}-${formatTime(interval.resumedAt)})` });
+      }
       for (const record of rowRecords) {
         if (record.isClosed) {
           setRange(600, 1079, "closed", 4);
@@ -634,7 +744,7 @@ function prepareTimelineUpdates(records: DowntimeRecord[], maps: TemplateMaps, v
         if (record.operationsEnd !== undefined && record.technicalEnd !== undefined && record.operationsEnd > record.technicalEnd) {
           setRange(record.technicalEnd + 1, record.operationsEnd, "operations", 2);
         }
-        setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 3);
+        setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 4);
         const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (record.technicalStart! % 1440) - 605);
         descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
       }
@@ -911,6 +1021,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const existingClosures = new Set(records.filter(record => record.isClosed && record.rideCode).map(record => record.rideCode!));
   const manualRideCodes = Array.from(new Set((options.manualClosedRideCodes ?? []).map(normalizeManualRideCode).filter((rideCode): rideCode is string => Boolean(rideCode))));
   manualRideCodes.filter(rideCode => !existingClosures.has(rideCode)).forEach(rideCode => records.push(manualClosureRecord(rideCode, outputDate)));
+  const weatherIntervals = parseWeatherIntervals(options.weatherText ?? "", outputDate);
   const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings, outputDate);
   const styleVariants = createStyleVariants(await textFromZip(templateZip, "xl/styles.xml"));
   templateZip.file("xl/styles.xml", styleVariants.stylesheetXml);
@@ -930,7 +1041,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     }
   }
   const aggregates = aggregateRecords(records);
-  const timelineUpdates = prepareTimelineUpdates(records, maps, styleVariants);
+  const timelineUpdates = prepareTimelineUpdates(records, weatherIntervals, maps, styleVariants);
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
   const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
   const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate, styleVariants);
@@ -987,6 +1098,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     totalEvacuationMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.evacuationMinutes : 0), 0),
     totalNetworkPercentage: (records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.technicalMinutes : 0), 0) / FLEET_OPERATING_MINUTES) * 100,
     closedRideCount: records.filter(record => record.status === "matched" && record.isClosed).length,
+    weatherIntervalCount: weatherIntervals.length,
     summaryByRide: [...summaryByRide].sort((a, b) => b.minutes - a.minutes),
     outputBuffer,
     outputFileName: `Technical_Downtime_${outputDate}.xlsx`,

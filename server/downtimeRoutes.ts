@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import multer from "multer";
+import { createSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { processDowntimeWorkbooks } from "./downtimeProcessor";
 
@@ -34,6 +35,22 @@ function parseManualClosures(value: unknown): string[] {
   return parsed;
 }
 
+function parseSavePreference(value: unknown): boolean {
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("The save preference is invalid.");
+}
+
+function parseWeatherText(value: unknown): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || value.length > 20_000) throw new Error("The weather message text is invalid.");
+  return value;
+}
+
+function safeFileName(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-").slice(0, 180) || "downtime-log.xlsx";
+}
+
 export function registerDowntimeRoutes(app: Express) {
   app.post(
     "/api/downtime/analyze",
@@ -43,16 +60,39 @@ export function registerDowntimeRoutes(app: Express) {
       if (!operationsFile) return failure(response, 400, "Upload an Operations downtime XLSX file.");
       try {
         const manualClosedRideCodes = parseManualClosures(request.body.closedRideCodes);
-        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes });
+        const weatherText = parseWeatherText(request.body.weatherText);
+        const saveToStorage = parseSavePreference(request.body.saveToStorage);
+        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText });
+        const reportId = crypto.randomUUID();
         const stored = await storagePut(
-          `downtime-reports/${crypto.randomUUID()}/${result.outputFileName}`,
+          `downtime-reports/${reportId}/${result.outputFileName}`,
           result.outputBuffer,
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
+        if (saveToStorage) {
+          const source = await storagePut(
+            `downtime-logs/${reportId}/${safeFileName(operationsFile.originalname)}`,
+            operationsFile.buffer,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          );
+          const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
+          if (!reportDate) throw new Error("The generated report date could not be saved.");
+          await createSavedDowntimeReport({
+            reportDate,
+            sourceFileName: operationsFile.originalname,
+            sourceFileUrl: source.url,
+            outputFileName: result.outputFileName,
+            outputFileUrl: stored.url,
+            totalTechnicalMinutes: result.totalTechnicalMinutes,
+            totalNetworkPercentage: result.totalNetworkPercentage,
+            weatherIntervalCount: result.weatherIntervalCount,
+          });
+        }
         return response.json({
           ...result,
           outputBuffer: undefined,
           downloadUrl: stored.url,
+          savedToLibrary: saveToStorage,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "The workbook could not be processed.";

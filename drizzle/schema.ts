@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { double, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,18 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const savedDowntimeReports = mysqlTable("savedDowntimeReports", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: varchar("reportDate", { length: 10 }).notNull(),
+  sourceFileName: varchar("sourceFileName", { length: 512 }).notNull(),
+  sourceFileUrl: text("sourceFileUrl").notNull(),
+  outputFileName: varchar("outputFileName", { length: 512 }).notNull(),
+  outputFileUrl: text("outputFileUrl").notNull(),
+  totalTechnicalMinutes: int("totalTechnicalMinutes").notNull(),
+  totalNetworkPercentage: double("totalNetworkPercentage").notNull(),
+  weatherIntervalCount: int("weatherIntervalCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SavedDowntimeReport = typeof savedDowntimeReports.$inferSelect;
+export type InsertSavedDowntimeReport = typeof savedDowntimeReports.$inferInsert;

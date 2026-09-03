@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertSavedDowntimeReport, InsertUser, savedDowntimeReports, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,14 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function createSavedDowntimeReport(report: InsertSavedDowntimeReport) {
+  const db = await getDb();
+  if (!db) throw new Error("The report library is temporarily unavailable. Your workbook was generated but could not be saved.");
+  await db.insert(savedDowntimeReports).values(report);
+}
+
+export async function listSavedDowntimeReports() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(savedDowntimeReports).orderBy(desc(savedDowntimeReports.createdAt)).limit(100);
+}

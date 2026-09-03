@@ -3,7 +3,30 @@ import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { __testables, durationMinutes, formatTime, parseTimeToMinutes, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
+import { __testables, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
+
+async function buildMinimalOperationsWorkbook() {
+  const zip = new JSZip();
+  zip.file("xl/workbook.xml", '<workbook><sheets><sheet name="Operations" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file("xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
+  zip.file("xl/worksheets/sheet1.xml", '<worksheet><sheetData><row r="2"><c r="A2" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C2" t="inlineStr"><is><t>Technical</t></is></c><c r="D2" t="inlineStr"><is><t>11-1</t></is></c><c r="F2" t="inlineStr"><is><t>Brake check</t></is></c><c r="G2" t="inlineStr"><is><t>10:00</t></is></c><c r="H2" t="inlineStr"><is><t>10:10</t></is></c></row></sheetData></worksheet>');
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+async function buildMinimalTemplateWorkbook() {
+  const zip = new JSZip();
+  zip.file("xl/workbook.xml", '<workbook><sheets><sheet name="R&A Tech Downtime" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file("xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
+  const reportRows = Array.from({ length: 21 }, (_, index) => {
+    const row = index + 4;
+    if (row === 4) return '<row r="4"><c r="A4" t="inlineStr"><is><t>03 Sep</t></is></c></row>';
+    if (row === 10) return '<row r="10"><c r="B10" t="inlineStr"><is><t>VTM</t></is></c></row>';
+    return `<row r="${row}"></row>`;
+  }).join("");
+  zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="3"><c r="F3"><v>0.4166667</v></c><c r="G3"><v>0.4173611</v></c></row>${reportRows}<row r="107"></row></sheetData></worksheet>`);
+  zip.file("xl/styles.xml", '<styleSheet><fonts count="1"><font><sz val="11"/></font></fonts><fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFB9DFF0"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF7C9DF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF146C94"/></patternFill></fill></fills><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>');
+  return zip.generateAsync({ type: "nodebuffer" });
+}
 
 describe("downtime transformation rules", () => {
   it("uses downtime start through ride readiness for technical minutes", () => {
@@ -41,6 +64,48 @@ describe("downtime transformation rules", () => {
     expect(rows[0]?.cells.get("A")?.value).toBe("");
     expect(rows[0]?.cells.get("B")?.value).toBe("ESD");
     expect(rows[0]?.cells.get("C")?.value).toBe("A");
+  });
+
+  it("pairs a single-ride weather start with an unlabelled resume and ignores operator initials", () => {
+    const intervals = parseWeatherIntervals("VTM - 11-3: Inclement Weather (10-13 Purple); No Guest Onboard @1515H\n11-8: @1626H\nFS", "2026-09-03");
+    expect(intervals).toEqual([expect.objectContaining({ rideCode: "VTM", startedAt: 915, resumedAt: 986, minutes: 71, condition: "10-13 Purple — Fog" })]);
+  });
+
+  it("pairs grouped weather messages ride by ride and leaves unmatched starts out of the export", () => {
+    const intervals = parseWeatherIntervals("11-3: Inclement Weather (10-13 Orange)\n\nBCT (EV): @1414H\nEHF: @1412H\nSAG@:1414H\nAH\n\n11-8: Inclement Weather (10-13 Orange)\n\nBCT (EV): @1501H\nEHF: @1500H\nSAG@:1500H\nMD", "2026-09-03");
+    expect(intervals).toHaveLength(3);
+    expect(intervals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rideCode: "BCT (EV)", minutes: 47, condition: "10-13 Orange — Moderate to heavy rain" }),
+      expect.objectContaining({ rideCode: "EHF", minutes: 48 }),
+      expect.objectContaining({ rideCode: "SAG", minutes: 46 }),
+    ]));
+  });
+
+  it("maps complete weather intervals in orange without changing technical metrics", async () => {
+    const [operations, template] = await Promise.all([buildMinimalOperationsWorkbook(), buildMinimalTemplateWorkbook()]);
+    const baseline = await processDowntimeWorkbooks(operations, template);
+    const result = await processDowntimeWorkbooks(operations, template, { weatherText: "VTM - 11-3: Inclement Weather (10-13 Green) @1015H\n11-8: @1030H" });
+    expect(result.weatherIntervalCount).toBe(1);
+    expect(result.totalTechnicalMinutes).toBe(baseline.totalTechnicalMinutes);
+    expect(result.totalNetworkPercentage).toBe(baseline.totalNetworkPercentage);
+
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const baselineOutput = await JSZip.loadAsync(baseline.outputBuffer);
+    const baselineTimelineXml = await baselineOutput.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const stylesXml = await output.file("xl/styles.xml")?.async("string") ?? "";
+    const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    const styleId = Number(/\bs="(\d+)"/.exec(cell("U10"))?.[1]);
+    const parsedStyles = new XMLParser({ ignoreAttributes: false }).parse(stylesXml) as any;
+    const xfs = parsedStyles.styleSheet?.cellXfs?.xf ?? [];
+    const fills = parsedStyles.styleSheet?.fills?.fill ?? [];
+    const weatherFillId = Number(xfs[styleId]?.["@_fillId"]);
+    expect(fills[weatherFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFFFC000");
+    expect(timelineXml).toContain("Weather — 10-13 Green — Light rain (10:15-10:30)");
+    ["D10", "E4", "BZ107"].forEach(reference => {
+      const baselineCell = new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(baselineTimelineXml)?.[0] ?? "";
+      expect(cell(reference)).toBe(baselineCell);
+    });
   });
 });
 
