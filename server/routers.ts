@@ -25,20 +25,20 @@ export const appRouter = router({
     }),
   }),
   savedReports: router({
-    list: protectedProcedure.query(() => listSavedDowntimeReports()),
+    list: publicProcedure.query(() => listSavedDowntimeReports()),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
       await deleteSavedDowntimeReport(input.id);
       return { success: true };
     }),
   }),
   analysis: router({
-    get: protectedProcedure.input(analysisInput).query(async ({ input }) => {
+    get: publicProcedure.input(analysisInput).query(async ({ input }) => {
       const reports = await getSavedDowntimeReportsByIds(input.reportIds);
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
       const loaded = await loadSavedDowntimeReports(reports);
       return buildAnalysis(loaded.map(item => ({ reportDate: item.report.reportDate, records: item.records })), input.rideCodes);
     }),
-    export: protectedProcedure.input(analysisInput).mutation(async ({ input }) => {
+    export: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
       const reports = await getSavedDowntimeReportsByIds(input.reportIds);
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
       return exportCompiledDowntimeLog(reports, input.rideCodes);

@@ -23,3 +23,11 @@
 - [x] Export a compiled XLSX that retains the original downtime-log structure while filtering to the selected dates and rides.
 - [x] Add automated tests for analysis aggregation, compiled export, and report deletion.
 - [x] Validate the Analysis Studio workflows on desktop and mobile, then publish the enhancement.
+- [x] Inspect the navigation, analysis controls, and report-review display implementation for the requested updates.
+- [x] Keep Analysis Studio navigation on the original website rather than redirecting to manus.im.
+- [x] Add a Select all rides control and replace the calendar Select all action with Clear all dates.
+- [x] Replace the pre-export formula explanation with a workbook-mapping verification alert.
+- [x] Display the report-review bar chart vertically.
+- [x] Revise the total downtime percentage denominator wording to describe minutes across 19 rides.
+- [x] Mark the handover closure check as optional.
+- [x] Test the navigation and revised controls on desktop and mobile, then publish the fix.

@@ -9,11 +9,12 @@ import { appRouter } from "./routers";
 
 describe("savedReports.list", () => {
   const context = { user: { id: 1, openId: "operator", role: "user" } } as TrpcContext;
+  const anonymousContext = { user: null } as TrpcContext;
 
   it("returns the saved-report library from the persistence helper", async () => {
     const reports = [{ id: 1, reportDate: "2026-09-03", sourceFileName: "downtime.xlsx" }];
     mocks.listSavedDowntimeReports.mockResolvedValue(reports);
-    const caller = appRouter.createCaller(context);
+    const caller = appRouter.createCaller(anonymousContext);
 
     await expect(caller.savedReports.list()).resolves.toEqual(reports);
     expect(mocks.listSavedDowntimeReports).toHaveBeenCalledOnce();
