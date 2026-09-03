@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertSavedDowntimeReport, InsertUser, savedDowntimeReports, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -99,4 +99,16 @@ export async function listSavedDowntimeReports() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(savedDowntimeReports).orderBy(desc(savedDowntimeReports.createdAt)).limit(100);
+}
+
+export async function getSavedDowntimeReportsByIds(ids: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("The report library is temporarily unavailable.");
+  return db.select().from(savedDowntimeReports).where(inArray(savedDowntimeReports.id, ids));
+}
+
+export async function deleteSavedDowntimeReport(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("The report library is temporarily unavailable.");
+  await db.delete(savedDowntimeReports).where(eq(savedDowntimeReports.id, id));
 }

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Archive, CloudSun, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
+import { BarChart3, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -29,8 +29,7 @@ import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
-  { icon: Archive, label: "Saved reports", path: "/saved-reports" },
-  { icon: CloudSun, label: "Weather mapping", path: "/weather-guide" },
+  { icon: BarChart3, label: "Analysis studio", path: "/analysis" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { __testables, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
+import { __testables, compileDowntimeLogExport, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
 
 async function buildMinimalOperationsWorkbook() {
   const zip = new JSZip();
@@ -106,6 +106,16 @@ describe("downtime transformation rules", () => {
       const baselineCell = new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(baselineTimelineXml)?.[0] ?? "";
       expect(cell(reference)).toBe(baselineCell);
     });
+  });
+
+  it("compiles selected source-log rides into a valid XLSX using the uploaded-log worksheet structure", async () => {
+    const source = await buildMinimalOperationsWorkbook();
+    const output = await compileDowntimeLogExport([{ reportDate: "2026-09-03", buffer: source }], ["VTM"]);
+    const zip = await JSZip.loadAsync(output);
+    const xml = await zip.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    expect(xml).toContain("Epic Voyage to Moonhaven");
+    expect(xml).toContain("03/09/2026");
+    expect(xml).toContain('<row r="1">');
   });
 });
 

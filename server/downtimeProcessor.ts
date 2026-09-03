@@ -54,6 +54,14 @@ export type ProcessingOptions = {
   weatherText?: string;
 };
 
+export type DowntimeLogCell = { column: string; value: string; style?: string };
+export type DowntimeLogRow = {
+  dateKey?: string;
+  attraction?: string;
+  rideCode?: string;
+  cells: DowntimeLogCell[];
+};
+
 const TECHNICAL_FILL_ID = "3";
 const OPERATIONS_FILL_ID = "4";
 const EVACUATION_FILL_ID = "7";
@@ -436,6 +444,76 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
     results.push(record);
   }
   return results;
+}
+
+export async function readTechnicalDowntimeRecords(operationsBuffer: Buffer): Promise<DowntimeRecord[]> {
+  const zip = await JSZip.loadAsync(operationsBuffer);
+  const workbook = await getSheets(zip);
+  const sheet = workbook.sheets[0];
+  if (!sheet) throw new Error("The saved source log does not contain a downtime worksheet.");
+  return parseOperations(sheet, workbook.sharedStrings);
+}
+
+async function readDowntimeLogRows(operationsBuffer: Buffer): Promise<{ headerRows: DowntimeLogRow[]; dataRows: DowntimeLogRow[] }> {
+  const zip = await JSZip.loadAsync(operationsBuffer);
+  const workbook = await getSheets(zip);
+  const sheet = workbook.sheets[0];
+  if (!sheet) throw new Error("The saved source log does not contain a downtime worksheet.");
+  let activeDateKey: string | undefined;
+  const rows = parseRows(sheet.xml, workbook.sharedStrings).map(row => {
+    const rawDate = row.cells.get("A")?.value ?? "";
+    activeDateKey = excelDateToKey(rawDate) ?? activeDateKey;
+    const attraction = row.cells.get("B")?.value.trim();
+    return {
+      sourceRow: row.number,
+      dateKey: activeDateKey,
+      attraction,
+      rideCode: attraction ? resolveRideCode(attraction, row.cells.get("F")?.value ?? "") : undefined,
+      cells: Array.from(row.cells.values()).map(cell => ({ column: cell.column, value: cell.value, style: cell.style })),
+    };
+  });
+  const firstDataRow = rows.find(row => row.dateKey && row.attraction)?.sourceRow;
+  return {
+    headerRows: rows.filter(row => firstDataRow !== undefined && row.sourceRow < firstDataRow).map(({ sourceRow: _sourceRow, ...row }) => row),
+    dataRows: rows.filter(row => row.dateKey && row.attraction).map(({ sourceRow: _sourceRow, ...row }) => row),
+  };
+}
+
+function rowToXml(row: DowntimeLogRow, rowNumber: number): string {
+  const cells = row.cells
+    .filter(cell => cell.value || cell.style)
+    .sort((left, right) => columnToNumber(left.column) - columnToNumber(right.column))
+    .map(cell => {
+      const value = cell.column === "A" && row.dateKey ? row.dateKey.split("-").reverse().join("/") : cell.value;
+      return `<c r="${cell.column}${rowNumber}"${cell.style ? ` s="${cell.style}"` : ""} t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+    })
+    .join("");
+  return `<row r="${rowNumber}">${cells}</row>`;
+}
+
+export async function compileDowntimeLogExport(sources: Array<{ reportDate: string; buffer: Buffer }>, selectedRideCodes: string[]): Promise<Buffer> {
+  if (!sources.length) throw new Error("Select at least one saved report before exporting.");
+  const sourceRows = [] as Array<{ reportDate: string; headerRows: DowntimeLogRow[]; dataRows: DowntimeLogRow[] }>;
+  for (const source of sources) {
+    sourceRows.push({ reportDate: source.reportDate, ...(await readDowntimeLogRows(source.buffer)) });
+  }
+  const selectedCodes = new Set(selectedRideCodes);
+  const rows = sourceRows
+    .sort((left, right) => left.reportDate.localeCompare(right.reportDate))
+    .flatMap(source => source.dataRows.filter(row => selectedCodes.size === 0 || (row.rideCode && selectedCodes.has(row.rideCode))));
+  const primaryZip = await JSZip.loadAsync(sources[0]!.buffer);
+  const primaryWorkbook = await getSheets(primaryZip);
+  const primarySheet = primaryWorkbook.sheets[0];
+  if (!primarySheet) throw new Error("The saved source log does not contain a downtime worksheet.");
+  const headerRows = sourceRows[0]?.headerRows ?? [];
+  const sheetData = [...headerRows, ...rows].map((row, index) => rowToXml(row, index + 1)).join("");
+  const compiledSheet = primarySheet.xml
+    .replace(/<dimension\b[^>]*\/>/, "")
+    .replace(/<sheetData>[\s\S]*?<\/sheetData>/, `<sheetData>${sheetData}</sheetData>`);
+  primaryZip.file(primarySheet.path, compiledSheet);
+  const outputName = "Compiled Downtime Log";
+  primaryZip.file("xl/workbook.xml", updateSheetName(await textFromZip(primaryZip, "xl/workbook.xml"), primarySheet.name, outputName));
+  return primaryZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
 }
 
 type TemplateMaps = {

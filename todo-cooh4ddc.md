@@ -15,3 +15,11 @@
 - [x] Verify at workbook level that weather cells use orange while technical totals and availability calculations remain unchanged.
 - [x] Verify the Saved Reports list procedure returns persisted-report data.
 - [x] Validate the main workflows visually and publish the completed enhancement.
+- [x] Inspect the saved-report persistence model and source-log workbook contents for analysis and filtered export.
+- [x] Replace the Weather Mapping navigation page with the Downtime Analysis Studio.
+- [x] Integrate saved-report recall and file deletion into the Analysis Studio.
+- [x] Add multi-date calendar selection and multi-ride selection for analysis.
+- [x] Present aggregate downtime, average incident count, average downtime percentage, ride rankings, weekday patterns, and related operational insights.
+- [x] Export a compiled XLSX that retains the original downtime-log structure while filtering to the selected dates and rides.
+- [x] Add automated tests for analysis aggregation, compiled export, and report deletion.
+- [x] Validate the Analysis Studio workflows on desktop and mobile, then publish the enhancement.
