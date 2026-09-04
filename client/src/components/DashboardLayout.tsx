@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
+import DotField from "@/components/DotField";
 import { BarChart3, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -36,6 +37,7 @@ const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
+const SKYWORLDS_LOGO_URL = "/manus-storage/skyworldslogo_4b1f1436.jpg";
 
 export default function DashboardLayout({
   children,
@@ -126,10 +128,10 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r-0"
+          className="border-r border-white/10 bg-[#060810] text-slate-100"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-20 justify-center border-b border-white/10">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
@@ -138,13 +140,10 @@ function DashboardLayoutContent({
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Downtime Studio
-                  </span>
-                </div>
-              ) : null}
+              {!isCollapsed ? <div className="flex min-w-0 items-center gap-2.5">
+                <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-9 w-9 rounded-lg border border-white/20 bg-white object-cover p-0.5" />
+                <div className="min-w-0"><span className="block truncate text-sm font-extrabold tracking-tight text-white">SkyWorlds 11-1</span><span className="block truncate text-[10px] font-medium uppercase tracking-[0.14em] text-sky-200/70">Downtime Studio</span></div>
+              </div> : <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-7 w-7 rounded-md border border-white/20 bg-white object-cover p-0.5" />}
             </div>
           </SidebarHeader>
 
@@ -214,9 +213,10 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset>
+      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#080c18]">
+        <DotField className="pointer-events-none absolute inset-0 opacity-100" />
         {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="relative z-10 flex h-14 items-center justify-between border-b border-white/10 bg-[#080c18]/95 px-2 text-slate-100 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
@@ -229,7 +229,7 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="flex-1 p-4">{children}</main>
+        <main className="skyworlds-workspace relative z-10 flex-1 p-4">{children}</main>
       </SidebarInset>
     </>
   );

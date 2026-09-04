@@ -31,3 +31,12 @@
 - [x] Revise the total downtime percentage denominator wording to describe minutes across 19 rides.
 - [x] Mark the handover closure check as optional.
 - [x] Test the navigation and revised controls on desktop and mobile, then publish the fix.
+- [x] Review the supplied SkyWorlds branding requirements and current theme and chart implementation.
+- [x] Add the supplied SkyWorlds logo to the website branding and favicon.
+- [x] Apply a dark SkyWorlds visual theme with an interactive DotField background while keeping the sidebar plain dark.
+- [x] Ensure text, form controls, report tables, and data visualizations remain legible in the dark theme.
+- [x] Give the downtime chart y-axes sufficient width for three-digit minute tick labels in Report Studio and Analysis Studio.
+- [x] Validate the branded dark interface and chart axes on desktop and mobile, then publish the update.
+- [x] Verify the generated Report Studio review table and reporting chart through the actual upload interface on desktop and mobile using a retained source log.
+- [x] Desktop retained-log fixture rendered the generated review metrics, Match-column alert, vertical report chart, and pre-export table in the dark interface.
+- [x] Desktop generated review chart displayed readable 0–200 minute y-axis ticks with the expanded label width, and the dark pre-export table remained legible.
