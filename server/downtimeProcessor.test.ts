@@ -5,11 +5,12 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { __testables, compileDowntimeLogExport, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
 
-async function buildMinimalOperationsWorkbook() {
+async function buildMinimalOperationsWorkbook(options: { code?: string; description?: string; evacuationStart?: string; evacuationEnd?: string } = {}) {
   const zip = new JSZip();
   zip.file("xl/workbook.xml", '<workbook><sheets><sheet name="Operations" sheetId="1" r:id="rId1"/></sheets></workbook>');
   zip.file("xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
-  zip.file("xl/worksheets/sheet1.xml", '<worksheet><sheetData><row r="2"><c r="A2" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C2" t="inlineStr"><is><t>Technical</t></is></c><c r="D2" t="inlineStr"><is><t>11-1</t></is></c><c r="F2" t="inlineStr"><is><t>Brake check</t></is></c><c r="G2" t="inlineStr"><is><t>10:00</t></is></c><c r="H2" t="inlineStr"><is><t>10:10</t></is></c></row></sheetData></worksheet>');
+  const evacuationCells = options.evacuationStart && options.evacuationEnd ? `<c r="M2" t="inlineStr"><is><t>${options.evacuationStart}</t></is></c><c r="N2" t="inlineStr"><is><t>${options.evacuationEnd}</t></is></c>` : "";
+  zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="2"><c r="A2" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C2" t="inlineStr"><is><t>Technical</t></is></c><c r="D2" t="inlineStr"><is><t>${options.code ?? "11-1"}</t></is></c><c r="F2" t="inlineStr"><is><t>${options.description ?? "Brake check"}</t></is></c><c r="G2" t="inlineStr"><is><t>10:00</t></is></c><c r="H2" t="inlineStr"><is><t>10:10</t></is></c>${evacuationCells}</row></sheetData></worksheet>`);
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
@@ -68,14 +69,14 @@ describe("downtime transformation rules", () => {
 
   it("pairs a single-ride weather start with an unlabelled resume and ignores operator initials", () => {
     const intervals = parseWeatherIntervals("VTM - 11-3: Inclement Weather (10-13 Purple); No Guest Onboard @1515H\n11-8: @1626H\nFS", "2026-09-03");
-    expect(intervals).toEqual([expect.objectContaining({ rideCode: "VTM", startedAt: 915, resumedAt: 986, minutes: 71, condition: "10-13 Purple — Fog" })]);
+    expect(intervals).toEqual([expect.objectContaining({ rideCode: "VTM", startedAt: 915, resumedAt: 986, minutes: 71, condition: "10-13 Purple" })]);
   });
 
   it("pairs grouped weather messages ride by ride and leaves unmatched starts out of the export", () => {
     const intervals = parseWeatherIntervals("11-3: Inclement Weather (10-13 Orange)\n\nBCT (EV): @1414H\nEHF: @1412H\nSAG@:1414H\nAH\n\n11-8: Inclement Weather (10-13 Orange)\n\nBCT (EV): @1501H\nEHF: @1500H\nSAG@:1500H\nMD", "2026-09-03");
     expect(intervals).toHaveLength(3);
     expect(intervals).toEqual(expect.arrayContaining([
-      expect.objectContaining({ rideCode: "BCT (EV)", minutes: 47, condition: "10-13 Orange — Moderate to heavy rain" }),
+      expect.objectContaining({ rideCode: "BCT (EV)", minutes: 47, condition: "10-13 Orange" }),
       expect.objectContaining({ rideCode: "EHF", minutes: 48 }),
       expect.objectContaining({ rideCode: "SAG", minutes: 46 }),
     ]));
@@ -100,12 +101,47 @@ describe("downtime transformation rules", () => {
     const xfs = parsedStyles.styleSheet?.cellXfs?.xf ?? [];
     const fills = parsedStyles.styleSheet?.fills?.fill ?? [];
     const weatherFillId = Number(xfs[styleId]?.["@_fillId"]);
-    expect(fills[weatherFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFFFC000");
-    expect(timelineXml).toContain("Weather — 10-13 Green — Light rain (10:15-10:30)");
+    expect(fills[weatherFillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FFFFE699");
+    expect(timelineXml).toContain("Inclement Weather (10-13 Green)  ");
+    expect(timelineXml).toContain("(Moderated)");
+    expect(cell("P10")).toContain('rgb="FFFF0000"');
     ["D10", "E4", "BZ107"].forEach(reference => {
       const baselineCell = new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(baselineTimelineXml)?.[0] ?? "";
       expect(cell(reference)).toBe(baselineCell);
     });
+  });
+
+  it("maps 11-10 as a visual-only Signal 29 annotation and keeps it out of downtime totals", async () => {
+    const [operations, template] = await Promise.all([buildMinimalOperationsWorkbook({ code: "11-10", description: "Fire alarm" }), buildMinimalTemplateWorkbook()]);
+    const result = await processDowntimeWorkbooks(operations, template);
+    expect(result).toMatchObject({ totalTechnicalMinutes: 0, totalEvacuationMinutes: 0, totalEvacuationEvents: 0, totalNetworkPercentage: 0, fireAlarmCount: 1, matchedCount: 0 });
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const stylesXml = await output.file("xl/styles.xml")?.async("string") ?? "";
+    const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    const styles = new XMLParser({ ignoreAttributes: false }).parse(stylesXml) as any;
+    const xfs = styles.styleSheet?.cellXfs?.xf ?? [];
+    const fills = styles.styleSheet?.fills?.fill ?? [];
+    const fillId = Number(xfs[Number(/\bs="(\d+)"/.exec(cell("F10"))?.[1])]?.["@_fillId"]);
+    expect(fills[fillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FF00CC99");
+    expect(timelineXml).toContain("Signal 29 (Fire Alarm Triggered)");
+  });
+
+  it("uses black technical mapping and red fault-code text for late handover while retaining evacuation totals", async () => {
+    const [operations, template] = await Promise.all([buildMinimalOperationsWorkbook({ description: "Late handover (Brake sensor fault)", evacuationStart: "10:01", evacuationEnd: "10:04" }), buildMinimalTemplateWorkbook()]);
+    const result = await processDowntimeWorkbooks(operations, template);
+    expect(result).toMatchObject({ totalEvacuationMinutes: 3, totalEvacuationEvents: 1 });
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    const stylesXml = await output.file("xl/styles.xml")?.async("string") ?? "";
+    const cell = (reference: string) => new RegExp(`<c\\b(?=[^>]*\\br="${reference}"[^>]*)(?:[^>]*\\/>|[^>]*>[\\s\\S]*?<\\/c>)`).exec(timelineXml)?.[0] ?? "";
+    const styles = new XMLParser({ ignoreAttributes: false }).parse(stylesXml) as any;
+    const xfs = styles.styleSheet?.cellXfs?.xf ?? [];
+    const fills = styles.styleSheet?.fills?.fill ?? [];
+    const fillId = Number(xfs[Number(/\bs="(\d+)"/.exec(cell("F10"))?.[1])]?.["@_fillId"]);
+    expect(fills[fillId]?.patternFill?.fgColor?.["@_rgb"]).toBe("FF000000");
+    expect(cell("F10")).toContain("Brake sensor fault");
+    expect(cell("F10")).toContain('rgb="FFFF0000"');
   });
 
   it("compiles selected source-log rides into a valid XLSX using the uploaded-log worksheet structure", async () => {

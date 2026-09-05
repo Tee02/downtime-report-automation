@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import multer from "multer";
-import { createSavedDowntimeReport } from "./db";
+import { createSavedDowntimeReport, findSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { processDowntimeWorkbooks } from "./downtimeProcessor";
 
@@ -63,6 +63,11 @@ export function registerDowntimeRoutes(app: Express) {
         const weatherText = parseWeatherText(request.body.weatherText);
         const saveToStorage = parseSavePreference(request.body.saveToStorage);
         const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText });
+        const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
+        if (!reportDate) throw new Error("The generated report date could not be saved.");
+        if (saveToStorage && await findSavedDowntimeReport(reportDate)) {
+          return failure(response, 409, `A saved report already exists for ${reportDate}. This workbook was not saved again to prevent a repeated report in the system.`);
+        }
         const reportId = crypto.randomUUID();
         const stored = await storagePut(
           `downtime-reports/${reportId}/${result.outputFileName}`,
@@ -75,8 +80,6 @@ export function registerDowntimeRoutes(app: Express) {
             operationsFile.buffer,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           );
-          const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
-          if (!reportDate) throw new Error("The generated report date could not be saved.");
           await createSavedDowntimeReport({
             reportDate,
             sourceFileName: operationsFile.originalname,

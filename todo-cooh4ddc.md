@@ -40,3 +40,17 @@
 - [x] Verify the generated Report Studio review table and reporting chart through the actual upload interface on desktop and mobile using a retained source log.
 - [x] Desktop retained-log fixture rendered the generated review metrics, Match-column alert, vertical report chart, and pre-export table in the dark interface.
 - [x] Desktop generated review chart displayed readable 0–200 minute y-axis ticks with the expanded label width, and the dark pre-export table remained legible.
+- [x] Inspect the current workbook processor, analysis calculations, saved-report mutations, and affected UI components.
+- [x] Apply a metallic blue gradient visual system inspired by the supplied reference, replacing the current black background.
+- [x] Add a documented downtime severity scale to charts for rapid identification of critical issues.
+- [x] Map weather annotations in RGB (255, 230, 153) with the requested concise labels and red moderation status.
+- [x] Add visual-only 11-10 fire-alarm mapping in RGB (0, 204, 153) with the prescribed Signal 29 label.
+- [x] Map late-handover technical intervals in black with red fault-code treatment while preserving pink operations-resume time.
+- [x] Add daily evacuation minutes and evacuation-event counts to Report Studio and Analysis Studio.
+- [x] Add ride availability percentages and rank rides by lowest availability first in Analysis Studio.
+- [x] Block duplicate saved workbooks with a clear repeated-report warning.
+- [x] Protect saved-report deletion with a production-safe access rule while keeping the Analysis Studio on-site.
+- [x] Add regression coverage for unauthorized saved-report deletion attempts and explicit in-site access guidance.
+- [x] Limit the included source-log table to about seven visible rows with an internal scrollbar for additional reports.
+- [x] Add automated tests for the new mapping, analytical, duplicate-prevention, and deletion behavior.
+- [x] Validate the updated workflow and responsive visual presentation, then publish the completed update.

@@ -22,6 +22,8 @@ export type DowntimeRecord = {
   evacuationMinutes: number;
   downtimePercentage: number;
   isClosed: boolean;
+  isFireAlarm: boolean;
+  isLateHandover: boolean;
   status: "matched" | "unmatched";
   matchNote: string;
 };
@@ -33,9 +35,11 @@ export type ProcessingResult = {
   totalTechnicalMinutes: number;
   totalOperationsMinutes: number;
   totalEvacuationMinutes: number;
+  totalEvacuationEvents: number;
   totalNetworkPercentage: number;
   closedRideCount: number;
   weatherIntervalCount: number;
+  fireAlarmCount: number;
   summaryByRide: Array<{
     rideCode: string;
     attraction: string;
@@ -66,7 +70,9 @@ const TECHNICAL_FILL_ID = "3";
 const OPERATIONS_FILL_ID = "4";
 const EVACUATION_FILL_ID = "7";
 const CLOSED_FILL_HEX = "FFF8CBAD";
-const WEATHER_FILL_HEX = "FFFFC000";
+const WEATHER_FILL_HEX = "FFFFE699";
+const FIRE_ALARM_FILL_HEX = "FF00CC99";
+const LATE_HANDOVER_FILL_HEX = "FF000000";
 const DAILY_OPERATING_MINUTES = 480;
 const FLEET_OPERATING_MINUTES = DAILY_OPERATING_MINUTES * 19;
 
@@ -320,10 +326,10 @@ export type WeatherInterval = {
 type WeatherUpdateKind = "start" | "resume";
 
 const WEATHER_CONDITIONS: Record<string, string> = {
-  BLUE: "10-13 Blue — Clearing",
-  GREEN: "10-13 Green — Light rain",
-  ORANGE: "10-13 Orange — Moderate to heavy rain",
-  PURPLE: "10-13 Purple — Fog",
+  BLUE: "10-13 Blue",
+  GREEN: "10-13 Green",
+  ORANGE: "10-13 Orange",
+  PURPLE: "10-13 Purple",
 };
 
 function parseWeatherTime(value: string): number | undefined {
@@ -408,9 +414,10 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
     const department = row.cells.get("C")?.value.trim() ?? "";
     const description = row.cells.get("F")?.value.trim() ?? "";
     const isTechnical = department.toUpperCase() === "TECHNICAL";
+    const isFireAlarm = code.toUpperCase() === "11-10";
     const isTechnicalClosure = code.toUpperCase() === "CLOSED" && /technical|maintenance|ndt/i.test(description);
     const isClosed = isTechnicalClosure;
-    if (!((code === "11-1" && isTechnical) || isTechnicalClosure)) continue;
+    if (!((code === "11-1" && isTechnical) || isTechnicalClosure || isFireAlarm)) continue;
     const rawDate = row.cells.get("A")?.value ?? "";
     const recordDateKey = excelDateToKey(rawDate);
     const attraction = row.cells.get("B")?.value.trim() ?? "";
@@ -436,8 +443,10 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
       technicalMinutes: durationMinutes(technicalStart, technicalEnd),
       operationsMinutes: durationMinutes(technicalEnd, operationsEnd),
       evacuationMinutes: durationMinutes(evacuationStart, evacuationEnd),
-      downtimePercentage: isClosed ? 0 : (durationMinutes(technicalStart, technicalEnd) / DAILY_OPERATING_MINUTES) * 100,
+      downtimePercentage: isClosed || isFireAlarm ? 0 : (durationMinutes(technicalStart, technicalEnd) / DAILY_OPERATING_MINUTES) * 100,
       isClosed,
+      isFireAlarm,
+      isLateHandover: !isFireAlarm && /\blate\s+(?:technical\s+)?handover\b/i.test(description),
       status: "unmatched",
       matchNote: "Awaiting template match",
     };
@@ -598,6 +607,11 @@ function setText(rowXml: string, reference: string, value: string): string {
   return replaceCell(rowXml, reference, ` t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is>`);
 }
 
+function setRichText(rowXml: string, reference: string, parts: Array<{ value: string; color?: string }>): string {
+  const runs = parts.map(part => `<r>${part.color ? `<rPr><color rgb="${part.color}"/></rPr>` : ""}<t xml:space="preserve">${escapeXml(part.value)}</t></r>`).join("");
+  return replaceCell(rowXml, reference, ` t="inlineStr"><is>${runs}</is>`);
+}
+
 function clearCell(rowXml: string, reference: string): string {
   const existing = findCell(rowXml, reference);
   if (!existing) return rowXml;
@@ -616,10 +630,11 @@ function setStyle(rowXml: string, reference: string, style: string): string {
   return replaceCell(rowXml, reference, `>${body}`, style);
 }
 
-type TimelineStyleKind = "technical" | "operations" | "evacuation" | "weather" | "closed" | "blank";
+type TimelineStyleKind = "technical" | "lateHandover" | "operations" | "evacuation" | "weather" | "fireAlarm" | "closed" | "blank";
 type StyleVariants = {
   stylesheetXml: string;
   timeline: Record<TimelineStyleKind, Map<string, string>>;
+  lateHandoverText: Map<string, string>;
   percentage: Map<string, string>;
   percentageAlert: Map<string, string>;
   availability: Record<"standard" | "downtime" | "closed", Map<string, string>>;
@@ -705,7 +720,9 @@ function addColorFonts(stylesheetXml: string, color: string): { stylesheetXml: s
 function createStyleVariants(stylesheetXml: string): StyleVariants {
   const withClosedFill = addClosedRideFill(stylesheetXml);
   const withWeatherFill = addSolidFill(withClosedFill.stylesheetXml, WEATHER_FILL_HEX);
-  const withAvailabilityFill = addSolidFill(withWeatherFill.stylesheetXml, "FFFFF2CC");
+  const withFireAlarmFill = addSolidFill(withWeatherFill.stylesheetXml, FIRE_ALARM_FILL_HEX);
+  const withLateHandoverFill = addSolidFill(withFireAlarmFill.stylesheetXml, LATE_HANDOVER_FILL_HEX);
+  const withAvailabilityFill = addSolidFill(withLateHandoverFill.stylesheetXml, "FFFFF2CC");
   const withRedFonts = addColorFonts(withAvailabilityFill.stylesheetXml, "FFFF0000");
   const withPurpleFonts = addColorFonts(withRedFonts.stylesheetXml, "FF7030A0");
   const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withPurpleFonts.stylesheetXml);
@@ -717,19 +734,24 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     operations: OPERATIONS_FILL_ID,
     evacuation: EVACUATION_FILL_ID,
     weather: withWeatherFill.fillId,
+    fireAlarm: withFireAlarmFill.fillId,
+    lateHandover: withLateHandoverFill.fillId,
     closed: withClosedFill.fillId,
     blank: "0",
   };
   const timeline = {
     technical: new Map<string, string>(),
+    lateHandover: new Map<string, string>(),
     operations: new Map<string, string>(),
     evacuation: new Map<string, string>(),
     weather: new Map<string, string>(),
+    fireAlarm: new Map<string, string>(),
     closed: new Map<string, string>(),
     blank: new Map<string, string>(),
   };
   const percentage = new Map<string, string>();
   const percentageAlert = new Map<string, string>();
+  const lateHandoverText = new Map<string, string>();
   const availability = { standard: new Map<string, string>(), downtime: new Map<string, string>(), closed: new Map<string, string>() };
   const additions: string[] = [];
   let nextStyle = xfs.length;
@@ -744,6 +766,8 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     percentageAlert.set(base, String(nextStyle++));
     const redFontId = withRedFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1" }));
+    lateHandoverText.set(base, String(nextStyle++));
+    additions.push(withXfAttributes(xf, { fillId: withLateHandoverFill.fillId, applyFill: "1", fontId: redFontId, applyFont: "1" }));
     availability.standard.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" }));
     availability.downtime.set(base, String(nextStyle++));
@@ -758,6 +782,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
   return {
     stylesheetXml: withPurpleFonts.stylesheetXml.replace(container[0], `${updatedOpen}${container[2]}${additions.join("")}${container[3]}`),
     timeline,
+    lateHandoverText,
     percentage,
     percentageAlert,
     availability,
@@ -795,7 +820,7 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
     const rowWeather = weatherByRow.get(rowNumber) ?? [];
     updates.set(rowNumber, rowXml => {
       const cellStyles = new Map<string, { kind: TimelineStyleKind; priority: number }>();
-      const descriptions: Array<{ reference: string; value: string }> = [];
+      const descriptions: Array<{ reference: string; value: string; redSuffix?: string }> = [];
       const setRange = (start: number | undefined, end: number | undefined, kind: TimelineStyleKind, priority: number) => {
         if (start === undefined || end === undefined) return;
         const finalEnd = end >= start ? end : end + 1440;
@@ -810,7 +835,7 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
       for (const interval of rowWeather) {
         setRange(interval.startedAt, interval.resumedAt, "weather", 3);
         const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (interval.startedAt % 1440) - 605);
-        descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: `Weather — ${interval.condition} (${formatTime(interval.startedAt)}-${formatTime(interval.resumedAt)})` });
+        descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: `Inclement Weather (${interval.condition})  `, redSuffix: "(Moderated)" });
       }
       for (const record of rowRecords) {
         if (record.isClosed) {
@@ -818,16 +843,29 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
           descriptions.push({ reference: `${numberToColumn(maps.timeStartColumn)}${rowNumber}`, value: `Closed — ${record.description}` });
           continue;
         }
-        setRange(record.technicalStart, record.technicalEnd, "technical", 1);
+        if (record.isFireAlarm) {
+          setRange(record.technicalStart, record.technicalEnd, "fireAlarm", 4);
+          const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (record.technicalStart! % 1440) - 605);
+          descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: "Signal 29 (Fire Alarm Triggered)" });
+          continue;
+        }
+        setRange(record.technicalStart, record.technicalEnd, record.isLateHandover ? "lateHandover" : "technical", 1);
         if (record.operationsEnd !== undefined && record.technicalEnd !== undefined && record.operationsEnd > record.technicalEnd) {
           setRange(record.technicalEnd + 1, record.operationsEnd, "operations", 2);
         }
         setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 4);
         const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (record.technicalStart! % 1440) - 605);
-        descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
+        if (record.isLateHandover) {
+          const faultMatch = /\s*(\([^)]*\))\s*$/.exec(record.description);
+          descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description.slice(0, faultMatch?.index).trimEnd() + (faultMatch ? " " : ""), redSuffix: faultMatch?.[1] ?? record.description });
+        } else descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
       }
       let revised = rowXml;
-      for (const description of descriptions) revised = setText(revised, description.reference, description.value);
+      for (const description of descriptions) {
+        revised = description.redSuffix
+          ? setRichText(revised, description.reference, [{ value: description.value }, { value: description.redSuffix, color: "FFFF0000" }])
+          : setText(revised, description.reference, description.value);
+      }
       for (const [reference, detail] of Array.from(cellStyles.entries())) {
         revised = setStyle(revised, reference, deriveStyle(findCell(revised, reference), variants.timeline[detail.kind]));
       }
@@ -865,7 +903,7 @@ type DailyAggregate = {
 
 function aggregateRecords(records: DowntimeRecord[]): Map<string, DailyAggregate> {
   const aggregates = new Map<string, DailyAggregate>();
-  for (const record of records.filter(item => item.status === "matched" && item.rideCode && !item.isClosed)) {
+  for (const record of records.filter(item => item.status === "matched" && item.rideCode && !item.isClosed && !item.isFireAlarm)) {
     const key = `${record.dateKey}|${record.rideCode}`;
     const current = aggregates.get(key) ?? {
       dateKey: record.dateKey,
@@ -1082,6 +1120,8 @@ function manualClosureRecord(rideCode: string, reportDateKey: string): DowntimeR
     evacuationMinutes: 0,
     downtimePercentage: 0,
     isClosed: true,
+    isFireAlarm: false,
+    isLateHandover: false,
     status: "unmatched",
     matchNote: "Awaiting template match",
   };
@@ -1106,6 +1146,12 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   for (const record of records) {
     if (!record.dateKey) record.matchNote = "The source row does not include a usable date.";
     else if (!record.rideCode) record.matchNote = "The attraction is not mapped to a Technical template ride code.";
+    else if (record.isFireAlarm && !maps.timelineRows.has(`${timelineDateKey(record.dateKey)}|${record.rideCode}`)) record.matchNote = "No matching date and ride row exists in the supplied Technical template.";
+    else if (record.isFireAlarm && (record.technicalStart === undefined || record.technicalEnd === undefined)) record.matchNote = "A fire-alarm start or end time is missing.";
+    else if (record.isFireAlarm) {
+      record.status = "matched";
+      record.matchNote = "Signal 29 is mapped visually in green and excluded from downtime percentages.";
+    }
     else if (record.isClosed && !maps.timelineRows.has(`${timelineDateKey(record.dateKey)}|${record.rideCode}`)) record.matchNote = "No matching date and ride row exists in the supplied Technical template.";
     else if (record.isClosed) {
       record.status = "matched";
@@ -1151,7 +1197,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     templateZip.file(maps.summarySheet.path, summaryXml);
   }
   const summaryByRide = Array.from(
-    records.filter(record => record.status === "matched" && record.rideCode)
+    records.filter(record => record.status === "matched" && record.rideCode && !record.isFireAlarm)
     .reduce((summary, record) => {
       const current = summary.get(record.rideCode!) ?? { rideCode: record.rideCode!, attraction: record.attraction, minutes: 0, events: 0, evacuationMinutes: 0, percentage: 0, isClosed: false };
       if (record.isClosed) current.isClosed = true;
@@ -1169,14 +1215,16 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const outputBuffer = await templateZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
   return {
     records,
-    matchedCount: records.filter(record => record.status === "matched" && !record.isClosed).length,
+    matchedCount: records.filter(record => record.status === "matched" && !record.isClosed && !record.isFireAlarm).length,
     unmatchedCount: records.filter(record => record.status === "unmatched").length,
-    totalTechnicalMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.technicalMinutes : 0), 0),
-    totalOperationsMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.operationsMinutes : 0), 0),
-    totalEvacuationMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.evacuationMinutes : 0), 0),
-    totalNetworkPercentage: (records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed ? record.technicalMinutes : 0), 0) / FLEET_OPERATING_MINUTES) * 100,
+    totalTechnicalMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed && !record.isFireAlarm ? record.technicalMinutes : 0), 0),
+    totalOperationsMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed && !record.isFireAlarm ? record.operationsMinutes : 0), 0),
+    totalEvacuationMinutes: records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed && !record.isFireAlarm ? record.evacuationMinutes : 0), 0),
+    totalEvacuationEvents: records.filter(record => record.status === "matched" && !record.isClosed && !record.isFireAlarm && record.evacuationEnd !== undefined).length,
+    totalNetworkPercentage: (records.reduce((total, record) => total + (record.status === "matched" && !record.isClosed && !record.isFireAlarm ? record.technicalMinutes : 0), 0) / FLEET_OPERATING_MINUTES) * 100,
     closedRideCount: records.filter(record => record.status === "matched" && record.isClosed).length,
     weatherIntervalCount: weatherIntervals.length,
+    fireAlarmCount: records.filter(record => record.status === "matched" && record.isFireAlarm).length,
     summaryByRide: [...summaryByRide].sort((a, b) => b.minutes - a.minutes),
     outputBuffer,
     outputFileName: `Technical_Downtime_${outputDate}.xlsx`,

@@ -20,10 +20,15 @@ describe("savedReports.list", () => {
     expect(mocks.listSavedDowntimeReports).toHaveBeenCalledOnce();
   });
 
-  it("removes a saved report from the library when the user confirms deletion", async () => {
+  it("removes a saved report when an authenticated user confirms deletion", async () => {
     const caller = appRouter.createCaller(context);
 
     await expect(caller.savedReports.delete({ id: 7 })).resolves.toEqual({ success: true });
     expect(mocks.deleteSavedDowntimeReport).toHaveBeenCalledWith(7);
+  });
+
+  it("rejects anonymous deletion while anonymous browsing remains available", async () => {
+    const caller = appRouter.createCaller(anonymousContext);
+    await expect(caller.savedReports.delete({ id: 7 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 });

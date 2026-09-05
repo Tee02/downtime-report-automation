@@ -95,6 +95,17 @@ export async function createSavedDowntimeReport(report: InsertSavedDowntimeRepor
   await db.insert(savedDowntimeReports).values(report);
 }
 
+export async function findSavedDowntimeReport(reportDate: string) {
+  const db = await getDb();
+  if (!db) throw new Error("The report library is temporarily unavailable.");
+  const reports = await db
+    .select({ id: savedDowntimeReports.id })
+    .from(savedDowntimeReports)
+    .where(eq(savedDowntimeReports.reportDate, reportDate))
+    .limit(1);
+  return reports[0];
+}
+
 export async function listSavedDowntimeReports() {
   const db = await getDb();
   if (!db) return [];

@@ -8,11 +8,12 @@ const mocks = vi.hoisted(() => ({
   storageGetSignedUrl: vi.fn(),
   storagePut: vi.fn(),
   createSavedDowntimeReport: vi.fn(),
+  findSavedDowntimeReport: vi.fn(),
 }));
 
 vi.mock("./downtimeProcessor", () => ({ processDowntimeWorkbooks: mocks.processDowntimeWorkbooks }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: mocks.storageGetSignedUrl, storagePut: mocks.storagePut }));
-vi.mock("./db", () => ({ createSavedDowntimeReport: mocks.createSavedDowntimeReport }));
+vi.mock("./db", () => ({ createSavedDowntimeReport: mocks.createSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport }));
 
 import { registerDowntimeRoutes } from "./downtimeRoutes";
 
@@ -26,6 +27,7 @@ afterEach(async () => {
 describe("downtime analyze upload route", () => {
   it("forwards closures and weather text, then saves both files only when requested", async () => {
     mocks.storageGetSignedUrl.mockResolvedValue("data:application/octet-stream;base64,UEsDBBQAAAAIAAA=");
+    mocks.findSavedDowntimeReport.mockResolvedValue(undefined);
     const readableWorkbook = await new JSZip().file("xl/workbook.xml", "<workbook/>").generateAsync({ type: "nodebuffer" });
     let storedWorkbook = Buffer.alloc(0);
     mocks.storagePut.mockImplementation(async (key: string, data: Buffer) => {
@@ -37,7 +39,7 @@ describe("downtime analyze upload route", () => {
     });
     mocks.processDowntimeWorkbooks.mockResolvedValue({
       records: [], matchedCount: 0, unmatchedCount: 0, totalTechnicalMinutes: 0, totalOperationsMinutes: 0, totalEvacuationMinutes: 0,
-      totalNetworkPercentage: 0, closedRideCount: 1, weatherIntervalCount: 2, summaryByRide: [], outputBuffer: readableWorkbook, outputFileName: "Technical_Downtime_2026-08-03.xlsx",
+      totalNetworkPercentage: 0, closedRideCount: 1, weatherIntervalCount: 2, fireAlarmCount: 0, totalEvacuationEvents: 0, summaryByRide: [], outputBuffer: readableWorkbook, outputFileName: "Technical_Downtime_2026-08-03.xlsx",
     });
     const app = express();
     registerDowntimeRoutes(app);
@@ -68,5 +70,25 @@ describe("downtime analyze upload route", () => {
     expect(download.status).toBe(200);
     const downloadedZip = await JSZip.loadAsync(Buffer.from(await download.arrayBuffer()));
     expect(Object.keys(downloadedZip.files)).toContain("xl/workbook.xml");
+  });
+
+  it("blocks a repeated report date before creating new retained files", async () => {
+    mocks.storageGetSignedUrl.mockResolvedValue("data:application/octet-stream;base64,UEsDBBQAAAAIAAA=");
+    mocks.findSavedDowntimeReport.mockResolvedValue({ id: 9 });
+    mocks.processDowntimeWorkbooks.mockResolvedValue({ outputFileName: "Technical_Downtime_2026-08-03.xlsx" });
+    const app = express();
+    registerDowntimeRoutes(app);
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    const form = new FormData();
+    form.append("operationsFile", new Blob(["sample workbook"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "renamed-downtime.xlsx");
+    form.append("saveToStorage", "true");
+    const response = await fetch(`http://127.0.0.1:${port}/api/downtime/analyze`, { method: "POST", body: form });
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ error: expect.stringContaining("already exists") }));
+    expect(response.status).toBe(409);
+    expect(mocks.storagePut).not.toHaveBeenCalled();
+    expect(mocks.createSavedDowntimeReport).not.toHaveBeenCalled();
   });
 });

@@ -128,10 +128,10 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r border-white/10 bg-[#060810] text-slate-100"
+          className="border-r border-[#adbBda]/70 bg-[#ede8f5] text-slate-800 shadow-[10px_0_35px_rgba(61,82,160,0.08)]"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-20 justify-center border-b border-white/10">
+          <SidebarHeader className="h-20 justify-center border-b border-[#adbBda]/70">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
@@ -141,9 +141,9 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed ? <div className="flex min-w-0 items-center gap-2.5">
-                <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-9 w-9 rounded-lg border border-white/20 bg-white object-cover p-0.5" />
-                <div className="min-w-0"><span className="block truncate text-sm font-extrabold tracking-tight text-white">SkyWorlds 11-1</span><span className="block truncate text-[10px] font-medium uppercase tracking-[0.14em] text-sky-200/70">Downtime Studio</span></div>
-              </div> : <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-7 w-7 rounded-md border border-white/20 bg-white object-cover p-0.5" />}
+                <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-9 w-9 rounded-lg border border-[#8697c4]/60 bg-white object-cover p-0.5 shadow-sm" />
+                <div className="min-w-0"><span className="block truncate text-sm font-extrabold tracking-tight text-[#293252]">SkyWorlds 11-1</span><span className="block truncate text-[10px] font-medium uppercase tracking-[0.14em] text-[#5368b4]">Downtime Studio</span></div>
+              </div> : <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-7 w-7 rounded-md border border-[#8697c4]/60 bg-white object-cover p-0.5" />}
             </div>
           </SidebarHeader>
 
@@ -213,10 +213,11 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#080c18]">
-        <DotField className="pointer-events-none absolute inset-0 opacity-100" />
+      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#ede8f5]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(112,145,230,0.44),transparent_30%),radial-gradient(circle_at_92%_84%,rgba(61,82,160,0.22),transparent_38%),linear-gradient(135deg,#ede8f5_0%,#dce2f5_48%,#bfcceb_100%)]" />
+        <DotField className="pointer-events-none absolute inset-0 opacity-45" />
         {isMobile && (
-          <div className="relative z-10 flex h-14 items-center justify-between border-b border-white/10 bg-[#080c18]/95 px-2 text-slate-100 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="relative z-10 flex h-14 items-center justify-between border-b border-[#adbBda]/70 bg-[#ede8f5]/95 px-2 text-slate-800 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
