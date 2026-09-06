@@ -35,8 +35,18 @@ export const savedDowntimeReports = mysqlTable("savedDowntimeReports", {
   totalTechnicalMinutes: int("totalTechnicalMinutes").notNull(),
   totalNetworkPercentage: double("totalNetworkPercentage").notNull(),
   weatherIntervalCount: int("weatherIntervalCount").notNull().default(0),
+  weatherText: text("weatherText"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type SavedDowntimeReport = typeof savedDowntimeReports.$inferSelect;
 export type InsertSavedDowntimeReport = typeof savedDowntimeReports.$inferInsert;
+
+export const darkDays = mysqlTable("darkDays", {
+  id: int("id").autoincrement().primaryKey(),
+  dateKey: varchar("dateKey", { length: 10 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DarkDay = typeof darkDays.$inferSelect;
+export type InsertDarkDay = typeof darkDays.$inferInsert;

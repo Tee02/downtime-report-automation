@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertSavedDowntimeReport, InsertUser, savedDowntimeReports, users } from "../drizzle/schema";
+import { darkDays, InsertSavedDowntimeReport, InsertUser, savedDowntimeReports, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -122,4 +122,21 @@ export async function deleteSavedDowntimeReport(id: number) {
   const db = await getDb();
   if (!db) throw new Error("The report library is temporarily unavailable.");
   await db.delete(savedDowntimeReports).where(eq(savedDowntimeReports.id, id));
+}
+
+export async function listDarkDays(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ dateKey: darkDays.dateKey }).from(darkDays).orderBy(darkDays.dateKey);
+  return rows.map(r => r.dateKey);
+}
+
+export async function setDarkDay(dateKey: string, isDarkDay: boolean): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("The database is temporarily unavailable.");
+  if (isDarkDay) {
+    await db.insert(darkDays).values({ dateKey }).onDuplicateKeyUpdate({ set: { dateKey } });
+  } else {
+    await db.delete(darkDays).where(eq(darkDays.dateKey, dateKey));
+  }
 }

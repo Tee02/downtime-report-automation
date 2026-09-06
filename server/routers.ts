@@ -3,12 +3,12 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { deleteSavedDowntimeReport, getSavedDowntimeReportsByIds, listSavedDowntimeReports } from "./db";
+import { deleteSavedDowntimeReport, getSavedDowntimeReportsByIds, listDarkDays, listSavedDowntimeReports, setDarkDay } from "./db";
 import { buildAnalysis, exportCompiledDowntimeLog, loadSavedDowntimeReports } from "./downtimeAnalysis";
 
 const analysisInput = z.object({
-  reportIds: z.array(z.number().int().positive()).min(1).max(60),
-  rideCodes: z.array(z.string().min(1).max(16)).max(24),
+  reportIds: z.array(z.number().int().positive()).max(60).default([]),
+  rideCodes: z.array(z.string().min(1).max(16)).max(24).default([]),
 });
 
 export const appRouter = router({
@@ -31,14 +31,37 @@ export const appRouter = router({
       return { success: true };
     }),
   }),
+  darkDays: router({
+    list: publicProcedure.query(() => listDarkDays()),
+    set: publicProcedure.input(z.object({
+      dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      isDarkDay: z.boolean(),
+    })).mutation(async ({ input }) => {
+      await setDarkDay(input.dateKey, input.isDarkDay);
+      return { success: true };
+    }),
+  }),
   analysis: router({
     get: publicProcedure.input(analysisInput).query(async ({ input }) => {
+      if (!input.reportIds.length) return null;
       const reports = await getSavedDowntimeReportsByIds(input.reportIds);
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
-      const loaded = await loadSavedDowntimeReports(reports);
-      return buildAnalysis(loaded.map(item => ({ reportDate: item.report.reportDate, records: item.records })), input.rideCodes);
+      const [loaded, darkDaysList] = await Promise.all([
+        loadSavedDowntimeReports(reports),
+        listDarkDays(),
+      ]);
+      return buildAnalysis(
+        loaded.map(item => ({
+          reportDate: item.report.reportDate,
+          records: item.records,
+          weatherText: item.report.weatherText,
+        })),
+        input.rideCodes,
+        darkDaysList
+      );
     }),
     export: publicProcedure.input(analysisInput).mutation(async ({ input }) => {
+      if (!input.reportIds.length) throw new Error("Please select at least one report to export.");
       const reports = await getSavedDowntimeReportsByIds(input.reportIds);
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
       return exportCompiledDowntimeLog(reports, input.rideCodes);

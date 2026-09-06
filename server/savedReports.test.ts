@@ -1,13 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
-const mocks = vi.hoisted(() => ({ listSavedDowntimeReports: vi.fn(), deleteSavedDowntimeReport: vi.fn(), getSavedDowntimeReportsByIds: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  listSavedDowntimeReports: vi.fn(),
+  deleteSavedDowntimeReport: vi.fn(),
+  getSavedDowntimeReportsByIds: vi.fn(),
+  listDarkDays: vi.fn(),
+  setDarkDay: vi.fn(),
+}));
 
-vi.mock("./db", () => ({ listSavedDowntimeReports: mocks.listSavedDowntimeReports, deleteSavedDowntimeReport: mocks.deleteSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds }));
+vi.mock("./db", () => ({
+  listSavedDowntimeReports: mocks.listSavedDowntimeReports,
+  deleteSavedDowntimeReport: mocks.deleteSavedDowntimeReport,
+  getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds,
+  listDarkDays: mocks.listDarkDays,
+  setDarkDay: mocks.setDarkDay,
+}));
 
 import { appRouter } from "./routers";
 
-describe("savedReports.list", () => {
+describe("savedReports and darkDays routers", () => {
   const context = { user: { id: 1, openId: "operator", role: "user" } } as TrpcContext;
   const anonymousContext = { user: null } as TrpcContext;
 
@@ -30,5 +42,15 @@ describe("savedReports.list", () => {
   it("rejects anonymous deletion while anonymous browsing remains available", async () => {
     const caller = appRouter.createCaller(anonymousContext);
     await expect(caller.savedReports.delete({ id: 7 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("supports listing and setting dark days", async () => {
+    mocks.listDarkDays.mockResolvedValue(["2026-09-01"]);
+    mocks.setDarkDay.mockResolvedValue(undefined);
+    const caller = appRouter.createCaller(anonymousContext);
+
+    await expect(caller.darkDays.list()).resolves.toEqual(["2026-09-01"]);
+    await expect(caller.darkDays.set({ dateKey: "2026-09-02", isDarkDay: true })).resolves.toEqual({ success: true });
+    expect(mocks.setDarkDay).toHaveBeenCalledWith("2026-09-02", true);
   });
 });

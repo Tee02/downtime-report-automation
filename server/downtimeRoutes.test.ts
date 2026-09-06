@@ -65,7 +65,12 @@ describe("downtime analyze upload route", () => {
     expect(body.downloadUrl).toBe("/manus-storage/downtime-reports/sample.xlsx");
     expect(body.outputBuffer).toBeUndefined();
     expect(mocks.storagePut).toHaveBeenCalledTimes(2);
-    expect(mocks.createSavedDowntimeReport).toHaveBeenCalledWith(expect.objectContaining({ reportDate: "2026-08-03", sourceFileName: "downtime.xlsx", weatherIntervalCount: 2 }));
+    expect(mocks.createSavedDowntimeReport).toHaveBeenCalledWith(expect.objectContaining({
+      reportDate: "2026-08-03",
+      sourceFileName: "downtime.xlsx",
+      weatherIntervalCount: 2,
+      weatherText: expect.stringContaining("Inclement Weather"),
+    }));
     const download = await fetch(`http://127.0.0.1:${port}${body.downloadUrl}`);
     expect(download.status).toBe(200);
     const downloadedZip = await JSZip.loadAsync(Buffer.from(await download.arrayBuffer()));

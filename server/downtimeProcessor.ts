@@ -899,6 +899,7 @@ type DailyAggregate = {
   events: number;
   evacuationEvents: number;
   remarks: string[];
+  remarkParts: Array<{ value: string; color?: string }>;
 };
 
 function aggregateRecords(records: DowntimeRecord[]): Map<string, DailyAggregate> {
@@ -915,6 +916,7 @@ function aggregateRecords(records: DowntimeRecord[]): Map<string, DailyAggregate
       events: 0,
       evacuationEvents: 0,
       remarks: [],
+      remarkParts: [],
     };
     current.technicalMinutes += record.technicalMinutes;
     current.operationsMinutes += record.operationsMinutes;
@@ -924,6 +926,18 @@ function aggregateRecords(records: DowntimeRecord[]): Map<string, DailyAggregate
     const technicalRange = `${formatTime(record.technicalStart)}-${formatTime(record.technicalEnd)}`;
     const evacuationText = record.evacuationEnd === undefined ? "" : `, evac ${record.evacuationMinutes}mins (${formatTime(record.evacuationStart)}-${formatTime(record.evacuationEnd)})`;
     current.remarks.push(`*${record.dateLabel}, ${record.description}, ${record.technicalMinutes}mins (${technicalRange})${evacuationText}.`);
+    if (current.remarks.length > 1) {
+      current.remarkParts.push({ value: "\n" });
+    }
+    current.remarkParts.push({ value: `*${record.dateLabel}, ` });
+    current.remarkParts.push({ value: record.description, color: "FFFF0000" });
+    current.remarkParts.push({ value: `, ${record.technicalMinutes}mins (${technicalRange})` });
+    if (record.evacuationEnd !== undefined) {
+      current.remarkParts.push({ value: `, ` });
+      current.remarkParts.push({ value: `evac ${record.evacuationMinutes}mins`, color: "FFFF0000" });
+      current.remarkParts.push({ value: ` (${formatTime(record.evacuationStart)}-${formatTime(record.evacuationEnd)})` });
+    }
+    current.remarkParts.push({ value: "." });
     aggregates.set(key, current);
   }
   return aggregates;
@@ -942,7 +956,9 @@ function prepareSummaryUpdates(aggregates: Map<string, DailyAggregate>, maps: Te
       (xml: string) => setNumber(xml, `${numberToColumn(startColumn + 2)}${row}`, aggregate.events),
       (xml: string) => setNumber(xml, `${numberToColumn(startColumn + 4)}${row}`, aggregate.evacuationMinutes),
       (xml: string) => setNumber(xml, `${numberToColumn(startColumn + 5)}${row}`, aggregate.evacuationEvents),
-      (xml: string) => setText(xml, `BC${row}`, aggregate.remarks.join("\n")),
+      (xml: string) => aggregate.remarkParts && aggregate.remarkParts.length > 0
+        ? setRichText(xml, `BC${row}`, aggregate.remarkParts)
+        : setText(xml, `BC${row}`, aggregate.remarks.join("\n")),
     ];
     updates.set(row, [...(updates.get(row) ?? []), ...operations]);
   }

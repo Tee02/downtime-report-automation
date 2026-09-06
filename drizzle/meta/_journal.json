@@ -15,6 +15,13 @@
       "when": 1788442222518,
       "tag": "0001_dapper_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1788687051586,
+      "tag": "0002_supreme_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }
