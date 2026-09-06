@@ -1,0 +1,231 @@
+export type VersionRecord = {
+  version: string;
+  commit: string;
+  date: string;
+  time: string;
+  timestamp: string;
+  title: string;
+  tasks: string[];
+  isCurrent?: boolean;
+};
+
+export const CURRENT_VERSION = "v1.14";
+
+export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.14",
+    commit: "7d91a4b",
+    date: "2026-09-06",
+    time: "10:19:33",
+    timestamp: "2026-09-06 10:19:33",
+    title: "Ride Incident Logs, Red Highlights & Weather Recall",
+    tasks: [
+      "Removed 'Export selected log' button from Saved Report Library (display purpose only)",
+      "Shortened Ride Ranking table to top 5 with internal vertical scrollable container",
+      "Added dedicated Ride Incident Logs section with per-ride filtering and scroll",
+      "Applied strict red highlight rules: cause description and evac wording in red; time ranges neutral",
+      "Integrated weather persistence and recall for Excel and Analysis Studio incident logs",
+      "Optimized saved-report loading with concurrent S3 retrieval and memory cache",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.13",
+    commit: "c76b0f4",
+    date: "2026-09-05",
+    time: "14:41:22",
+    timestamp: "2026-09-05 14:41:22",
+    title: "Metallic Blue Redesign & Severity-Coded Analytics",
+    tasks: [
+      "Applied metallic blue theme-park visual redesign",
+      "Implemented severity-coded charts for daily downtime and weekday trends",
+      "Updated weather, fire alarm, and late-handover timeline color mappings",
+      "Added evacuation and fleet availability analytics",
+      "Added duplicate saved-report prevention and secure deletion guidance",
+      "Introduced scrollable saved-log library table",
+    ],
+  },
+  {
+    version: "v1.12",
+    commit: "c36fe88",
+    date: "2026-09-04",
+    time: "15:59:40",
+    timestamp: "2026-09-04 15:59:40",
+    title: "SkyWorlds Branding & Theme Polish",
+    tasks: [
+      "Applied official SkyWorlds logo and favicon assets",
+      "Switched application to accessible dark DotField theme",
+      "Retained clean dark sidebar layout",
+      "Widened minute axes in Report Studio and Analysis Studio charts",
+    ],
+  },
+  {
+    version: "v1.11",
+    commit: "aeec121",
+    date: "2026-09-03",
+    time: "16:42:45",
+    timestamp: "2026-09-03 16:42:45",
+    title: "Analysis Studio Controls & Navigation",
+    tasks: [
+      "Retained public access to Analysis Studio without forced OAuth redirects",
+      "Added 'Select all rides' and 'Clear all dates' selection controls",
+      "Refined review messaging and vertical chart layout",
+      "Improved percentage wording and optional handover guidance",
+    ],
+  },
+  {
+    version: "v1.10",
+    commit: "8c4b154",
+    date: "2026-09-03",
+    time: "14:14:24",
+    timestamp: "2026-09-03 14:14:24",
+    title: "Analysis Studio & Compiled XLSX Export",
+    tasks: [
+      "Added Analysis Studio with saved-log multi-date and multi-ride recall",
+      "Implemented operational downtime aggregation and availability formulas",
+      "Added compiled XLSX log export across selected date ranges",
+      "Added retained-report deletion workflow",
+      "Streamlined sidebar navigation",
+    ],
+  },
+  {
+    version: "v1.9",
+    commit: "a646f1e",
+    date: "2026-09-03",
+    time: "13:38:34",
+    timestamp: "2026-09-03 13:38:34",
+    title: "Closure Selection & Weather Mapping",
+    tasks: [
+      "Added compact handover closure selector with autocomplete",
+      "Added optional source-log retention toggle to library",
+      "Implemented weather WhatsApp message parser and interval mapping",
+      "Added event-count chart tooltips",
+    ],
+  },
+  {
+    version: "v1.8",
+    commit: "d9afa03",
+    date: "2026-08-30",
+    time: "05:43:00",
+    timestamp: "2026-08-30 05:43:00",
+    title: "Fleet Capacity Formula Update",
+    tasks: [
+      "Updated column E and total downtime percentage formulas from 18 to 19 fleet rides",
+      "Recalibrated daily operating minutes calculation (480 mins / 8 hours)",
+    ],
+  },
+  {
+    version: "v1.7",
+    commit: "f6f03db",
+    date: "2026-08-29",
+    time: "13:46:24",
+    timestamp: "2026-08-29 13:46:24",
+    title: "AFP Row Formatting Refinement",
+    tasks: [
+      "Removed default AFP row coloring in template",
+      "Retained normal AFP downtime recording and explicit handover closure styling",
+    ],
+  },
+  {
+    version: "v1.6",
+    commit: "5b1810d",
+    date: "2026-08-28",
+    time: "15:45:59",
+    timestamp: "2026-08-28 15:45:59",
+    title: "Attraction Aliases & Defenses",
+    tasks: [
+      "Mapped 'Ice Age: Expedition Thin Ice' to ETI code",
+      "Labeled NATM as 'Night At The Museum'",
+      "Defensive blanking for AFP unless active downtime or closure requires it",
+    ],
+  },
+  {
+    version: "v1.5",
+    commit: "538c249",
+    date: "2026-08-28",
+    time: "14:56:21",
+    timestamp: "2026-08-28 14:56:21",
+    title: "Manual Handover Closures & Big Weld's Fix",
+    tasks: [
+      "Added manual handover closure selector with multi-select support",
+      "Corrected 3 August interval styling",
+      "Corrected Big Weld's Zeppelin code resolution",
+      "Preserved weekly summary color schemes",
+      "Validated live XLSX download flow",
+    ],
+  },
+  {
+    version: "v1.4",
+    commit: "645c07e",
+    date: "2026-08-28",
+    time: "13:02:49",
+    timestamp: "2026-08-28 13:02:49",
+    title: "Full Fleet Code Mapping & Weekly Format",
+    tasks: [
+      "Completed ride mapping for all 21 attractions (including Boot Camp Training variants)",
+      "Weekly report formatting: 0.00% for normal, purple for closed, red/yellow for downtime",
+      "Verified technical blue styling resumes correctly after evacuation intervals",
+    ],
+  },
+  {
+    version: "v1.3",
+    commit: "77498ae",
+    date: "2026-08-28",
+    time: "09:59:50",
+    timestamp: "2026-08-28 09:59:50",
+    title: "V2 Adaptive Template Generation",
+    tasks: [
+      "Populated cleared daily sheet and tab from Operations log date",
+      "Generated first-weekly-day availability percentages",
+      "Cleared all unused weekly dates and summary cells",
+      "Highlighted Technical downtime percentages above 1% in red",
+      "Retained standard operational reporting notes",
+    ],
+  },
+  {
+    version: "v1.2",
+    commit: "d66a496",
+    date: "2026-08-27",
+    time: "16:04:02",
+    timestamp: "2026-08-27 16:04:02",
+    title: "AVL Exclusion & Closure Styling",
+    tasks: [
+      "Excluded AVL 11-1 records (retained Technical 11-1 only)",
+      "Used #F8CBAD peach highlight for confirmed closed rides",
+      "Reset uninvolved daily percentage cells to zero",
+      "Preserved current-day ride formulas and total formula",
+      "Refreshed dashboard with clean theme-park palette",
+    ],
+  },
+  {
+    version: "v1.1",
+    commit: "e8bedca",
+    date: "2026-08-27",
+    time: "15:29:00",
+    timestamp: "2026-08-27 15:29:00",
+    title: "Template Automation & Formula Engine",
+    tasks: [
+      "Repaired XLSX generation and integrated fixed WKtemplate",
+      "Enabled single Operations-log upload and automatic workbook matching",
+      "Added formula-based 480-minute ride percentage calculations",
+      "Added 8,640-minute total percentage in column E",
+      "Implemented closed-ride detection with native template colors",
+      "Added pre-export review dashboard",
+    ],
+  },
+  {
+    version: "v1.0",
+    commit: "2ca5f2a",
+    date: "2026-08-27",
+    time: "11:45:50",
+    timestamp: "2026-08-27 11:45:50",
+    title: "Initial System Launch",
+    tasks: [
+      "Launched Downtime Report Studio with XLSX workbook upload",
+      "Implemented 11-1 technical downtime record extraction",
+      "Created technical template-preserving workbook export engine",
+      "Implemented light-blue/pink/dark-blue timeline styling",
+      "Added pre-export review summary and bar chart visualization",
+    ],
+  },
+];

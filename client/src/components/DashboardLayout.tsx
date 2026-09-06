@@ -27,6 +27,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { VersionHistorySection } from "./VersionHistorySection";
 
 const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
@@ -201,6 +202,8 @@ function DashboardLayoutContent({
                 </DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <VersionHistorySection isCollapsed={isCollapsed} />
           </SidebarFooter>
         </Sidebar>
         <div
