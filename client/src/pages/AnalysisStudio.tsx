@@ -307,137 +307,136 @@ export default function AnalysisStudio() {
           </Card>
         ) : (
           <>
-            {/* 01: Calendar Recall */}
-            <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]">
-                      01 · Select reporting dates
-                    </p>
-                    <h2 className="mt-1 text-lg font-extrabold tracking-tight">Calendar recall</h2>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant={isDarkDayMode ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setIsDarkDayMode(!isDarkDayMode)}
-                      className={`h-8 text-xs font-bold transition-all ${
-                        isDarkDayMode
-                          ? "bg-slate-800 text-white hover:bg-slate-900 border-slate-700"
-                          : "border-slate-300 text-slate-700 bg-white hover:bg-slate-100"
-                      }`}
-                    >
-                      <Moon className="mr-1.5 h-3.5 w-3.5" />
-                      {isDarkDayMode ? "Exit Dark Day Mode" : "Manage Dark Days"}
-                    </Button>
-                    <CalendarDays className="h-5 w-5 text-[#3D52A0]" />
-                  </div>
-                </div>
+            {/* Top Workspace Grid: Left = Compact Calendar; Right = Ride Combination (top) + Saved Report Library (bottom) */}
+            <div className="grid gap-5 lg:grid-cols-12 items-start">
+              {/* Left Column: Compact Calendar Recall Card */}
+              <div className="lg:col-span-5 h-full">
+                <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)] h-full">
+                  <CardContent className="p-5 flex flex-col justify-between h-full">
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]">
+                            01 · Select reporting dates
+                          </p>
+                          <h2 className="mt-1 text-base font-extrabold tracking-tight">Calendar recall</h2>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            variant={isDarkDayMode ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setIsDarkDayMode(!isDarkDayMode)}
+                            className={`h-7 px-2 text-[10px] font-bold transition-all ${
+                              isDarkDayMode
+                                ? "bg-slate-800 text-white hover:bg-slate-900 border-slate-700"
+                                : "border-slate-300 text-slate-700 bg-white hover:bg-slate-100"
+                            }`}
+                          >
+                            <Moon className="mr-1 h-3 w-3" />
+                            {isDarkDayMode ? "Exit Dark Day" : "Manage Dark Days"}
+                          </Button>
+                          <CalendarDays className="h-4 w-4 text-[#3D52A0]" />
+                        </div>
+                      </div>
 
-                {isDarkDayMode ? (
-                  <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900 flex items-center justify-between">
-                    <span>
-                      <strong>Dark Day Mode active:</strong> Click any date in the calendar to toggle its Dark Day status (highlighted in grey with tooltip).
-                    </span>
-                  </div>
-                ) : rangeStartKey ? (
-                  <div className="mt-2 rounded-lg bg-indigo-50 border border-indigo-200 p-2 text-xs text-indigo-900 flex items-center justify-between">
-                    <span>
-                      Start date selected: <strong>{rangeStartKey}</strong>. Click an end date to auto-highlight all dates in between.
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setRangeStartKey(null)}
-                      className="h-6 px-2 text-[10px]"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : null}
+                      {isDarkDayMode ? (
+                        <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900">
+                          <strong>Dark Day Mode active:</strong> Click any date to toggle its Dark Day status.
+                        </div>
+                      ) : rangeStartKey ? (
+                        <div className="mt-2 rounded-lg bg-indigo-50 border border-indigo-200 p-2 text-xs text-indigo-900 flex items-center justify-between">
+                          <span className="truncate text-[11px]">Start: <strong>{rangeStartKey}</strong>. Click end date.</span>
+                          <Button size="sm" variant="ghost" onClick={() => setRangeStartKey(null)} className="h-5 px-1.5 text-[10px]">Cancel</Button>
+                        </div>
+                      ) : null}
 
-                <Calendar
-                  mode="multiple"
-                  selected={selectedDateObjects}
-                  onDayClick={handleDayClick}
-                  disabled={date => !availableDateKeys.includes(dateKey(date)) && !isDarkDayMode}
-                  weekStartsOn={1}
-                  modifiers={{
-                    saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
-                    darkDay: darkDayDateObjects,
-                  }}
-                  modifiersClassNames={{
-                    saved: "font-bold text-[#3D52A0]",
-                  }}
-                  className="mt-4 w-full rounded-xl border border-[#adbBda]/50 bg-[#f8f9ff]/80"
-                />
+                      {/* Centered, properly-proportioned calendar */}
+                      <div className="flex justify-center pt-2">
+                        <Calendar
+                          mode="multiple"
+                          selected={selectedDateObjects}
+                          onDayClick={handleDayClick}
+                          disabled={date => !availableDateKeys.includes(dateKey(date)) && !isDarkDayMode}
+                          weekStartsOn={1}
+                          modifiers={{
+                            saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
+                            darkDay: darkDayDateObjects,
+                          }}
+                          modifiersClassNames={{
+                            saved: "font-bold text-[#3D52A0]",
+                          }}
+                          className="w-full max-w-[330px] rounded-xl border border-[#adbBda]/50 bg-[#f8f9ff]/80 p-2"
+                        />
+                      </div>
+                    </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <p className="text-xs text-slate-500">
-                    {selectedReports.length} report{selectedReports.length === 1 ? "" : "s"} selected
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedDateKeys(new Set(availableDateKeys))}
-                      className="h-8 text-xs font-bold text-[#3D52A0] hover:text-[#293252]"
-                    >
-                      Select all
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={selectedDateKeys.size === 0}
-                      onClick={() => {
-                        setSelectedDateKeys(new Set());
-                        setRangeStartKey(null);
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                      <p className="text-xs text-slate-500 font-medium">
+                        {selectedReports.length} report{selectedReports.length === 1 ? "" : "s"} selected
+                      </p>
+                      <div className="flex gap-1.5">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedDateKeys(new Set(availableDateKeys))}
+                          className="h-7 px-2 text-xs font-bold text-[#3D52A0] hover:text-[#293252]"
+                        >
+                          Select all
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={selectedDateKeys.size === 0}
+                          onClick={() => {
+                            setSelectedDateKeys(new Set());
+                            setRangeStartKey(null);
+                          }}
+                          className="h-7 px-2 text-xs font-bold text-[#3D52A0] hover:text-[#293252]"
+                        >
+                          <X className="mr-1 h-3 w-3" />
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column: Ride Combination (top) + Saved Report Library (bottom) */}
+              <div className="lg:col-span-7 space-y-5">
+                {/* Ride combination */}
+                <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
+                  <CardContent className="p-5">
+                    <RideCombinationSwitch
+                      selectedRideCodes={selectedRideCodes}
+                      onChange={setSelectedRideCodes}
+                    />
+                  </CardContent>
+                </Card>
+
+                {/* Saved report library below the ride combination */}
+                <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
+                  <CardContent className="p-5">
+                    <CompactSavedReportLibrary
+                      reports={reports}
+                      selectedDateKeys={selectedDateKeys}
+                      onToggleDate={reportDate => {
+                        setSelectedDateKeys(current => {
+                          const next = new Set(current);
+                          if (next.has(reportDate)) next.delete(reportDate);
+                          else next.add(reportDate);
+                          return next;
+                        });
                       }}
-                      className="h-8 text-xs font-bold text-[#3D52A0] hover:text-[#293252]"
-                    >
-                      <X className="mr-1.5 h-3.5 w-3.5" />
-                      Clear
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Side-by-side Section: Ride combination (Compact switch) AND Saved report library (Shortened with View More) */}
-            <div className="grid gap-5 lg:grid-cols-2">
-              {/* Left Column: Ride Combination Switch */}
-              <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
-                <CardContent className="p-5 h-full">
-                  <RideCombinationSwitch
-                    selectedRideCodes={selectedRideCodes}
-                    onChange={setSelectedRideCodes}
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Right Column: Compact Saved Report Library */}
-              <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
-                <CardContent className="p-5 h-full">
-                  <CompactSavedReportLibrary
-                    reports={reports}
-                    selectedDateKeys={selectedDateKeys}
-                    onToggleDate={reportDate => {
-                      setSelectedDateKeys(current => {
-                        const next = new Set(current);
-                        if (next.has(reportDate)) next.delete(reportDate);
-                        else next.add(reportDate);
-                        return next;
-                      });
-                    }}
-                    onDeleteReport={id => setDeleteId(id)}
-                    canDelete={Boolean(user && !authLoading)}
-                  />
-                </CardContent>
-              </Card>
+                      onDeleteReport={id => setDeleteId(id)}
+                      canDelete={Boolean(user && !authLoading)}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             {/* Analytics Area */}
@@ -768,19 +767,38 @@ export default function AnalysisStudio() {
                       </div>
 
                       <div className="mt-4 max-h-[360px] overflow-y-auto rounded-xl border border-[#adbBda]/65 bg-[#f8f9ff]/70 p-4">
-                        {analysis.incidentLogs?.length ? (
-                          <div className="space-y-1">
-                            {analysis.incidentLogs.map(log => (
-                              <IncidentLogEntry
-                                key={log.id}
-                                kind={log.kind}
-                                dateLabel={log.dateLabel}
-                                description={log.description}
-                                durationLabel={log.durationLabel}
-                                timeRange={log.timeRange}
-                                evacuationLabel={log.evacuationLabel}
-                                evacuationRange={log.evacuationRange}
-                              />
+                        {analysis.rideIncidentGroups?.length ? (
+                          <div className="space-y-4 divide-y divide-slate-200/80">
+                            {analysis.rideIncidentGroups.map(group => (
+                              <div key={group.rideCode} className="pt-3 first:pt-0 space-y-1.5">
+                                <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono-report font-extrabold text-xs text-[#293252] bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                                      {group.rideCode}:
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-700">
+                                      {group.attraction}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-mono font-semibold text-slate-400">
+                                    {group.logs.length} event{group.logs.length === 1 ? "" : "s"}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 pl-1">
+                                  {group.logs.map(log => (
+                                    <IncidentLogEntry
+                                      key={log.id}
+                                      kind={log.kind}
+                                      dateLabel={log.dateLabel}
+                                      description={log.description}
+                                      durationLabel={log.durationLabel}
+                                      timeRange={log.timeRange}
+                                      evacuationLabel={log.evacuationLabel}
+                                      evacuationRange={log.evacuationRange}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
                             ))}
                           </div>
                         ) : (

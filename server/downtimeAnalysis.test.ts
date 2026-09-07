@@ -63,7 +63,7 @@ describe("downtime analysis aggregation", () => {
       expect.objectContaining({ dateKey: "2026-09-01", minutes: 10 }),
       expect.objectContaining({ dateKey: "2026-09-02", minutes: 30 }),
     ]));
-    expect(result.peakDay).toEqual({ dateKey: "2026-09-02", label: "2 Sept", minutes: 30 });
+    expect(result.peakDay).toMatchObject({ dateKey: "2026-09-02", label: "2 Sept", minutes: 30 });
 
     // Weekday pattern must have dates and be sorted starting with Monday
     expect(result.weekdayPattern[0]).toHaveProperty("dates");
@@ -88,5 +88,13 @@ describe("downtime analysis aggregation", () => {
     // EHF was not selected in ["VTM"], so its technical log should NOT appear
     const ehfLog = result.incidentLogs.find(l => l.kind === "technical" && l.rideCode === "EHF");
     expect(ehfLog).toBeUndefined();
+
+    // Ride incident groups must group logs by ride and include dark days
+    expect(result.rideIncidentGroups).toBeDefined();
+    const vtmGroup = result.rideIncidentGroups.find(g => g.rideCode === "VTM");
+    expect(vtmGroup).toBeDefined();
+    expect(vtmGroup?.logs.some(l => l.kind === "darkDay")).toBe(true);
+    expect(vtmGroup?.logs.some(l => l.kind === "technical")).toBe(true);
+    expect(vtmGroup?.logs.some(l => l.kind === "weather")).toBe(true);
   });
 });

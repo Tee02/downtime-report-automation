@@ -26,3 +26,14 @@
  - [x] 21. Run vitest tests and verify build
  - [x] 22. Capture visual screenshots and inspect UI in browser
  - [x] 23. Save checkpoint and deliver result
+
+## Iteration 3: Compact Desktop Layout, Ride-Sorted Incident Logs with Dark Days, v17 Version History, and GSMArena-Style 3-Column Comparison Studio
+
+ - [x] 24. Update version records in versionHistory.ts to catalog v15 (7d91a4b), v16 (8c94decf), and v17 (current live release) with timestamps and jobs
+ - [x] 25. Reorganize Analysis Studio top layout on desktop: compact Calendar on left, Ride Combination switch on top-right, and Saved Report Library right below it
+ - [x] 26. Refactor Ride Incident Logs: group and sort by ride (e.g. PTA:, RCC:, RTR:) with chronological incidents and Dark Day entries under each ride
+ - [x] 27. Build GSMArena-style 3-column Comparison Studio page (/comparison) allowing side-by-side selection of dates and rides with structured comparison tables
+ - [x] 28. Add Comparison Studio navigation entry in DashboardLayout sidebar and route in App.tsx
+ - [x] 29. Run vitest test suite and ensure all tests pass
+ - [x] 30. Capture full-page visual screenshots to verify both Analysis Studio and Comparison Studio
+ - [x] 31. Save checkpoint and deliver result

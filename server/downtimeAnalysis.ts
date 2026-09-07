@@ -48,6 +48,12 @@ export type IncidentLog = {
   evacuationRange?: string;
 };
 
+export type RideIncidentGroup = {
+  rideCode: string;
+  attraction: string;
+  logs: IncidentLog[];
+};
+
 export type AnalysisResult = {
   totalTechnicalMinutes: number;
   totalEvents: number;
@@ -62,9 +68,10 @@ export type AnalysisResult = {
   topRides: RideAnalysis[];
   dailyTrend: Array<{ dateKey: string; label: string; minutes: number; events: number; percentage: number; evacuationMinutes: number; evacuationEvents: number }>;
   weekdayPattern: Array<{ weekday: string; minutes: number; events: number; days: number; averageMinutes: number; dates: string[] }>;
+  peakDay?: { dateKey: string; label: string; minutes: number; events: number; percentage: number; evacuationMinutes: number; evacuationEvents: number };
+  longestIncident?: DowntimeRecord;
   incidentLogs: IncidentLog[];
-  peakDay?: { dateKey: string; label: string; minutes: number };
-  longestIncident?: { rideCode: string; attraction: string; minutes: number; dateKey: string };
+  rideIncidentGroups: RideIncidentGroup[];
 };
 
 function labelDate(dateKey: string) {
@@ -191,6 +198,39 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
   }));
   const incidentLogs = [...technicalIncidents, ...weatherIncidents, ...darkDayIncidents].sort((left, right) => left.dateKey.localeCompare(right.dateKey) || left.id.localeCompare(right.id));
 
+  // Group incident logs by ride with Dark Days chronologically inserted under each ride
+  const ridesInScope = rankingCodes.map(code => ({
+    code,
+    name: rideNames.get(code) ?? code,
+  }));
+
+  const rideIncidentGroups: RideIncidentGroup[] = ridesInScope.map(ride => {
+    // 1. Technical incidents for this ride
+    const techForRide = technicalIncidents.filter(inc => inc.rideCode === ride.code);
+    // 2. Weather incidents for this ride
+    const weatherForRide = weatherIncidents.filter(inc => inc.rideCode === ride.code);
+    // 3. Dark Days for all selected dates (included under each ride in chronological sequence)
+    const darkDaysForRide: IncidentLog[] = Array.from(selectedDarkDays).map(dateKey => ({
+      id: `darkday-${dateKey}-${ride.code}`,
+      kind: "darkDay" as const,
+      dateKey,
+      dateLabel: labelDate(dateKey),
+      rideCode: ride.code,
+      attraction: ride.name,
+      description: "Dark Day",
+    }));
+
+    const combinedLogs = [...techForRide, ...weatherForRide, ...darkDaysForRide].sort((a, b) =>
+      a.dateKey.localeCompare(b.dateKey) || a.id.localeCompare(b.id)
+    );
+
+    return {
+      rideCode: ride.code,
+      attraction: ride.name,
+      logs: combinedLogs,
+    };
+  }).filter(group => group.logs.length > 0);
+
   const totalTechnicalMinutes = records.reduce((total, record) => total + record.technicalMinutes, 0);
   const totalEvacuationMinutes = records.reduce((total, record) => total + record.evacuationMinutes, 0);
   const totalEvacuationEvents = records.filter(record => record.evacuationEnd !== undefined).length;
@@ -210,9 +250,10 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
     topRides,
     dailyTrend,
     weekdayPattern,
+    peakDay: peak,
+    longestIncident: longest,
     incidentLogs,
-    peakDay: peak ? { dateKey: peak.dateKey, label: peak.label, minutes: peak.minutes } : undefined,
-    longestIncident: longest ? { rideCode: longest.rideCode!, attraction: longest.attraction, minutes: longest.technicalMinutes, dateKey: longest.dateKey } : undefined,
+    rideIncidentGroups,
   };
 }
 

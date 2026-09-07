@@ -22,7 +22,7 @@ import {
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import DotField from "@/components/DotField";
-import { BarChart3, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
+import { BarChart3, Columns3, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -32,6 +32,7 @@ import { VersionHistorySection } from "./VersionHistorySection";
 const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
   { icon: BarChart3, label: "Analysis studio", path: "/analysis" },
+  { icon: Columns3, label: "Comparison studio", path: "/comparison" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

@@ -9,11 +9,43 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.14";
+export const CURRENT_VERSION = "v1.17";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.14",
+    version: "v1.17",
+    commit: "pending",
+    date: "2026-09-06",
+    time: "15:10:00",
+    timestamp: "2026-09-06 15:10:00",
+    title: "Comparison Studio & Ride-Grouped Incident Logs with Dark Days",
+    tasks: [
+      "Added new GSMArena-style 3-column Comparison Studio (/comparison) with side-by-side date and ride comparisons",
+      "Re-architected desktop layout: compact calendar on left, ride switch and saved reports stacked on right",
+      "Grouped and sorted Ride Incident Logs by attraction (e.g. PTA:, RCC:, RTR:) with chronological order",
+      "Included Dark Day entries under each ride's chronological log sequence (*04 Aug, Dark Day.)",
+      "Added Comparison Studio link to sidebar navigation",
+      "Maintained strict red highlight rules and dynamic severity threshold color reactions",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.16",
+    commit: "8c94dec",
+    date: "2026-09-06",
+    time: "14:37:12",
+    timestamp: "2026-09-06 14:37:12",
+    title: "Version History, Configurable Severity & Space-Saving Switch",
+    tasks: [
+      "Added live version number indicator and scrollable release changelog at bottom of sidebar",
+      "Implemented configurable downtime severity thresholds (Monitor, Elevated, High, Critical) with live recoloring",
+      "Refactored Ride Combination into space-saving button switch (All Rides default vs Custom dropdown)",
+      "Repositioned Saved Report Library side-by-side with hidden scrollbar and 'View more' expand toggle",
+      "Added severity color spectrum preview and quick presets (Default, Strict, Relaxed)",
+    ],
+  },
+  {
+    version: "v1.15",
     commit: "7d91a4b",
     date: "2026-09-06",
     time: "10:19:33",
@@ -27,10 +59,9 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Integrated weather persistence and recall for Excel and Analysis Studio incident logs",
       "Optimized saved-report loading with concurrent S3 retrieval and memory cache",
     ],
-    isCurrent: true,
   },
   {
-    version: "v1.13",
+    version: "v1.14",
     commit: "c76b0f4",
     date: "2026-09-05",
     time: "14:41:22",
