@@ -50,3 +50,13 @@ export const darkDays = mysqlTable("darkDays", {
 
 export type DarkDay = typeof darkDays.$inferSelect;
 export type InsertDarkDay = typeof darkDays.$inferInsert;
+
+export const siteContent = mysqlTable("siteContent", {
+  id: int("id").autoincrement().primaryKey(),
+  contentKey: varchar("contentKey", { length: 64 }).notNull().unique(),
+  contentValue: text("contentValue").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SiteContent = typeof siteContent.$inferSelect;
+export type InsertSiteContent = typeof siteContent.$inferInsert;

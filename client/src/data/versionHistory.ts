@@ -9,12 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.17";
+export const CURRENT_VERSION = "v1.18";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.17",
+    version: "v1.18",
     commit: "pending",
+    date: "2026-09-07",
+    time: "15:20:00",
+    timestamp: "2026-09-07 15:20:00",
+    title: "Passcode 494 Login, Latest-Only Analysis & 2-to-3 Dynamic Comparison Columns",
+    tasks: [
+      "Added in-app modal login with single passcode '494' replacing manus.im OAuth redirect",
+      "Authenticated session allows deleting saved reports and inline editing of front-end texts without touching backend code",
+      "Analysis Studio now auto-selects and calculates ONLY the single most recent available downtime log on page visit",
+      "Comparison Studio now shows 2 wide columns by default, with an expandable '+ Add 3rd Column' toggle",
+      "Comparison Studio date selection upgraded to an interactive calendar picker, defaulting to zero dates to save execution",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.17",
+    commit: "8e81d68",
     date: "2026-09-06",
     time: "15:10:00",
     timestamp: "2026-09-06 15:10:00",
@@ -27,7 +43,6 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added Comparison Studio link to sidebar navigation",
       "Maintained strict red highlight rules and dynamic severity threshold color reactions",
     ],
-    isCurrent: true,
   },
   {
     version: "v1.16",

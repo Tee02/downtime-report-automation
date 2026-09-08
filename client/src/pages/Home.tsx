@@ -9,6 +9,7 @@ import { Archive, ArrowRight, CheckCircle2, ChevronRight, CircleOff, CloudSun, D
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { EditableNotice } from "@/components/EditableNotice";
 
 type ReviewRecord = {
   sourceRow: number;
@@ -146,6 +147,13 @@ export default function Home() {
   const removeHandoverClosure = (rideCode: string) => { setHandoverClosedRides(current => current.filter(code => code !== rideCode)); setResponse(undefined); };
 
   return <DashboardLayout><div className="min-h-[calc(100vh-2rem)] text-slate-900"><section className="park-sky paper-grid relative overflow-hidden rounded-3xl border border-emerald-100 px-6 py-8 shadow-sm sm:px-9"><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-sky-200/35 blur-3xl" /><div className="absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-amber-200/45 blur-3xl" /><div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div className="max-w-2xl"><div className="mb-4 flex items-center gap-2"><Badge className="rounded-full bg-emerald-800 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800">Park operations</Badge><span className="font-mono-report text-xs text-emerald-800/70">Technical 11-1 only</span></div><h1 className="text-3xl font-extrabold tracking-[-0.055em] text-emerald-950 sm:text-4xl">Downtime Report Studio</h1><p className="mt-3 max-w-xl text-sm leading-6 text-emerald-950/70">Upload a daily Operations downtime log, add any confirmed handover closures or weather annotations, then generate a template-ready report for review.</p></div><div className="flex max-w-md items-start gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" /><p className="text-xs leading-5 text-slate-600"><strong className="text-slate-900">Template-safe output.</strong> Only Technical 11-1 downtime contributes to availability. Weather maps in light yellow and 11-10 fire alarms map in green; neither changes downtime percentage.</p></div></div></section>
+
+    <div className="mt-4">
+      <EditableNotice
+        contentKey="report_studio_notice"
+        defaultText="Operations Notice: Daily downtime reports require verified Technical 11-1 records. Use Report Studio to compile and save workbooks."
+      />
+    </div>
 
     <section className="mt-7"><Card className="border-slate-200 bg-white shadow-sm"><CardContent className="p-6 sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-700">01 · Configure report</p><h2 className="mt-2 text-xl font-extrabold tracking-tight">Build a clean report review</h2></div><div className="rounded-xl bg-amber-50 p-2.5 text-amber-700"><FileUp className="h-5 w-5" /></div></div><div className="mt-6"><FileDropzone label="Operations downtime log" note="Drop any daily Operations downtime XLSX workbook here. Its date is placed in the cleared V2 template automatically." file={operationsFile} onFile={setOperationsFile} /></div>
 

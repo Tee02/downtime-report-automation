@@ -1,6 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { darkDays, InsertSavedDowntimeReport, InsertUser, savedDowntimeReports, users } from "../drizzle/schema";
+import { InsertSavedDowntimeReport, InsertUser, darkDays, savedDowntimeReports, siteContent, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -139,4 +139,19 @@ export async function setDarkDay(dateKey: string, isDarkDay: boolean): Promise<v
   } else {
     await db.delete(darkDays).where(eq(darkDays.dateKey, dateKey));
   }
+}
+
+export async function getSiteContent(contentKey: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(siteContent).where(eq(siteContent.contentKey, contentKey)).limit(1);
+  return rows[0]?.contentValue ?? null;
+}
+
+export async function setSiteContent(contentKey: string, contentValue: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("The database is temporarily unavailable.");
+  await db.insert(siteContent).values({ contentKey, contentValue }).onDuplicateKeyUpdate({
+    set: { contentValue },
+  });
 }

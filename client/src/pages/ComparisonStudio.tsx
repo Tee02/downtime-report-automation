@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,13 +14,15 @@ import { trpc } from "@/lib/trpc";
 import { FLEET_RIDES } from "@/components/RideCombinationSwitch";
 import { IncidentLogEntry } from "@/components/IncidentLogEntry";
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   Check,
   ChevronDown,
   Columns3,
   Filter,
   Layers,
   Loader2,
+  Minus,
+  Plus,
   RotateCcw,
   Search,
   Sparkles,
@@ -53,56 +56,30 @@ export default function ComparisonStudio() {
     [reports]
   );
 
-  // Three slots configuration
+  // Column count: 2 by default for clean and wide view; 3rd column on demand
+  const [columnCount, setColumnCount] = useState<2 | 3>(2);
+
+  // Slots configuration - default with EMPTY dateKeys to save calculation execution
   const [slots, setSlots] = useState<SlotConfig[]>([
     {
       id: "slot-1",
-      name: "Scenario 1: All Fleet",
-      dateKeys: new Set(),
+      name: "Scenario 1",
+      dateKeys: new Set<string>(), // None selected by default
       rideCodes: [],
     },
     {
       id: "slot-2",
-      name: "Scenario 2: Recent Dates",
-      dateKeys: new Set(),
+      name: "Scenario 2",
+      dateKeys: new Set<string>(), // None selected by default
       rideCodes: [],
     },
     {
       id: "slot-3",
-      name: "Scenario 3: Outdoor Focus",
-      dateKeys: new Set(),
-      rideCodes: ["RCC", "RTR", "SAG", "SRS", "TTC", "BWZ"],
+      name: "Scenario 3",
+      dateKeys: new Set<string>(), // None selected by default
+      rideCodes: [],
     },
   ]);
-
-  // Prepopulate sensible defaults when reports load
-  const [initialized, setInitialized] = useState(false);
-  useEffect(() => {
-    if (availableDateKeys.length && !initialized) {
-      const half = Math.ceil(availableDateKeys.length / 2);
-      setSlots([
-        {
-          id: "slot-1",
-          name: "All Dates (Full Fleet)",
-          dateKeys: new Set(availableDateKeys),
-          rideCodes: [],
-        },
-        {
-          id: "slot-2",
-          name: "Period A (Earlier Dates)",
-          dateKeys: new Set(availableDateKeys.slice(0, half)),
-          rideCodes: [],
-        },
-        {
-          id: "slot-3",
-          name: "Period B (Outdoor Rides)",
-          dateKeys: new Set(availableDateKeys.slice(half)),
-          rideCodes: ["RCC", "RTR", "SAG", "SRS", "TTC", "BWZ"],
-        },
-      ]);
-      setInitialized(true);
-    }
-  }, [availableDateKeys, initialized]);
 
   // Prepare report IDs for each slot
   const slotReportIds = useMemo(() => {
@@ -113,7 +90,7 @@ export default function ComparisonStudio() {
     });
   }, [slots, reports]);
 
-  // Run 3 queries for the 3 columns
+  // Run queries only when dates are selected (saves calculation execution)
   const query1 = trpc.analysis.get.useQuery(
     { reportIds: slotReportIds[0], rideCodes: slots[0].rideCodes },
     { enabled: slotReportIds[0].length > 0 }
@@ -124,11 +101,15 @@ export default function ComparisonStudio() {
   );
   const query3 = trpc.analysis.get.useQuery(
     { reportIds: slotReportIds[2], rideCodes: slots[2].rideCodes },
-    { enabled: slotReportIds[2].length > 0 }
+    { enabled: columnCount === 3 && slotReportIds[2].length > 0 }
   );
 
-  const results = [query1.data, query2.data, query3.data];
-  const queries = [query1, query2, query3];
+  const allResults = [query1.data, query2.data, query3.data];
+  const allQueries = [query1, query2, query3];
+
+  const activeSlots = slots.slice(0, columnCount);
+  const activeResults = allResults.slice(0, columnCount);
+  const activeQueries = allQueries.slice(0, columnCount);
 
   const updateSlotName = (index: number, name: string) => {
     setSlots(current => {
@@ -159,7 +140,7 @@ export default function ComparisonStudio() {
       const copy = [...current];
       copy[index] = {
         ...copy[index],
-        dateKeys: new Set(availableDateKeys),
+        dateKeys: new Set(),
         rideCodes: [],
       };
       return copy;
@@ -168,17 +149,17 @@ export default function ComparisonStudio() {
 
   // Best availability among valid results
   const bestAvailability = useMemo(() => {
-    const avails = results.map(r => (r ? 100 - r.averageDowntimePercentage : null));
+    const avails = activeResults.map(r => (r ? 100 - r.averageDowntimePercentage : null));
     const valid = avails.filter((v): v is number => v !== null);
     return valid.length ? Math.max(...valid) : null;
-  }, [results]);
+  }, [activeResults]);
 
   // Lowest downtime minutes among valid results
   const lowestDowntime = useMemo(() => {
-    const times = results.map(r => (r ? r.totalTechnicalMinutes : null));
+    const times = activeResults.map(r => (r ? r.totalTechnicalMinutes : null));
     const valid = times.filter((v): v is number => v !== null);
     return valid.length ? Math.min(...valid) : null;
-  }, [results]);
+  }, [activeResults]);
 
   return (
     <DashboardLayout>
@@ -195,15 +176,15 @@ export default function ComparisonStudio() {
                 Downtime Comparison Studio
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-700">
-                Compare three operational scenarios side by side. Customize dates and ride combinations for each column to benchmark performance metrics, ride availability, and incident logs in a structured comparison table.
+                Compare operational scenarios side by side. Showing 2 clean columns by default, with an expandable 3rd column. Pick dates via the calendar picker to calculate comparisons on demand.
               </p>
             </div>
             <div className="max-w-xs rounded-2xl border border-[#8697c4]/45 bg-white/65 p-3.5 text-xs text-slate-600 shadow-sm backdrop-blur">
               <div className="flex items-center gap-2 font-bold text-[#293252] mb-1">
                 <Columns3 className="h-4 w-4 text-[#3D52A0]" />
-                3-Column Comparison
+                {columnCount}-Column View
               </div>
-              Data is displayed in structured table format with comparative highlighting.
+              Clean table format with on-demand calculation.
             </div>
           </div>
         </section>
@@ -224,20 +205,60 @@ export default function ComparisonStudio() {
           </Card>
         ) : (
           <>
-            {/* Slot Configuration Header Cards (3 columns) */}
-            <div className="grid gap-4 md:grid-cols-3">
-              {slots.map((slot, index) => (
-                <SlotConfigCard
-                  key={slot.id}
-                  index={index}
-                  slot={slot}
-                  availableDateKeys={availableDateKeys}
-                  onNameChange={name => updateSlotName(index, name)}
-                  onDatesChange={keys => updateSlotDates(index, keys)}
-                  onRidesChange={rides => updateSlotRides(index, rides)}
-                  onReset={() => resetSlot(index)}
-                  isLoading={queries[index].isLoading}
-                />
+            {/* Controls Bar: 2-or-3 Columns Switch */}
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-slate-600">
+                Displaying <strong>{columnCount} comparison columns</strong>. Select dates via the calendar to calculate downtime.
+              </p>
+              {columnCount === 2 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setColumnCount(3)}
+                  className="h-8 text-xs font-bold bg-[#3D52A0] text-white hover:bg-[#293252] shadow-sm"
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Add 3rd Column for Comparison
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setColumnCount(2)}
+                  className="h-8 text-xs font-bold border-slate-300 text-slate-700 bg-white hover:bg-slate-100"
+                >
+                  <Minus className="mr-1.5 h-3.5 w-3.5" />
+                  Hide 3rd Column (2-Column View)
+                </Button>
+              )}
+            </div>
+
+            {/* Slot Configuration Header Cards (2 or 3 columns) */}
+            <div className={`grid gap-4 ${columnCount === 2 ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
+              {activeSlots.map((slot, index) => (
+                <div key={slot.id} className="relative">
+                  <SlotConfigCard
+                    index={index}
+                    slot={slot}
+                    availableDateKeys={availableDateKeys}
+                    onNameChange={name => updateSlotName(index, name)}
+                    onDatesChange={keys => updateSlotDates(index, keys)}
+                    onRidesChange={rides => updateSlotRides(index, rides)}
+                    onReset={() => resetSlot(index)}
+                    isLoading={activeQueries[index].isLoading}
+                  />
+                  {index === 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setColumnCount(2)}
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-slate-800 text-white flex items-center justify-center hover:bg-rose-700 shadow"
+                      title="Close 3rd column"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
 
@@ -245,14 +266,14 @@ export default function ComparisonStudio() {
             <div className="overflow-hidden rounded-2xl border border-[#adbBda]/70 bg-white shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
               {/* Sticky Column Header */}
               <div className="grid grid-cols-12 bg-[#ede8f5] border-b border-[#adbBda]/60 sticky top-0 z-20 text-xs font-extrabold text-slate-800">
-                <div className="col-span-3 p-4 flex items-center gap-2 border-r border-[#adbBda]/40 text-slate-700 uppercase tracking-wider text-[11px]">
+                <div className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-4 flex items-center gap-2 border-r border-[#adbBda]/40 text-slate-700 uppercase tracking-wider text-[11px]`}>
                   <Columns3 className="h-4 w-4 text-[#3D52A0]" />
                   Metric / Category
                 </div>
-                {slots.map((slot, idx) => (
+                {activeSlots.map((slot, idx) => (
                   <div
                     key={slot.id}
-                    className={`col-span-3 p-3.5 border-r last:border-r-0 border-[#adbBda]/40 ${
+                    className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-3.5 border-r last:border-r-0 border-[#adbBda]/40 ${
                       idx === 0
                         ? "bg-indigo-50/50"
                         : idx === 1
@@ -269,7 +290,9 @@ export default function ComparisonStudio() {
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500 font-normal">
-                      <span>{slot.dateKeys.size} dates</span>
+                      <span className={slot.dateKeys.size === 0 ? "text-amber-700 font-bold" : "text-slate-600"}>
+                        {slot.dateKeys.size === 0 ? "No dates selected" : `${slot.dateKeys.size} dates`}
+                      </span>
                       <span>•</span>
                       <span>
                         {slot.rideCodes.length === 0
@@ -286,8 +309,13 @@ export default function ComparisonStudio() {
               <SpecRow
                 label="Fleet Availability"
                 detail="Mean operational uptime"
-                values={results.map(r =>
-                  r ? (100 - r.averageDowntimePercentage).toFixed(3) + "%" : "—"
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0
+                    ? "Select dates"
+                    : r
+                    ? (100 - r.averageDowntimePercentage).toFixed(3) + "%"
+                    : "—"
                 )}
                 highlightBest={(val, idx) => {
                   const num = parseFloat(val);
@@ -297,7 +325,10 @@ export default function ComparisonStudio() {
               <SpecRow
                 label="Total Technical Downtime"
                 detail="11-1 mechanical/electrical"
-                values={results.map(r => (r ? `${r.totalTechnicalMinutes} min` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.totalTechnicalMinutes} min` : "—"
+                )}
                 highlightBest={(val, idx) => {
                   const num = parseInt(val, 10);
                   return !isNaN(num) && lowestDowntime !== null && num === lowestDowntime;
@@ -306,17 +337,26 @@ export default function ComparisonStudio() {
               <SpecRow
                 label="Average Downtime Rate"
                 detail="Daily downtime percentage"
-                values={results.map(r => (r ? `${r.averageDowntimePercentage.toFixed(3)}%` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.averageDowntimePercentage.toFixed(3)}%` : "—"
+                )}
               />
               <SpecRow
                 label="Reporting Days"
                 detail="Sample size"
-                values={results.map(r => (r ? `${r.selectedDayCount} days` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "0 days" : r ? `${r.selectedDayCount} days` : "—"
+                )}
               />
               <SpecRow
                 label="Rides in Scope"
                 detail="Operating fleet count"
-                values={results.map(r => (r ? `${r.selectedRideCount} rides` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.selectedRideCount} rides` : "—"
+                )}
               />
 
               {/* Section 2: Interruptions & Evacuations */}
@@ -324,33 +364,53 @@ export default function ComparisonStudio() {
               <SpecRow
                 label="Recorded Incidents"
                 detail="Total stoppage events"
-                values={results.map(r => (r ? `${r.totalEvents}` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvents}` : "—"
+                )}
               />
               <SpecRow
                 label="Daily Incident Average"
                 detail="Incidents per operating day"
-                values={results.map(r => (r ? `${r.averageEventsPerDay.toFixed(1)} / day` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageEventsPerDay.toFixed(1)} / day` : "—"
+                )}
               />
               <SpecRow
                 label="Average Interruption"
                 detail="Duration per incident"
-                values={results.map(r => (r ? `${r.averageIncidentMinutes.toFixed(1)} min` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageIncidentMinutes.toFixed(1)} min` : "—"
+                )}
               />
               <SpecRow
                 label="Evacuation Time (11-7/11-17)"
                 detail="Total evacuation duration"
-                values={results.map(r => (r ? `${r.totalEvacuationMinutes} min` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationMinutes} min` : "—"
+                )}
               />
               <SpecRow
                 label="Evacuation Occurrences"
                 detail="Times passengers unloaded"
-                values={results.map(r => (r ? `${r.totalEvacuationEvents} times` : "—"))}
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationEvents} times` : "—"
+                )}
               />
               <SpecRow
                 label="Peak Downtime Day"
                 detail="Day with highest stoppage"
-                values={results.map(r =>
-                  r && r.peakDay ? `${r.peakDay.label} (${r.peakDay.minutes}m)` : "—"
+                columnCount={columnCount}
+                values={activeResults.map((r, i) =>
+                  activeSlots[i].dateKeys.size === 0
+                    ? "—"
+                    : r && r.peakDay
+                    ? `${r.peakDay.label} (${r.peakDay.minutes}m)`
+                    : "—"
                 )}
               />
 
@@ -361,28 +421,34 @@ export default function ComparisonStudio() {
                   key={code}
                   rideCode={code}
                   rideName={name}
-                  results={results}
+                  columnCount={columnCount}
+                  results={activeResults}
+                  activeSlots={activeSlots}
                 />
               ))}
 
               {/* Section 4: Day of Week Pattern */}
               <SectionHeader title="DAY OF WEEK PATTERN (MON – SUN)" tone="slate" />
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
-                <WeekdaySpecRow key={day} weekday={day} results={results} />
+                <WeekdaySpecRow key={day} weekday={day} columnCount={columnCount} results={activeResults} />
               ))}
 
               {/* Section 5: Ride Incident Logs Comparison */}
               <SectionHeader title="RIDE INCIDENT LOGS SIDE-BY-SIDE" tone="rose" />
               <div className="grid grid-cols-12 divide-x divide-[#adbBda]/40 bg-slate-50/50">
-                <div className="col-span-3 p-4 text-xs font-bold text-slate-700">
+                <div className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-4 text-xs font-bold text-slate-700`}>
                   <p>Chronological Logs</p>
                   <p className="mt-1 text-[10px] text-slate-400 font-normal">
                     Sorted by ride code, including technical, weather, and Dark Day entries.
                   </p>
                 </div>
-                {results.map((res, idx) => (
-                  <div key={idx} className="col-span-3 p-3 max-h-96 overflow-y-auto space-y-3">
-                    {res?.rideIncidentGroups?.length ? (
+                {activeResults.map((res, idx) => (
+                  <div key={idx} className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-3 max-h-96 overflow-y-auto space-y-3`}>
+                    {activeSlots[idx].dateKeys.size === 0 ? (
+                      <div className="p-5 text-center text-xs text-slate-400">
+                        No dates selected for {activeSlots[idx].name}. Select dates in the card above to load incident logs.
+                      </div>
+                    ) : res?.rideIncidentGroups?.length ? (
                       res.rideIncidentGroups.map(group => (
                         <div key={group.rideCode} className="space-y-1">
                           <div className="flex items-center gap-1.5 pb-0.5 border-b border-slate-200">
@@ -494,7 +560,7 @@ function SlotConfigCard({
 
         {/* Controls: Select Dates + Select Rides Popovers */}
         <div className="grid grid-cols-2 gap-2 pt-1">
-          {/* Date Selector Popover */}
+          {/* Date Selector Popover with Interactive Calendar */}
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -503,13 +569,15 @@ function SlotConfigCard({
                 className="h-8 justify-between text-xs px-2.5 border-[#8697c4]/60 bg-white font-semibold"
               >
                 <span className="flex items-center gap-1.5 truncate">
-                  <Calendar className="h-3.5 w-3.5 text-[#3D52A0]" />
-                  <span className="truncate">{slot.dateKeys.size} Dates</span>
+                  <CalendarIcon className="h-3.5 w-3.5 text-[#3D52A0]" />
+                  <span className="truncate">
+                    {slot.dateKeys.size === 0 ? "Pick Dates" : `${slot.dateKeys.size} Dates`}
+                  </span>
                 </span>
                 <ChevronDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-3 bg-white border-[#adbBda]/80 shadow-xl rounded-xl">
+            <PopoverContent className="w-auto p-3 bg-white border-[#adbBda]/80 shadow-2xl rounded-2xl" align="start">
               <div className="space-y-2">
                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                   <span className="text-xs font-bold text-slate-900">Select Dates</span>
@@ -518,47 +586,51 @@ function SlotConfigCard({
                       variant="ghost"
                       size="sm"
                       onClick={() => onDatesChange(new Set(availableDateKeys))}
-                      className="h-5 px-1.5 text-[10px] text-[#3D52A0] font-bold"
+                      className="h-6 px-1.5 text-[10px] text-[#3D52A0] font-bold"
                     >
-                      All
+                      All ({availableDateKeys.length})
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => onDatesChange(new Set())}
-                      className="h-5 px-1.5 text-[10px] text-slate-400"
+                      className="h-6 px-1.5 text-[10px] text-slate-400"
                     >
                       Clear
                     </Button>
                   </div>
                 </div>
-                <div className="max-h-48 overflow-y-auto space-y-1 text-xs">
-                  {availableDateKeys.map(key => {
-                    const checked = slot.dateKeys.has(key);
-                    return (
-                      <label
-                        key={key}
-                        onClick={() => {
-                          const next = new Set(slot.dateKeys);
-                          if (next.has(key)) next.delete(key);
-                          else next.add(key);
-                          onDatesChange(next);
-                        }}
-                        className={`flex items-center justify-between p-1.5 rounded cursor-pointer ${
-                          checked ? "bg-indigo-50 font-bold text-[#293252]" : "hover:bg-slate-50 text-slate-700"
-                        }`}
-                      >
-                        <span>{displayDateShort(key)}</span>
-                        <span
-                          className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${
-                            checked ? "border-[#3D52A0] bg-[#3D52A0] text-white" : "border-slate-300"
-                          }`}
-                        >
-                          {checked && <Check className="h-2.5 w-2.5" />}
-                        </span>
-                      </label>
-                    );
-                  })}
+
+                <div className="flex justify-center p-1">
+                  <Calendar
+                    mode="multiple"
+                    selected={Array.from(slot.dateKeys).map(k => new Date(`${k}T12:00:00`))}
+                    onDayClick={(day) => {
+                      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+                      if (!availableDateKeys.includes(key)) return;
+                      const next = new Set(slot.dateKeys);
+                      if (next.has(key)) next.delete(key);
+                      else next.add(key);
+                      onDatesChange(next);
+                    }}
+                    disabled={date => {
+                      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                      return !availableDateKeys.includes(key);
+                    }}
+                    weekStartsOn={1}
+                    modifiers={{
+                      saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
+                    }}
+                    modifiersClassNames={{
+                      saved: "font-bold text-[#3D52A0]",
+                    }}
+                    className="rounded-xl border border-slate-200 bg-[#f8f9ff]/70 p-2"
+                  />
+                </div>
+
+                <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>{slot.dateKeys.size} date{slot.dateKeys.size === 1 ? "" : "s"} chosen</span>
+                  <span className="text-[10px] text-slate-400">Click dates to toggle</span>
                 </div>
               </div>
             </PopoverContent>
@@ -688,16 +760,19 @@ function SpecRow({
   label,
   detail,
   values,
+  columnCount = 2,
   highlightBest,
 }: {
   label: string;
   detail?: string;
   values: string[];
+  columnCount?: 2 | 3;
   highlightBest?: (val: string, index: number) => boolean;
 }) {
+  const colWidth = columnCount === 2 ? "col-span-4" : "col-span-3";
   return (
     <div className="grid grid-cols-12 border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
-      <div className="col-span-3 p-3.5 border-r border-[#adbBda]/40 bg-slate-50/40">
+      <div className={`${colWidth} p-3.5 border-r border-[#adbBda]/40 bg-slate-50/40`}>
         <p className="font-bold text-slate-900">{label}</p>
         {detail && <p className="text-[10px] text-slate-400">{detail}</p>}
       </div>
@@ -706,11 +781,13 @@ function SpecRow({
         return (
           <div
             key={idx}
-            className={`col-span-3 p-3.5 border-r last:border-r-0 border-[#adbBda]/40 flex items-center justify-between ${
+            className={`${colWidth} p-3.5 border-r last:border-r-0 border-[#adbBda]/40 flex items-center justify-between ${
               isHighlighted ? "bg-emerald-50/70 font-extrabold text-emerald-950" : "text-slate-800"
             }`}
           >
-            <span className="font-semibold">{val}</span>
+            <span className={val === "Select dates" ? "text-slate-400 italic text-[11px]" : "font-semibold"}>
+              {val}
+            </span>
             {isHighlighted && (
               <span className="rounded bg-emerald-100 text-emerald-800 px-1 py-0.2 text-[9px] font-extrabold">
                 Best
@@ -727,11 +804,16 @@ function RideSpecRow({
   rideCode,
   rideName,
   results,
+  activeSlots,
+  columnCount = 2,
 }: {
   rideCode: string;
   rideName: string;
   results: Array<any>;
+  activeSlots: SlotConfig[];
+  columnCount?: 2 | 3;
 }) {
+  const colWidth = columnCount === 2 ? "col-span-4" : "col-span-3";
   const rideStats = results.map(res => {
     if (!res || !res.topRides) return null;
     return res.topRides.find((r: any) => r.rideCode === rideCode) ?? null;
@@ -739,7 +821,7 @@ function RideSpecRow({
 
   return (
     <div className="grid grid-cols-12 border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
-      <div className="col-span-3 p-3 border-r border-[#adbBda]/40 bg-slate-50/40 flex items-center gap-2">
+      <div className={`${colWidth} p-3 border-r border-[#adbBda]/40 bg-slate-50/40 flex items-center gap-2`}>
         <span className="font-mono-report font-extrabold text-[#3D52A0] text-[11px] w-12 shrink-0">
           {rideCode}
         </span>
@@ -750,9 +832,11 @@ function RideSpecRow({
       {rideStats.map((stat, idx) => (
         <div
           key={idx}
-          className="col-span-3 p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs"
+          className={`${colWidth} p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs`}
         >
-          {stat ? (
+          {activeSlots[idx].dateKeys.size === 0 ? (
+            <span className="text-slate-300 italic text-[11px]">—</span>
+          ) : stat ? (
             <div className="flex items-center justify-between">
               <div>
                 <span className="font-bold text-slate-900">
@@ -780,13 +864,16 @@ function RideSpecRow({
 function WeekdaySpecRow({
   weekday,
   results,
+  columnCount = 2,
 }: {
   weekday: string;
   results: Array<any>;
+  columnCount?: 2 | 3;
 }) {
+  const colWidth = columnCount === 2 ? "col-span-4" : "col-span-3";
   return (
     <div className="grid grid-cols-12 border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
-      <div className="col-span-3 p-3 border-r border-[#adbBda]/40 bg-slate-50/40 font-bold text-slate-800">
+      <div className={`${colWidth} p-3 border-r border-[#adbBda]/40 bg-slate-50/40 font-bold text-slate-800`}>
         {weekday}
       </div>
       {results.map((res, idx) => {
@@ -794,7 +881,7 @@ function WeekdaySpecRow({
         return (
           <div
             key={idx}
-            className="col-span-3 p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs font-mono"
+            className={`${colWidth} p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs font-mono`}
           >
             {point ? `${point.minutes} min (${point.events} events)` : "—"}
           </div>

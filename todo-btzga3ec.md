@@ -37,3 +37,17 @@
  - [x] 29. Run vitest test suite and ensure all tests pass
  - [x] 30. Capture full-page visual screenshots to verify both Analysis Studio and Comparison Studio
  - [x] 31. Save checkpoint and deliver result
+
+## Iteration 4: Passcode 494 Login, Latest-Only Analysis Auto-Select, Calendar Comparison Picker & 2-to-3 Dynamic Columns
+
+ - [x] 32. Update version records in versionHistory.ts for v17 (8e81d68c) and initialize v1.18 (Version 18)
+ - [x] 33. Implement in-app passcode modal for sign in with single passcode "494", replacing manus.im OAuth redirect
+ - [x] 34. Implement backend passcode verification endpoint / session cookie management so logged-in user can delete saved reports and edit frontend texts
+ - [x] 35. Add editable front-end text capability for logged-in operators (e.g. editable studio titles, remarks, and saved descriptions)
+ - [x] 36. Update Analysis Studio initial load behavior: auto-select ONLY the single latest available downtime log date and calculate it alone
+ - [x] 37. Update Comparison Studio date selection: replace list with interactive month calendar date picker in popover
+ - [x] 38. Update Comparison Studio default state: zero dates selected by default across columns to save calculation execution
+ - [x] 39. Update Comparison Studio column layout: show 2 columns by default with clean wide view, and provide "+ Add 3rd Column" / "Remove Column" toggle
+ - [x] 40. Run vitest test suite and typescript check
+ - [x] 41. Capture browser screenshots to visually verify passcode login, Analysis Studio latest-only selection, and Comparison Studio 2-column layout
+ - [x] 42. Save checkpoint and deliver result

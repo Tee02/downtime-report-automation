@@ -22,12 +22,16 @@ import {
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import DotField from "@/components/DotField";
-import { BarChart3, Columns3, FileSpreadsheet, LogOut, PanelLeft } from "lucide-react";
+import { BarChart3, Columns3, FileSpreadsheet, KeyRound, Lock, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
 import { VersionHistorySection } from "./VersionHistorySection";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
@@ -88,6 +92,34 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const [isPasscodeModalOpen, setIsPasscodeModalOpen] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [passcodeError, setPasscodeError] = useState("");
+
+  const trpcUtils = trpc.useUtils();
+  const loginMutation = trpc.auth.loginWithPasscode.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.auth.me.invalidate();
+      await trpcUtils.savedReports.list.invalidate();
+      setIsPasscodeModalOpen(false);
+      setPasscode("");
+      setPasscodeError("");
+      toast.success("Signed in successfully as Operator (Passcode 494).");
+    },
+    onError: (err) => {
+      setPasscodeError(err.message || "Invalid passcode.");
+    },
+  });
+
+  const handlePasscodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passcode.trim()) {
+      setPasscodeError("Please enter the passcode.");
+      return;
+    }
+    setPasscodeError("");
+    loginMutation.mutate({ passcode });
+  };
 
   useEffect(() => {
     if (isCollapsed) {
@@ -183,23 +215,31 @@ function DashboardLayoutContent({
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <p className="text-sm font-medium truncate leading-none">
-                      {user?.name || "Technical team"}
+                      {user ? (user.name || "Operator (494)") : "Guest Visitor"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "Report workspace"}
+                      {user ? "Full Edit & Delete Access" : "Click to sign in (494)"}
                     </p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-52 bg-white">
                 {user ? <DropdownMenuItem
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
-                </DropdownMenuItem> : <DropdownMenuItem onClick={() => startLogin()} className="cursor-pointer">
-                  <span>Sign in</span>
+                </DropdownMenuItem> : <DropdownMenuItem
+                  onClick={() => {
+                    setPasscode("");
+                    setPasscodeError("");
+                    setIsPasscodeModalOpen(true);
+                  }}
+                  className="cursor-pointer font-semibold text-[#3D52A0]"
+                >
+                  <Lock className="mr-2 h-4 w-4" />
+                  <span>Sign in with Passcode (494)</span>
                 </DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -207,6 +247,66 @@ function DashboardLayoutContent({
             <VersionHistorySection isCollapsed={isCollapsed} />
           </SidebarFooter>
         </Sidebar>
+
+        {/* In-App Simple Passcode Modal */}
+        <Dialog open={isPasscodeModalOpen} onOpenChange={setIsPasscodeModalOpen}>
+          <DialogContent className="sm:max-w-[360px] bg-white border border-[#adbBda]/80 shadow-2xl rounded-2xl">
+            <DialogHeader>
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-indigo-50 border border-indigo-200 text-[#3D52A0] mb-2">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-center text-lg font-extrabold text-[#293252]">
+                Operator Sign In
+              </DialogTitle>
+              <DialogDescription className="text-center text-xs text-slate-500">
+                Enter the 3-digit operator passcode to unlock text editing and delete permissions.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handlePasscodeSubmit} className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Input
+                  type="password"
+                  maxLength={6}
+                  placeholder="Enter passcode (e.g. 494)"
+                  value={passcode}
+                  onChange={(e) => {
+                    setPasscode(e.target.value);
+                    if (passcodeError) setPasscodeError("");
+                  }}
+                  autoFocus
+                  className="h-10 text-center font-mono text-lg tracking-widest font-bold border-slate-300 focus:border-[#3D52A0]"
+                />
+                {passcodeError && (
+                  <p className="text-center text-xs font-semibold text-rose-600">
+                    {passcodeError}
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter className="flex gap-2 sm:justify-between pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsPasscodeModalOpen(false)}
+                  className="text-xs text-slate-500"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={loginMutation.isPending}
+                  className="bg-[#3D52A0] text-white hover:bg-[#293252] text-xs font-bold px-4"
+                >
+                  {loginMutation.isPending ? "Verifying…" : "Sign In"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
         <div
           className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {

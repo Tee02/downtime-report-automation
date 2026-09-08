@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { EditableNotice } from "@/components/EditableNotice";
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -174,7 +175,9 @@ export default function AnalysisStudio() {
 
   useEffect(() => {
     if (availableDateKeys.length && !hasInitializedDates.current) {
-      setSelectedDateKeys(new Set(availableDateKeys));
+      // Auto-select ONLY the single most recent available downtime log date
+      const latestDateKey = availableDateKeys[availableDateKeys.length - 1];
+      setSelectedDateKeys(new Set([latestDateKey]));
       hasInitializedDates.current = true;
     }
   }, [availableDateKeys]);
@@ -276,6 +279,11 @@ export default function AnalysisStudio() {
             </div>
           </div>
         </section>
+
+        <EditableNotice
+          contentKey="analysis_studio_notice"
+          defaultText="Analysis Studio Scope: Technical 11-1 incidents are calculated based on active operating rides. Latest downtime log auto-selected."
+        />
 
         {reportsLoading ? (
           <Card className="border-[#adbBda]/70 bg-white/80 shadow-sm">
