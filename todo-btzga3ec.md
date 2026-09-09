@@ -51,3 +51,21 @@
  - [x] 40. Run vitest test suite and typescript check
  - [x] 41. Capture browser screenshots to visually verify passcode login, Analysis Studio latest-only selection, and Comparison Studio 2-column layout
  - [x] 42. Save checkpoint and deliver result
+
+## Iteration 5: Security Privacy (Hide 494 Code), Full Frontend Text Edit Mode, Date Presets, Range Picker, Dynamic Comparison Auto-Naming, Delta Badges & History
+
+ - [x] 43. Update version records in versionHistory.ts: record v18 commit (03a8cbfd) and initialize v1.19 (Version 19)
+ - [x] 44. Remove any public display of "494" in sidebar, placeholders, subtitles, error messages, and version logs
+ - [x] 45. Remove the fixed banner sentences ("Operations Notice..." and "Analysis Studio Scope...") in Report Studio and Analysis Studio
+ - [x] 46. Implement operator front-end text editing mode: enable editing of titles, section names, card headers, labels, and copy across the UI with persistent save
+ - [x] 47. Add quick date presets in Analysis Studio: "Yesterday", "Last 7 Days", "Latest Only", "All Available", and "Clear"
+ - [x] 48. Implement start & end date range selection in Comparison Studio calendar picker
+ - [x] 49. Display exact selected dates in Comparison Studio column headers and in the "Reporting Days" spec row
+ - [x] 50. Auto-hide rides that have 100% availability in all compared columns; only show rides with downtime (<100%)
+ - [x] 51. Auto-rename scenarios following format `TTC on 21/8` or `All rides on 21/8` based on selected date(s) and ride(s)
+ - [x] 52. Implement "Start Comparison" button positioned before the comparison table to trigger calculation
+ - [x] 53. Auto-save up to 5 previous comparison history items above scenario selection for one-click re-loading
+ - [x] 54. Implement Side-by-Side Delta Metrics in Column 2 (and 3) showing percentage and minute difference badges against Column 1
+ - [x] 55. Run vitest test suite and typescript check
+ - [x] 56. Capture browser screenshots to verify all new features visually
+ - [x] 57. Save checkpoint and deliver result

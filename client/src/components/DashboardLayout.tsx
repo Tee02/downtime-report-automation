@@ -215,10 +215,10 @@ function DashboardLayoutContent({
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <p className="text-sm font-medium truncate leading-none">
-                      {user ? (user.name || "Operator (494)") : "Guest Visitor"}
+                      {user ? (user.name || "SkyWorlds Operator") : "Guest Visitor"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user ? "Full Edit & Delete Access" : "Click to sign in (494)"}
+                      {user ? "Full Edit & Delete Access" : "Click to sign in"}
                     </p>
                   </div>
                 </button>
@@ -239,7 +239,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer font-semibold text-[#3D52A0]"
                 >
                   <Lock className="mr-2 h-4 w-4" />
-                  <span>Sign in with Passcode (494)</span>
+                  <span>Sign in as Operator</span>
                 </DropdownMenuItem>}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -268,7 +268,7 @@ function DashboardLayoutContent({
                 <Input
                   type="password"
                   maxLength={6}
-                  placeholder="Enter passcode (e.g. 494)"
+                  placeholder="Enter passcode"
                   value={passcode}
                   onChange={(e) => {
                     setPasscode(e.target.value);

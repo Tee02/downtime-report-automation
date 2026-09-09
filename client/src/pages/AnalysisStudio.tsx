@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { EditableNotice } from "@/components/EditableNotice";
+import { EditableText } from "@/contexts/TextEditContext";
 
 function dateKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
@@ -267,23 +267,29 @@ export default function AnalysisStudio() {
               <Badge className="rounded-full bg-[#3D52A0] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-[#3D52A0]">
                 Saved-log intelligence
               </Badge>
-              <h1 className="mt-4 text-3xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-4xl">
-                Downtime Analysis Studio
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-slate-700">
-                Recall saved Operations logs, focus on any combination of reporting dates and rides, then compare downtime, evacuation, and availability patterns before reviewing full ride incident logs.
-              </p>
+              <EditableText
+                contentKey="analysis_page_title"
+                defaultText="Downtime Analysis Studio"
+                as="h1"
+                className="mt-4 text-3xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-4xl block"
+              />
+              <EditableText
+                contentKey="analysis_page_desc"
+                defaultText="Recall saved Operations logs, focus on any combination of reporting dates and rides, then compare downtime, evacuation, and availability patterns before reviewing full ride incident logs."
+                as="p"
+                className="mt-3 text-sm leading-6 text-slate-700 block"
+              />
             </div>
             <div className="max-w-md rounded-2xl border border-[#8697c4]/45 bg-white/65 p-4 text-xs leading-5 text-slate-600 shadow-sm backdrop-blur">
-              <strong className="text-slate-900">Calculation scope.</strong> Technical 11-1 events determine downtime and availability. Weather and 11-10 fire-alarm intervals remain visual-only mappings in their source reports.
+              <EditableText
+                contentKey="analysis_scope_note"
+                defaultText="Calculation scope: Technical 11-1 events determine downtime and availability. Weather and 11-10 fire-alarm intervals remain visual-only mappings in their source reports."
+                as="div"
+                className="text-xs leading-5 text-slate-600"
+              />
             </div>
           </div>
         </section>
-
-        <EditableNotice
-          contentKey="analysis_studio_notice"
-          defaultText="Analysis Studio Scope: Technical 11-1 incidents are calculated based on active operating rides. Latest downtime log auto-selected."
-        />
 
         {reportsLoading ? (
           <Card className="border-[#adbBda]/70 bg-white/80 shadow-sm">
@@ -324,10 +330,18 @@ export default function AnalysisStudio() {
                     <div>
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]">
-                            01 · Select reporting dates
-                          </p>
-                          <h2 className="mt-1 text-base font-extrabold tracking-tight">Calendar recall</h2>
+                          <EditableText
+                            contentKey="analysis_dates_step"
+                            defaultText="01 · Select reporting dates"
+                            as="p"
+                            className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0] block"
+                          />
+                          <EditableText
+                            contentKey="analysis_dates_title"
+                            defaultText="Calendar recall"
+                            as="h2"
+                            className="mt-1 text-base font-extrabold tracking-tight block"
+                          />
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Button
@@ -358,6 +372,71 @@ export default function AnalysisStudio() {
                           <Button size="sm" variant="ghost" onClick={() => setRangeStartKey(null)} className="h-5 px-1.5 text-[10px]">Cancel</Button>
                         </div>
                       ) : null}
+
+                      {/* Quick Date Preset Buttons */}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pb-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                          Presets:
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (availableDateKeys.length >= 2) {
+                              setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 2]]));
+                            } else if (availableDateKeys.length === 1) {
+                              setSelectedDateKeys(new Set([availableDateKeys[0]]));
+                            }
+                          }}
+                          className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
+                        >
+                          Yesterday
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const last7 = availableDateKeys.slice(-7);
+                            setSelectedDateKeys(new Set(last7));
+                          }}
+                          className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
+                        >
+                          Last 7 Days
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (availableDateKeys.length > 0) {
+                              setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 1]]));
+                            }
+                          }}
+                          className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
+                        >
+                          Latest Only
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedDateKeys(new Set(availableDateKeys))}
+                          className="h-6 px-2 text-[10px] font-bold border-slate-200 bg-white hover:bg-slate-100 text-slate-600"
+                        >
+                          All ({availableDateKeys.length})
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedDateKeys(new Set())}
+                          className="h-6 px-1.5 text-[10px] text-slate-400 hover:text-slate-600"
+                        >
+                          Clear
+                        </Button>
+                      </div>
 
                       {/* Centered, properly-proportioned calendar */}
                       <div className="flex justify-center pt-2">

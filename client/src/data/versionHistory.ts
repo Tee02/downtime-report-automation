@@ -9,24 +9,42 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.18";
+export const CURRENT_VERSION = "v1.19";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.18",
+    version: "v1.19",
     commit: "pending",
-    date: "2026-09-07",
-    time: "15:20:00",
-    timestamp: "2026-09-07 15:20:00",
-    title: "Passcode 494 Login, Latest-Only Analysis & 2-to-3 Dynamic Comparison Columns",
+    date: "2026-09-08",
+    time: "17:40:00",
+    timestamp: "2026-09-08 17:40:00",
+    title: "Security Privacy, Custom Text Editing, Date Presets, Delta Metrics & Comparison History",
     tasks: [
-      "Added in-app modal login with single passcode '494' replacing manus.im OAuth redirect",
+      "Removed all public exposure of operator passcode across sidebars, forms, and system messages",
+      "Added comprehensive front-end text editing mode allowing operators to edit and save UI titles, section names, and card copy",
+      "Added quick date presets (Yesterday, Last 7 Days, Latest Only) at Analysis Studio calendar picker",
+      "Enhanced Comparison Studio with start & end date range calendar picker and exact date display in reporting days",
+      "Automated hiding of 100% available rides in comparison tables to spotlight attractions with downtime",
+      "Added dynamic scenario auto-naming following standard 'Ride on Date' format (e.g. TTC on 21/8, All rides on 21/8)",
+      "Added prominent 'Start Comparison' trigger button and 5-slot comparison history recall",
+      "Added side-by-side delta metrics (+/- min, +/- %) beside Column 2 for instant variance quantification",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.18",
+    commit: "03a8cbf",
+    date: "2026-09-08",
+    time: "15:20:00",
+    timestamp: "2026-09-08 15:20:00",
+    title: "Operator Login, Latest-Only Analysis & 2-to-3 Dynamic Comparison Columns",
+    tasks: [
+      "Added in-app modal login with operator passcode replacing manus.im OAuth redirect",
       "Authenticated session allows deleting saved reports and inline editing of front-end texts without touching backend code",
       "Analysis Studio now auto-selects and calculates ONLY the single most recent available downtime log on page visit",
       "Comparison Studio now shows 2 wide columns by default, with an expandable '+ Add 3rd Column' toggle",
       "Comparison Studio date selection upgraded to an interactive calendar picker, defaulting to zero dates to save execution",
     ],
-    isCurrent: true,
   },
   {
     version: "v1.17",

@@ -24,7 +24,7 @@ export const appRouter = router({
         if (input.passcode.trim() !== "494") {
           throw new TRPCError({
             code: "UNAUTHORIZED",
-            message: "Invalid passcode. Please enter '494'.",
+            message: "Invalid passcode. Please try again.",
           });
         }
 
@@ -32,7 +32,7 @@ export const appRouter = router({
         await upsertUser({
           openId,
           name: "SkyWorlds Operator",
-          email: "operator494@skyworlds.local",
+          email: "operator@skyworlds.local",
           loginMethod: "passcode",
           role: "admin",
           lastSignedIn: new Date(),

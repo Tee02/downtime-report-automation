@@ -13,21 +13,25 @@ import {
 import { trpc } from "@/lib/trpc";
 import { FLEET_RIDES } from "@/components/RideCombinationSwitch";
 import { IncidentLogEntry } from "@/components/IncidentLogEntry";
+import { EditableText } from "@/contexts/TextEditContext";
+import { toast } from "sonner";
 import {
+  ArrowDownRight,
+  ArrowUpRight,
   Calendar as CalendarIcon,
   Check,
   ChevronDown,
   Columns3,
   Filter,
+  History,
   Layers,
   Loader2,
   Minus,
+  Play,
   Plus,
   RotateCcw,
   Search,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -39,12 +43,46 @@ type SlotConfig = {
   rideCodes: string[];
 };
 
-function displayDateShort(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+type ComparisonHistoryItem = {
+  id: string;
+  timestamp: number;
+  label: string;
+  columnCount: 2 | 3;
+  slots: Array<{
+    id: string;
+    name: string;
+    dateKeys: string[];
+    rideCodes: string[];
+  }>;
+};
+
+const HISTORY_STORAGE_KEY = "skyworlds_comparison_history_v1";
+
+function formatDMy(iso: string): string {
+  const parts = iso.split("-");
+  if (parts.length < 3) return iso;
+  return `${parseInt(parts[2], 10)}/${parseInt(parts[1], 10)}`;
+}
+
+function generateAutoScenarioName(
+  dateKeys: Set<string>,
+  rideCodes: string[],
+  fallback: string
+): string {
+  if (dateKeys.size === 0) return fallback;
+  const sorted = Array.from(dateKeys).sort();
+  const datePart =
+    sorted.length === 1
+      ? formatDMy(sorted[0])
+      : `${formatDMy(sorted[0])}–${formatDMy(sorted[sorted.length - 1])}`;
+
+  if (rideCodes.length === 0 || rideCodes.length === FLEET_RIDES.length) {
+    return `All rides on ${datePart}`;
+  }
+  if (rideCodes.length <= 2) {
+    return `${rideCodes.join(", ")} on ${datePart}`;
+  }
+  return `${rideCodes.length} rides on ${datePart}`;
 }
 
 export default function ComparisonStudio() {
@@ -59,23 +97,36 @@ export default function ComparisonStudio() {
   // Column count: 2 by default for clean and wide view; 3rd column on demand
   const [columnCount, setColumnCount] = useState<2 | 3>(2);
 
+  // Comparison calculation trigger state
+  const [isCalculated, setIsCalculated] = useState(false);
+
+  // Comparison history (up to 5 previous comparisons)
+  const [history, setHistory] = useState<ComparisonHistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Slots configuration - default with EMPTY dateKeys to save calculation execution
   const [slots, setSlots] = useState<SlotConfig[]>([
     {
       id: "slot-1",
-      name: "Scenario 1",
+      name: "All rides on (select dates)",
       dateKeys: new Set<string>(), // None selected by default
       rideCodes: [],
     },
     {
       id: "slot-2",
-      name: "Scenario 2",
+      name: "All rides on (select dates)",
       dateKeys: new Set<string>(), // None selected by default
       rideCodes: [],
     },
     {
       id: "slot-3",
-      name: "Scenario 3",
+      name: "All rides on (select dates)",
       dateKeys: new Set<string>(), // None selected by default
       rideCodes: [],
     },
@@ -90,18 +141,18 @@ export default function ComparisonStudio() {
     });
   }, [slots, reports]);
 
-  // Run queries only when dates are selected (saves calculation execution)
+  // Run queries only when user presses "Start Comparison" AND dates are selected
   const query1 = trpc.analysis.get.useQuery(
     { reportIds: slotReportIds[0], rideCodes: slots[0].rideCodes },
-    { enabled: slotReportIds[0].length > 0 }
+    { enabled: isCalculated && slotReportIds[0].length > 0 }
   );
   const query2 = trpc.analysis.get.useQuery(
     { reportIds: slotReportIds[1], rideCodes: slots[1].rideCodes },
-    { enabled: slotReportIds[1].length > 0 }
+    { enabled: isCalculated && slotReportIds[1].length > 0 }
   );
   const query3 = trpc.analysis.get.useQuery(
     { reportIds: slotReportIds[2], rideCodes: slots[2].rideCodes },
-    { enabled: columnCount === 3 && slotReportIds[2].length > 0 }
+    { enabled: isCalculated && columnCount === 3 && slotReportIds[2].length > 0 }
   );
 
   const allResults = [query1.data, query2.data, query3.data];
@@ -122,7 +173,12 @@ export default function ComparisonStudio() {
   const updateSlotDates = (index: number, dateKeys: Set<string>) => {
     setSlots(current => {
       const copy = [...current];
-      copy[index] = { ...copy[index], dateKeys };
+      const autoName = generateAutoScenarioName(
+        dateKeys,
+        copy[index].rideCodes,
+        `Scenario ${index + 1}`
+      );
+      copy[index] = { ...copy[index], dateKeys, name: autoName };
       return copy;
     });
   };
@@ -130,7 +186,12 @@ export default function ComparisonStudio() {
   const updateSlotRides = (index: number, rideCodes: string[]) => {
     setSlots(current => {
       const copy = [...current];
-      copy[index] = { ...copy[index], rideCodes };
+      const autoName = generateAutoScenarioName(
+        copy[index].dateKeys,
+        rideCodes,
+        `Scenario ${index + 1}`
+      );
+      copy[index] = { ...copy[index], rideCodes, name: autoName };
       return copy;
     });
   };
@@ -140,11 +201,68 @@ export default function ComparisonStudio() {
       const copy = [...current];
       copy[index] = {
         ...copy[index],
+        name: `Scenario ${index + 1}`,
         dateKeys: new Set(),
         rideCodes: [],
       };
       return copy;
     });
+  };
+
+  // Start comparison execution handler
+  const handleStartComparison = () => {
+    const hasAnyDates = activeSlots.some(s => s.dateKeys.size > 0);
+    if (!hasAnyDates) {
+      toast.error("Please pick dates in at least one scenario before starting comparison.");
+      return;
+    }
+    setIsCalculated(true);
+
+    // Auto-save this comparison into history (max 5 items)
+    const label = activeSlots.map(s => s.name).join(" vs ");
+    const newHistoryItem: ComparisonHistoryItem = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      label,
+      columnCount,
+      slots: activeSlots.map(s => ({
+        id: s.id,
+        name: s.name,
+        dateKeys: Array.from(s.dateKeys),
+        rideCodes: s.rideCodes,
+      })),
+    };
+
+    setHistory(prev => {
+      const filtered = prev.filter(h => h.label !== label);
+      const updated = [newHistoryItem, ...filtered].slice(0, 5);
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    toast.success("Comparison benchmark calculated.");
+  };
+
+  const restoreHistory = (item: ComparisonHistoryItem) => {
+    setColumnCount(item.columnCount);
+    setSlots(current => {
+      const next = [...current];
+      item.slots.forEach((s, idx) => {
+        if (next[idx]) {
+          next[idx] = {
+            ...next[idx],
+            name: s.name,
+            dateKeys: new Set(s.dateKeys),
+            rideCodes: s.rideCodes,
+          };
+        }
+      });
+      return next;
+    });
+    setIsCalculated(true);
+    toast.success(`Restored previous comparison: ${item.label}`);
   };
 
   // Best availability among valid results
@@ -161,6 +279,23 @@ export default function ComparisonStudio() {
     return valid.length ? Math.min(...valid) : null;
   }, [activeResults]);
 
+  // Auto-hide 100% rides: If both (all) columns show 100% availability with 0 downtime, hide the ride!
+  const visibleRides = useMemo(() => {
+    if (!isCalculated || !activeResults.some(r => r !== null)) {
+      return FLEET_RIDES;
+    }
+
+    return FLEET_RIDES.filter(([code]) => {
+      // Check if this ride has downtime (<100% or >0 minutes) in AT LEAST ONE active slot
+      const hasDowntime = activeResults.some((res, idx) => {
+        if (!res || !res.topRides || activeSlots[idx].dateKeys.size === 0) return false;
+        const ride = res.topRides.find((r: any) => r.rideCode === code);
+        return ride && (ride.minutes > 0 || ride.availabilityPercentage < 99.999);
+      });
+      return hasDowntime;
+    });
+  }, [isCalculated, activeResults, activeSlots]);
+
   return (
     <DashboardLayout>
       <div className="min-h-[calc(100vh-2rem)] text-slate-900 space-y-6">
@@ -172,12 +307,18 @@ export default function ComparisonStudio() {
               <Badge className="rounded-full bg-[#3D52A0] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-[#3D52A0]">
                 Multi-Scenario Benchmark
               </Badge>
-              <h1 className="mt-4 text-3xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-4xl">
-                Downtime Comparison Studio
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-slate-700">
-                Compare operational scenarios side by side. Showing 2 clean columns by default, with an expandable 3rd column. Pick dates via the calendar picker to calculate comparisons on demand.
-              </p>
+              <EditableText
+                contentKey="comp_page_title"
+                defaultText="Downtime Comparison Studio"
+                as="h1"
+                className="mt-4 text-3xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-4xl block"
+              />
+              <EditableText
+                contentKey="comp_page_desc"
+                defaultText="Compare operational scenarios side by side. Showing 2 clean columns by default, with an expandable 3rd column. Pick dates via the calendar picker to calculate comparisons on demand."
+                as="p"
+                className="mt-3 text-sm leading-6 text-slate-700 block"
+              />
             </div>
             <div className="max-w-xs rounded-2xl border border-[#8697c4]/45 bg-white/65 p-3.5 text-xs text-slate-600 shadow-sm backdrop-blur">
               <div className="flex items-center gap-2 font-bold text-[#293252] mb-1">
@@ -205,10 +346,36 @@ export default function ComparisonStudio() {
           </Card>
         ) : (
           <>
+            {/* Previous Comparison History (up to 5 saved comparisons) */}
+            {history.length > 0 && (
+              <div className="rounded-2xl border border-[#adbBda]/70 bg-white/85 p-4 shadow-sm space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                    <History className="h-4 w-4 text-[#3D52A0]" />
+                    <span>Previous Comparison History (Saved up to 5)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Click any history card to reload</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {history.map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => restoreHistory(item)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200/80 bg-indigo-50/70 hover:bg-indigo-100 text-xs font-semibold text-[#293252] transition-all hover:shadow-xs active:scale-98"
+                    >
+                      <Sparkles className="h-3 w-3 text-[#3D52A0]" />
+                      <span className="truncate max-w-[280px]">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Controls Bar: 2-or-3 Columns Switch */}
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold text-slate-600">
-                Displaying <strong>{columnCount} comparison columns</strong>. Select dates via the calendar to calculate downtime.
+                Displaying <strong>{columnCount} comparison columns</strong>. Set start/end dates via calendar, then click Start Comparison.
               </p>
               {columnCount === 2 ? (
                 <Button
@@ -262,6 +429,28 @@ export default function ComparisonStudio() {
               ))}
             </div>
 
+            {/* Start Comparison Trigger Button positioned before the comparison table */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-blue-50/80 to-purple-50/90 border border-indigo-200/90 shadow-sm">
+              <div>
+                <h3 className="text-sm font-extrabold text-[#293252]">
+                  {isCalculated ? "Comparison Calculated" : "Ready to Benchmark"}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {isCalculated
+                    ? "Side-by-side metrics and delta comparisons are active below. Press start anytime to re-evaluate."
+                    : "Press Start Comparison below to run queries and render the side-by-side benchmark table."}
+                </p>
+              </div>
+              <Button
+                size="lg"
+                onClick={handleStartComparison}
+                className="h-10 px-6 text-xs font-extrabold bg-[#3D52A0] hover:bg-[#293252] text-white shadow-md active:scale-95 transition-all gap-2"
+              >
+                <Play className="h-4 w-4 fill-white" />
+                {isCalculated ? "Recalculate Comparison" : "Start Comparison"}
+              </Button>
+            </div>
+
             {/* GSMArena-Style Side-by-Side Comparison Table */}
             <div className="overflow-hidden rounded-2xl border border-[#adbBda]/70 bg-white shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
               {/* Sticky Column Header */}
@@ -289,9 +478,11 @@ export default function ComparisonStudio() {
                         Col {idx + 1}
                       </span>
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500 font-normal">
-                      <span className={slot.dateKeys.size === 0 ? "text-amber-700 font-bold" : "text-slate-600"}>
-                        {slot.dateKeys.size === 0 ? "No dates selected" : `${slot.dateKeys.size} dates`}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 font-normal">
+                      <span className={slot.dateKeys.size === 0 ? "text-amber-700 font-bold" : "text-slate-700 font-semibold"}>
+                        {slot.dateKeys.size === 0
+                          ? "No dates selected"
+                          : Array.from(slot.dateKeys).sort().map(formatDMy).join(", ")}
                       </span>
                       <span>•</span>
                       <span>
@@ -311,12 +502,14 @@ export default function ComparisonStudio() {
                 detail="Mean operational uptime"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0
+                  !isCalculated || activeSlots[i].dateKeys.size === 0
                     ? "Select dates"
                     : r
                     ? (100 - r.averageDowntimePercentage).toFixed(3) + "%"
                     : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? 100 - r.averageDowntimePercentage : null)) : undefined}
+                deltaType="percentage"
                 highlightBest={(val, idx) => {
                   const num = parseFloat(val);
                   return !isNaN(num) && bestAvailability !== null && Math.abs(num - bestAvailability) < 0.005;
@@ -327,8 +520,10 @@ export default function ComparisonStudio() {
                 detail="11-1 mechanical/electrical"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.totalTechnicalMinutes} min` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.totalTechnicalMinutes} min` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.totalTechnicalMinutes : null)) : undefined}
+                deltaType="minutes"
                 highlightBest={(val, idx) => {
                   const num = parseInt(val, 10);
                   return !isNaN(num) && lowestDowntime !== null && num === lowestDowntime;
@@ -339,16 +534,21 @@ export default function ComparisonStudio() {
                 detail="Daily downtime percentage"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.averageDowntimePercentage.toFixed(3)}%` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "Select dates" : r ? `${r.averageDowntimePercentage.toFixed(3)}%` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.averageDowntimePercentage : null)) : undefined}
+                deltaType="rate"
               />
               <SpecRow
                 label="Reporting Days"
-                detail="Sample size"
+                detail="Sample size & exact dates"
                 columnCount={columnCount}
-                values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "0 days" : r ? `${r.selectedDayCount} days` : "—"
-                )}
+                values={activeResults.map((r, i) => {
+                  const count = activeSlots[i].dateKeys.size;
+                  if (count === 0) return "0 days (None)";
+                  const sortedStr = Array.from(activeSlots[i].dateKeys).sort().map(formatDMy).join(", ");
+                  return `${count} day${count === 1 ? "" : "s"} (${sortedStr})`;
+                })}
               />
               <SpecRow
                 label="Rides in Scope"
@@ -366,15 +566,17 @@ export default function ComparisonStudio() {
                 detail="Total stoppage events"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvents}` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvents}` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.totalEvents : null)) : undefined}
+                deltaType="count"
               />
               <SpecRow
                 label="Daily Incident Average"
                 detail="Incidents per operating day"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageEventsPerDay.toFixed(1)} / day` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageEventsPerDay.toFixed(1)} / day` : "—"
                 )}
               />
               <SpecRow
@@ -382,31 +584,37 @@ export default function ComparisonStudio() {
                 detail="Duration per incident"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageIncidentMinutes.toFixed(1)} min` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.averageIncidentMinutes.toFixed(1)} min` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.averageIncidentMinutes : null)) : undefined}
+                deltaType="minutes"
               />
               <SpecRow
                 label="Evacuation Time (11-7/11-17)"
                 detail="Total evacuation duration"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationMinutes} min` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationMinutes} min` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.totalEvacuationMinutes : null)) : undefined}
+                deltaType="evacuation"
               />
               <SpecRow
                 label="Evacuation Occurrences"
                 detail="Times passengers unloaded"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationEvents} times` : "—"
+                  !isCalculated || activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.totalEvacuationEvents} times` : "—"
                 )}
+                rawValues={isCalculated ? activeResults.map(r => (r ? r.totalEvacuationEvents : null)) : undefined}
+                deltaType="count"
               />
               <SpecRow
                 label="Peak Downtime Day"
                 detail="Day with highest stoppage"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
-                  activeSlots[i].dateKeys.size === 0
+                  !isCalculated || activeSlots[i].dateKeys.size === 0
                     ? "—"
                     : r && r.peakDay
                     ? `${r.peakDay.label} (${r.peakDay.minutes}m)`
@@ -414,23 +622,33 @@ export default function ComparisonStudio() {
                 )}
               />
 
-              {/* Section 3: Ride-by-Ride Breakdown */}
-              <SectionHeader title="FLEET RIDE BREAKDOWN (ALL 21 ATTRACTIONS)" tone="indigo" />
-              {FLEET_RIDES.map(([code, name]) => (
-                <RideSpecRow
-                  key={code}
-                  rideCode={code}
-                  rideName={name}
-                  columnCount={columnCount}
-                  results={activeResults}
-                  activeSlots={activeSlots}
-                />
-              ))}
+              {/* Section 3: Ride-by-Ride Breakdown (Auto-hiding 100% available rides) */}
+              <SectionHeader
+                title={`FLEET RIDE BREAKDOWN (${isCalculated ? `SHOWING ${visibleRides.length} RIDES WITH DOWNTIME` : "ALL ATTRACTIONS"})`}
+                tone="indigo"
+              />
+              {visibleRides.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 bg-slate-50">
+                  All attractions achieved 100% availability with 0 downtime across the compared scenarios. 100% availability rides are hidden.
+                </div>
+              ) : (
+                visibleRides.map(([code, name]) => (
+                  <RideSpecRow
+                    key={code}
+                    rideCode={code}
+                    rideName={name}
+                    columnCount={columnCount}
+                    results={activeResults}
+                    activeSlots={activeSlots}
+                    isCalculated={isCalculated}
+                  />
+                ))
+              )}
 
               {/* Section 4: Day of Week Pattern */}
               <SectionHeader title="DAY OF WEEK PATTERN (MON – SUN)" tone="slate" />
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
-                <WeekdaySpecRow key={day} weekday={day} columnCount={columnCount} results={activeResults} />
+                <WeekdaySpecRow key={day} weekday={day} columnCount={columnCount} results={activeResults} isCalculated={isCalculated} />
               ))}
 
               {/* Section 5: Ride Incident Logs Comparison */}
@@ -444,9 +662,9 @@ export default function ComparisonStudio() {
                 </div>
                 {activeResults.map((res, idx) => (
                   <div key={idx} className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-3 max-h-96 overflow-y-auto space-y-3`}>
-                    {activeSlots[idx].dateKeys.size === 0 ? (
+                    {!isCalculated || activeSlots[idx].dateKeys.size === 0 ? (
                       <div className="p-5 text-center text-xs text-slate-400">
-                        No dates selected for {activeSlots[idx].name}. Select dates in the card above to load incident logs.
+                        No dates selected or comparison not started. Select dates and click Start Comparison above.
                       </div>
                     ) : res?.rideIncidentGroups?.length ? (
                       res.rideIncidentGroups.map(group => (
@@ -514,12 +732,42 @@ function SlotConfigCard({
 }) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [searchRide, setSearchRide] = useState("");
+  const [rangeStartKey, setRangeStartKey] = useState<string | null>(null);
+  const [isRangeMode, setIsRangeMode] = useState(false);
 
   const filteredRides = FLEET_RIDES.filter(([c, n]) => {
     if (!searchRide) return true;
     const q = searchRide.toLowerCase();
     return c.toLowerCase().includes(q) || n.toLowerCase().includes(q);
   });
+
+  const handleDayClick = (day: Date) => {
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    if (!availableDateKeys.includes(key)) return;
+
+    if (isRangeMode) {
+      if (!rangeStartKey) {
+        setRangeStartKey(key);
+        return;
+      }
+      // Select all dates between rangeStartKey and key
+      const start = rangeStartKey < key ? rangeStartKey : key;
+      const end = rangeStartKey < key ? key : rangeStartKey;
+      const inRange = availableDateKeys.filter(k => k >= start && k <= end);
+      const next = new Set(slot.dateKeys);
+      inRange.forEach(k => next.add(k));
+      onDatesChange(next);
+      setRangeStartKey(null);
+      toast.success(`Selected range from ${formatDMy(start)} to ${formatDMy(end)}.`);
+      return;
+    }
+
+    // Single click toggle
+    const next = new Set(slot.dateKeys);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onDatesChange(next);
+  };
 
   return (
     <Card className="border-[#adbBda]/70 bg-white/85 shadow-sm">
@@ -551,7 +799,7 @@ function SlotConfigCard({
             variant="ghost"
             size="sm"
             onClick={onReset}
-            title="Reset to all dates and fleet"
+            title="Reset scenario"
             className="h-6 w-6 p-0 text-slate-400 hover:text-slate-700"
           >
             <RotateCcw className="h-3 w-3" />
@@ -585,6 +833,19 @@ function SlotConfigCard({
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => {
+                        setIsRangeMode(!isRangeMode);
+                        setRangeStartKey(null);
+                      }}
+                      className={`h-6 px-1.5 text-[10px] font-bold ${
+                        isRangeMode ? "bg-indigo-100 text-[#3D52A0]" : "text-slate-500"
+                      }`}
+                    >
+                      {isRangeMode ? "Range: ON" : "Range Mode"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => onDatesChange(new Set(availableDateKeys))}
                       className="h-6 px-1.5 text-[10px] text-[#3D52A0] font-bold"
                     >
@@ -601,40 +862,74 @@ function SlotConfigCard({
                   </div>
                 </div>
 
-                <div className="flex justify-center p-1">
-                  <Calendar
-                    mode="multiple"
-                    selected={Array.from(slot.dateKeys).map(k => new Date(`${k}T12:00:00`))}
-                    onDayClick={(day) => {
-                      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
-                      if (!availableDateKeys.includes(key)) return;
-                      const next = new Set(slot.dateKeys);
-                      if (next.has(key)) next.delete(key);
-                      else next.add(key);
-                      onDatesChange(next);
+                {/* Quick presets in comparison calendar */}
+                <div className="flex items-center gap-1 pb-1">
+                  <span className="text-[10px] font-bold text-slate-400">Presets:</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (availableDateKeys.length >= 2) {
+                        onDatesChange(new Set([availableDateKeys[availableDateKeys.length - 2]]));
+                      }
                     }}
-                    disabled={date => {
-                      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                      return !availableDateKeys.includes(key);
+                    className="h-5 px-1.5 text-[10px] font-semibold border-indigo-200 text-[#3D52A0]"
+                  >
+                    Yesterday
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onDatesChange(new Set(availableDateKeys.slice(-7)));
                     }}
-                    weekStartsOn={1}
-                    modifiers={{
-                      saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
-                    }}
-                    modifiersClassNames={{
-                      saved: "font-bold text-[#3D52A0]",
-                    }}
-                    className="rounded-xl border border-slate-200 bg-[#f8f9ff]/70 p-2"
-                  />
+                    className="h-5 px-1.5 text-[10px] font-semibold border-indigo-200 text-[#3D52A0]"
+                  >
+                    Last 7 Days
+                  </Button>
                 </div>
 
-                <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>{slot.dateKeys.size} date{slot.dateKeys.size === 1 ? "" : "s"} chosen</span>
-                  <span className="text-[10px] text-slate-400">Click dates to toggle</span>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+                {rangeStartKey && (
+                  <div className="rounded bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] text-[#3D52A0]">
+                    Start date: <strong>{formatDMy(rangeStartKey)}</strong>. Click end date.
+                  </div>
+                )}
+
+                 <div className="flex justify-center p-1">
+                   <Calendar
+                     mode="multiple"
+                     selected={Array.from(slot.dateKeys).map(k => new Date(`${k}T12:00:00`))}
+                     onDayClick={handleDayClick}
+                     disabled={date => {
+                       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                       return !availableDateKeys.includes(key);
+                     }}
+                     weekStartsOn={1}
+                     modifiers={{
+                       saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
+                     }}
+                     modifiersClassNames={{
+                       saved: "font-bold text-[#3D52A0]",
+                     }}
+                     className="rounded-xl border border-slate-200 bg-[#f8f9ff]/70 p-2"
+                   />
+                 </div>
+ 
+                 <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                   <span className="truncate max-w-[200px]">
+                     {slot.dateKeys.size === 0
+                       ? "None chosen"
+                       : Array.from(slot.dateKeys).sort().map(formatDMy).join(", ")}
+                   </span>
+                   <span className="text-[10px] text-slate-400 shrink-0">
+                     {isRangeMode ? "2-click range" : "Click to toggle"}
+                   </span>
+                 </div>
+               </div>
+             </PopoverContent>
+           </Popover>
 
           {/* Ride Selector Popover */}
           <Popover>
@@ -647,7 +942,9 @@ function SlotConfigCard({
                 <span className="flex items-center gap-1.5 truncate">
                   <Filter className="h-3.5 w-3.5 text-[#3D52A0]" />
                   <span className="truncate">
-                    {slot.rideCodes.length === 0 ? "All 21" : `${slot.rideCodes.length} Rides`}
+                    {slot.rideCodes.length === 0
+                      ? "All 21 Rides"
+                      : `${slot.rideCodes.length} Rides`}
                   </span>
                 </span>
                 <ChevronDown className="h-3 w-3 opacity-50 shrink-0 ml-1" />
@@ -661,10 +958,10 @@ function SlotConfigCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRidesChange(FLEET_RIDES.map(([c]) => c))}
+                      onClick={() => onRidesChange([])}
                       className="h-5 px-1.5 text-[10px] text-[#3D52A0] font-bold"
                     >
-                      All
+                      All 21
                     </Button>
                     <Button
                       variant="ghost"
@@ -672,19 +969,22 @@ function SlotConfigCard({
                       onClick={() => onRidesChange([])}
                       className="h-5 px-1.5 text-[10px] text-slate-400"
                     >
-                      Fleet (Default)
+                      Clear
                     </Button>
                   </div>
                 </div>
+
                 <div className="relative">
-                  <Search className="absolute left-2 top-2 h-3 w-3 text-slate-400" />
+                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
                   <Input
-                    placeholder="Search ride..."
+                    type="text"
+                    placeholder="Filter ride name..."
                     value={searchRide}
                     onChange={e => setSearchRide(e.target.value)}
-                    className="h-7 pl-7 text-xs bg-slate-50"
+                    className="h-7 pl-8 text-xs bg-slate-50"
                   />
                 </div>
+
                 <div className="max-h-48 overflow-y-auto space-y-1 text-xs">
                   {filteredRides.map(([code, name]) => {
                     const checked = slot.rideCodes.includes(code);
@@ -702,14 +1002,12 @@ function SlotConfigCard({
                           checked ? "bg-indigo-50 font-bold text-[#293252]" : "hover:bg-slate-50 text-slate-700"
                         }`}
                       >
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="font-mono text-[10px] text-[#3D52A0] font-bold w-10">
-                            {code}
-                          </span>
-                          <span className="truncate text-[11px]">{name}</span>
-                        </div>
+                        <span className="truncate pr-2">
+                          <strong className="font-mono text-[#3D52A0] mr-1.5">{code}</strong>
+                          <span className="text-slate-600 font-normal">{name}</span>
+                        </span>
                         <span
-                          className={`flex h-3.5 w-3.5 items-center justify-center rounded border ${
+                          className={`flex h-3.5 w-3.5 items-center justify-center rounded border shrink-0 ${
                             checked ? "border-[#3D52A0] bg-[#3D52A0] text-white" : "border-slate-300"
                           }`}
                         >
@@ -723,34 +1021,22 @@ function SlotConfigCard({
             </PopoverContent>
           </Popover>
         </div>
-
-        {isLoading && (
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 pt-0.5">
-            <Loader2 className="h-3 w-3 animate-spin text-[#3D52A0]" />
-            Recalculating column…
-          </div>
-        )}
       </CardContent>
     </Card>
   );
 }
 
-function SectionHeader({
-  title,
-  tone = "blue",
-}: {
-  title: string;
-  tone?: "blue" | "amber" | "indigo" | "slate" | "rose";
-}) {
-  const toneClasses = {
-    blue: "bg-blue-900 text-blue-50",
-    amber: "bg-amber-900 text-amber-50",
-    indigo: "bg-indigo-900 text-indigo-50",
-    slate: "bg-slate-800 text-slate-50",
-    rose: "bg-rose-950 text-rose-50",
-  };
+function SectionHeader({ title, tone = "blue" }: { title: string; tone?: string }) {
+  const toneBg =
+    tone === "amber"
+      ? "bg-[#6a3810] text-amber-50"
+      : tone === "indigo"
+      ? "bg-[#293252] text-indigo-50"
+      : tone === "rose"
+      ? "bg-[#681822] text-rose-50"
+      : "bg-[#1b264f] text-blue-50";
   return (
-    <div className={`px-4 py-2 text-[10px] font-extrabold uppercase tracking-[0.14em] ${toneClasses[tone]}`}>
+    <div className={`p-2.5 px-4 font-mono-report font-extrabold text-[11px] tracking-wider uppercase ${toneBg}`}>
       {title}
     </div>
   );
@@ -760,12 +1046,16 @@ function SpecRow({
   label,
   detail,
   values,
+  rawValues,
+  deltaType = "none",
   columnCount = 2,
   highlightBest,
 }: {
   label: string;
   detail?: string;
   values: string[];
+  rawValues?: (number | null)[];
+  deltaType?: "percentage" | "minutes" | "count" | "rate" | "evacuation" | "none";
   columnCount?: 2 | 3;
   highlightBest?: (val: string, index: number) => boolean;
 }) {
@@ -778,6 +1068,77 @@ function SpecRow({
       </div>
       {values.map((val, idx) => {
         const isHighlighted = highlightBest ? highlightBest(val, idx) : false;
+
+        // Calculate Delta against Column 1 (idx === 0)
+        let deltaBadge: React.ReactNode = null;
+        if (
+          idx >= 1 &&
+          rawValues &&
+          rawValues[0] !== null &&
+          rawValues[0] !== undefined &&
+          rawValues[idx] !== null &&
+          rawValues[idx] !== undefined
+        ) {
+          const base = rawValues[0]!;
+          const current = rawValues[idx]!;
+          const diff = current - base;
+
+          if (deltaType === "percentage") {
+            if (Math.abs(diff) >= 0.001) {
+              const isBetter = diff > 0;
+              deltaBadge = (
+                <span
+                  className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    isBetter ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {isBetter ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
+                  {diff > 0 ? `+${diff.toFixed(3)}%` : `${diff.toFixed(3)}%`}
+                </span>
+              );
+            }
+          } else if (deltaType === "minutes" || deltaType === "evacuation") {
+            if (Math.abs(diff) >= 1) {
+              const isBetter = diff < 0; // Fewer minutes of downtime/evacuation is better
+              deltaBadge = (
+                <span
+                  className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    isBetter ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {diff > 0 ? `+${diff.toFixed(0)} min` : `${diff.toFixed(0)} min`}
+                </span>
+              );
+            }
+          } else if (deltaType === "rate") {
+            if (Math.abs(diff) >= 0.001) {
+              const isBetter = diff < 0;
+              deltaBadge = (
+                <span
+                  className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    isBetter ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {diff > 0 ? `+${diff.toFixed(3)}%` : `${diff.toFixed(3)}%`}
+                </span>
+              );
+            }
+          } else if (deltaType === "count") {
+            if (Math.abs(diff) >= 1) {
+              const isBetter = diff < 0;
+              deltaBadge = (
+                <span
+                  className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                    isBetter ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {diff > 0 ? `+${diff}` : `${diff}`}
+                </span>
+              );
+            }
+          }
+        }
+
         return (
           <div
             key={idx}
@@ -785,11 +1146,14 @@ function SpecRow({
               isHighlighted ? "bg-emerald-50/70 font-extrabold text-emerald-950" : "text-slate-800"
             }`}
           >
-            <span className={val === "Select dates" ? "text-slate-400 italic text-[11px]" : "font-semibold"}>
-              {val}
-            </span>
+            <div className="flex items-center flex-wrap gap-1">
+              <span className={val === "Select dates" ? "text-slate-400 italic text-[11px]" : "font-semibold"}>
+                {val}
+              </span>
+              {deltaBadge}
+            </div>
             {isHighlighted && (
-              <span className="rounded bg-emerald-100 text-emerald-800 px-1 py-0.2 text-[9px] font-extrabold">
+              <span className="rounded bg-emerald-100 text-emerald-800 px-1 py-0.2 text-[9px] font-extrabold shrink-0">
                 Best
               </span>
             )}
@@ -805,12 +1169,14 @@ function RideSpecRow({
   rideName,
   results,
   activeSlots,
+  isCalculated,
   columnCount = 2,
 }: {
   rideCode: string;
   rideName: string;
   results: Array<any>;
   activeSlots: SlotConfig[];
+  isCalculated: boolean;
   columnCount?: 2 | 3;
 }) {
   const colWidth = columnCount === 2 ? "col-span-4" : "col-span-3";
@@ -834,7 +1200,7 @@ function RideSpecRow({
           key={idx}
           className={`${colWidth} p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs`}
         >
-          {activeSlots[idx].dateKeys.size === 0 ? (
+          {!isCalculated || activeSlots[idx].dateKeys.size === 0 ? (
             <span className="text-slate-300 italic text-[11px]">—</span>
           ) : stat ? (
             <div className="flex items-center justify-between">
@@ -853,7 +1219,7 @@ function RideSpecRow({
               )}
             </div>
           ) : (
-            <span className="text-slate-400 text-[11px]">N/A</span>
+            <span className="text-slate-400 text-[11px]">100% (0 min)</span>
           )}
         </div>
       ))}
@@ -864,10 +1230,12 @@ function RideSpecRow({
 function WeekdaySpecRow({
   weekday,
   results,
+  isCalculated,
   columnCount = 2,
 }: {
   weekday: string;
   results: Array<any>;
+  isCalculated: boolean;
   columnCount?: 2 | 3;
 }) {
   const colWidth = columnCount === 2 ? "col-span-4" : "col-span-3";
@@ -883,7 +1251,7 @@ function WeekdaySpecRow({
             key={idx}
             className={`${colWidth} p-3 border-r last:border-r-0 border-[#adbBda]/40 text-xs font-mono`}
           >
-            {point ? `${point.minutes} min (${point.events} events)` : "—"}
+            {!isCalculated ? "—" : point ? `${point.minutes} min (${point.events} events)` : "—"}
           </div>
         );
       })}

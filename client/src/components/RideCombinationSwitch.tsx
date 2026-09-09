@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Check, ChevronDown, Filter, Layers, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EditableText } from "@/contexts/TextEditContext";
 import {
   Popover,
   PopoverContent,
@@ -88,20 +89,31 @@ export function RideCombinationSwitch({
       <div>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]">
-              02 · Focus the fleet
-            </p>
-            <h2 className="mt-0.5 text-base font-extrabold tracking-tight text-slate-900">
-              Ride combination
-            </h2>
+            <EditableText
+              contentKey="fleet_section_step"
+              defaultText="02 · Focus the fleet"
+              as="p"
+              className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]"
+            />
+            <EditableText
+              contentKey="fleet_section_title"
+              defaultText="Ride combination"
+              as="h2"
+              className="mt-0.5 text-base font-extrabold tracking-tight text-slate-900 block"
+            />
           </div>
           <Badge
             variant="outline"
             className="border-[#8697c4]/60 bg-white/70 text-[#3D52A0] text-[11px] font-bold shrink-0"
           >
-            {mode === "all" || selectedRideCodes.length === 0
-              ? "All 21 Rides"
-              : `${selectedRideCodes.length} Selected`}
+            <EditableText
+              contentKey="fleet_badge_label"
+              defaultText={
+                mode === "all" || selectedRideCodes.length === 0
+                  ? "All 21 Rides"
+                  : `${selectedRideCodes.length} Selected`
+              }
+            />
           </Badge>
         </div>
 
@@ -117,7 +129,7 @@ export function RideCombinationSwitch({
             }`}
           >
             <Layers className="h-3.5 w-3.5 text-[#3D52A0]" />
-            All Rides (Default)
+            <EditableText contentKey="fleet_tab_all_label" defaultText="All Rides (Default)" />
           </button>
           <button
             type="button"
@@ -129,7 +141,7 @@ export function RideCombinationSwitch({
             }`}
           >
             <Filter className="h-3.5 w-3.5 text-[#3D52A0]" />
-            Select Rides
+            <EditableText contentKey="fleet_tab_custom_label" defaultText="Select Rides" />
           </button>
         </div>
 
@@ -137,12 +149,18 @@ export function RideCombinationSwitch({
         <div className="mt-3">
           {mode === "all" ? (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs text-slate-600">
-              <p className="font-semibold text-slate-800">
-                Full fleet analysis active:
-              </p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
-                All 21 attractions are included across all metrics, trends, and incident logs. Toggle to the right to filter specific rides.
-              </p>
+              <EditableText
+                contentKey="fleet_all_heading"
+                defaultText="Full fleet analysis active:"
+                as="p"
+                className="font-semibold text-slate-800 block"
+              />
+              <EditableText
+                contentKey="fleet_all_subheading"
+                defaultText="All 21 attractions are included across all metrics, trends, and incident logs. Toggle to the right to filter specific rides."
+                as="p"
+                className="mt-0.5 text-[11px] leading-relaxed text-slate-500 block"
+              />
             </div>
           ) : (
             <div className="space-y-2">
