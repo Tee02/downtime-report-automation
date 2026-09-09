@@ -33,7 +33,15 @@ export function TextEditProvider({ children }: { children: React.ReactNode }) {
   const [pendingChanges, setPendingChanges] = useState<Record<string, string>>({});
 
   const trpcUtils = trpc.useUtils();
+  const { data: dbContents } = trpc.siteContent.list.useQuery();
   const setMutation = trpc.siteContent.set.useMutation();
+
+  // Sync db contents when loaded
+  useEffect(() => {
+    if (dbContents) {
+      setEditedTexts(prev => ({ ...dbContents, ...prev }));
+    }
+  }, [dbContents]);
 
   // If user logs out, disable edit mode
   useEffect(() => {
@@ -167,11 +175,15 @@ export function EditableText({
     <Component
       contentEditable
       suppressContentEditableWarning
+      onInput={(e: React.FormEvent<HTMLElement>) => {
+        const val = e.currentTarget.textContent || "";
+        setText(contentKey, val);
+      }}
       onBlur={(e: React.FocusEvent<HTMLElement>) => {
         const val = e.currentTarget.textContent || "";
         setText(contentKey, val);
       }}
-      className={`${className} outline-dashed outline-2 outline-indigo-400 bg-indigo-50/70 px-1 py-0.5 rounded cursor-text hover:bg-indigo-100/70 transition-colors`}
+      className={`${className} outline-dashed outline-2 outline-indigo-500 bg-indigo-50/90 px-1 py-0.5 rounded cursor-text hover:bg-indigo-100/90 transition-colors`}
       title="Click to edit text (Operator mode)"
     >
       {text}

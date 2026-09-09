@@ -286,7 +286,6 @@ export default function ComparisonStudio() {
     }
 
     return FLEET_RIDES.filter(([code]) => {
-      // Check if this ride has downtime (<100% or >0 minutes) in AT LEAST ONE active slot
       const hasDowntime = activeResults.some((res, idx) => {
         if (!res || !res.topRides || activeSlots[idx].dateKeys.size === 0) return false;
         const ride = res.topRides.find((r: any) => r.rideCode === code);
@@ -305,7 +304,7 @@ export default function ComparisonStudio() {
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <Badge className="rounded-full bg-[#3D52A0] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-[#3D52A0]">
-                Multi-Scenario Benchmark
+                <EditableText contentKey="comp_banner_badge" defaultText="Multi-Scenario Benchmark" />
               </Badge>
               <EditableText
                 contentKey="comp_page_title"
@@ -323,9 +322,9 @@ export default function ComparisonStudio() {
             <div className="max-w-xs rounded-2xl border border-[#8697c4]/45 bg-white/65 p-3.5 text-xs text-slate-600 shadow-sm backdrop-blur">
               <div className="flex items-center gap-2 font-bold text-[#293252] mb-1">
                 <Columns3 className="h-4 w-4 text-[#3D52A0]" />
-                {columnCount}-Column View
+                <EditableText contentKey="comp_banner_col_view" defaultText={`${columnCount}-Column View`} />
               </div>
-              Clean table format with on-demand calculation.
+              <EditableText contentKey="comp_banner_col_desc" defaultText="Clean table format with on-demand calculation." />
             </div>
           </div>
         </section>
@@ -352,9 +351,9 @@ export default function ComparisonStudio() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
                     <History className="h-4 w-4 text-[#3D52A0]" />
-                    <span>Previous Comparison History (Saved up to 5)</span>
+                    <EditableText contentKey="comp_history_title" defaultText="Previous Comparison History (Saved up to 5)" />
                   </div>
-                  <span className="text-[11px] text-slate-400">Click any history card to reload</span>
+                  <EditableText contentKey="comp_history_hint" defaultText="Click any history card to reload" as="span" className="text-[11px] text-slate-400 block" />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {history.map(item => (
@@ -375,7 +374,10 @@ export default function ComparisonStudio() {
             {/* Controls Bar: 2-or-3 Columns Switch */}
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold text-slate-600">
-                Displaying <strong>{columnCount} comparison columns</strong>. Set start/end dates via calendar, then click Start Comparison.
+                <EditableText
+                  contentKey="comp_controls_note"
+                  defaultText={`Displaying ${columnCount} comparison columns. Set start/end dates via calendar, then click Start Comparison.`}
+                />
               </p>
               {columnCount === 2 ? (
                 <Button
@@ -385,7 +387,7 @@ export default function ComparisonStudio() {
                   className="h-8 text-xs font-bold bg-[#3D52A0] text-white hover:bg-[#293252] shadow-sm"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Add 3rd Column for Comparison
+                  <EditableText contentKey="comp_add_3rd_btn" defaultText="Add 3rd Column for Comparison" />
                 </Button>
               ) : (
                 <Button
@@ -396,7 +398,7 @@ export default function ComparisonStudio() {
                   className="h-8 text-xs font-bold border-slate-300 text-slate-700 bg-white hover:bg-slate-100"
                 >
                   <Minus className="mr-1.5 h-3.5 w-3.5" />
-                  Hide 3rd Column (2-Column View)
+                  <EditableText contentKey="comp_hide_3rd_btn" defaultText="Hide 3rd Column (2-Column View)" />
                 </Button>
               )}
             </div>
@@ -433,13 +435,21 @@ export default function ComparisonStudio() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-blue-50/80 to-purple-50/90 border border-indigo-200/90 shadow-sm">
               <div>
                 <h3 className="text-sm font-extrabold text-[#293252]">
-                  {isCalculated ? "Comparison Calculated" : "Ready to Benchmark"}
+                  <EditableText
+                    contentKey="comp_ready_title"
+                    defaultText={isCalculated ? "Comparison Calculated" : "Ready to Benchmark"}
+                  />
                 </h3>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {isCalculated
-                    ? "Side-by-side metrics and delta comparisons are active below. Press start anytime to re-evaluate."
-                    : "Press Start Comparison below to run queries and render the side-by-side benchmark table."}
-                </p>
+                <EditableText
+                  contentKey="comp_ready_desc"
+                  defaultText={
+                    isCalculated
+                      ? "Side-by-side metrics and delta comparisons are active below. Press start anytime to re-evaluate."
+                      : "Press Start Comparison below to run queries and render the side-by-side benchmark table."
+                  }
+                  as="p"
+                  className="text-xs text-slate-600 mt-0.5 block"
+                />
               </div>
               <Button
                 size="lg"
@@ -447,7 +457,10 @@ export default function ComparisonStudio() {
                 className="h-10 px-6 text-xs font-extrabold bg-[#3D52A0] hover:bg-[#293252] text-white shadow-md active:scale-95 transition-all gap-2"
               >
                 <Play className="h-4 w-4 fill-white" />
-                {isCalculated ? "Recalculate Comparison" : "Start Comparison"}
+                <EditableText
+                  contentKey="comp_start_btn"
+                  defaultText={isCalculated ? "Recalculate Comparison" : "Start Comparison"}
+                />
               </Button>
             </div>
 
@@ -457,7 +470,7 @@ export default function ComparisonStudio() {
               <div className="grid grid-cols-12 bg-[#ede8f5] border-b border-[#adbBda]/60 sticky top-0 z-20 text-xs font-extrabold text-slate-800">
                 <div className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-4 flex items-center gap-2 border-r border-[#adbBda]/40 text-slate-700 uppercase tracking-wider text-[11px]`}>
                   <Columns3 className="h-4 w-4 text-[#3D52A0]" />
-                  Metric / Category
+                  <EditableText contentKey="comp_th_category" defaultText="Metric / Category" />
                 </div>
                 {activeSlots.map((slot, idx) => (
                   <div
@@ -496,8 +509,9 @@ export default function ComparisonStudio() {
               </div>
 
               {/* Section 1: Overview & Availability */}
-              <SectionHeader title="OVERVIEW & FLEET AVAILABILITY" tone="blue" />
+              <SectionHeader contentKey="sec_overview" title="OVERVIEW & FLEET AVAILABILITY" tone="blue" />
               <SpecRow
+                contentKey="fleet_avail"
                 label="Fleet Availability"
                 detail="Mean operational uptime"
                 columnCount={columnCount}
@@ -516,6 +530,7 @@ export default function ComparisonStudio() {
                 }}
               />
               <SpecRow
+                contentKey="total_tech_dt"
                 label="Total Technical Downtime"
                 detail="11-1 mechanical/electrical"
                 columnCount={columnCount}
@@ -530,6 +545,7 @@ export default function ComparisonStudio() {
                 }}
               />
               <SpecRow
+                contentKey="avg_dt_rate"
                 label="Average Downtime Rate"
                 detail="Daily downtime percentage"
                 columnCount={columnCount}
@@ -540,6 +556,7 @@ export default function ComparisonStudio() {
                 deltaType="rate"
               />
               <SpecRow
+                contentKey="reporting_days"
                 label="Reporting Days"
                 detail="Sample size & exact dates"
                 columnCount={columnCount}
@@ -551,6 +568,7 @@ export default function ComparisonStudio() {
                 })}
               />
               <SpecRow
+                contentKey="rides_scope"
                 label="Rides in Scope"
                 detail="Operating fleet count"
                 columnCount={columnCount}
@@ -560,8 +578,9 @@ export default function ComparisonStudio() {
               />
 
               {/* Section 2: Interruptions & Evacuations */}
-              <SectionHeader title="INTERRUPTIONS & EVACUATIONS" tone="amber" />
+              <SectionHeader contentKey="sec_interruptions" title="INTERRUPTIONS & EVACUATIONS" tone="amber" />
               <SpecRow
+                contentKey="recorded_incidents"
                 label="Recorded Incidents"
                 detail="Total stoppage events"
                 columnCount={columnCount}
@@ -572,6 +591,7 @@ export default function ComparisonStudio() {
                 deltaType="count"
               />
               <SpecRow
+                contentKey="daily_incident_avg"
                 label="Daily Incident Average"
                 detail="Incidents per operating day"
                 columnCount={columnCount}
@@ -580,6 +600,7 @@ export default function ComparisonStudio() {
                 )}
               />
               <SpecRow
+                contentKey="avg_interruption"
                 label="Average Interruption"
                 detail="Duration per incident"
                 columnCount={columnCount}
@@ -590,6 +611,7 @@ export default function ComparisonStudio() {
                 deltaType="minutes"
               />
               <SpecRow
+                contentKey="evac_time"
                 label="Evacuation Time (11-7/11-17)"
                 detail="Total evacuation duration"
                 columnCount={columnCount}
@@ -600,6 +622,7 @@ export default function ComparisonStudio() {
                 deltaType="evacuation"
               />
               <SpecRow
+                contentKey="evac_occurrences"
                 label="Evacuation Occurrences"
                 detail="Times passengers unloaded"
                 columnCount={columnCount}
@@ -610,6 +633,7 @@ export default function ComparisonStudio() {
                 deltaType="count"
               />
               <SpecRow
+                contentKey="peak_dt_day"
                 label="Peak Downtime Day"
                 detail="Day with highest stoppage"
                 columnCount={columnCount}
@@ -622,8 +646,9 @@ export default function ComparisonStudio() {
                 )}
               />
 
-              {/* Section 3: Ride-by-Ride Breakdown (Auto-hiding 100% available rides) */}
+              {/* Section 3: Ride-by-Ride Breakdown */}
               <SectionHeader
+                contentKey="sec_ride_breakdown"
                 title={`FLEET RIDE BREAKDOWN (${isCalculated ? `SHOWING ${visibleRides.length} RIDES WITH DOWNTIME` : "ALL ATTRACTIONS"})`}
                 tone="indigo"
               />
@@ -646,19 +671,22 @@ export default function ComparisonStudio() {
               )}
 
               {/* Section 4: Day of Week Pattern */}
-              <SectionHeader title="DAY OF WEEK PATTERN (MON – SUN)" tone="slate" />
+              <SectionHeader contentKey="sec_weekday_pattern" title="DAY OF WEEK PATTERN (MON – SUN)" tone="slate" />
               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
                 <WeekdaySpecRow key={day} weekday={day} columnCount={columnCount} results={activeResults} isCalculated={isCalculated} />
               ))}
 
               {/* Section 5: Ride Incident Logs Comparison */}
-              <SectionHeader title="RIDE INCIDENT LOGS SIDE-BY-SIDE" tone="rose" />
+              <SectionHeader contentKey="sec_incident_logs" title="RIDE INCIDENT LOGS SIDE-BY-SIDE" tone="rose" />
               <div className="grid grid-cols-12 divide-x divide-[#adbBda]/40 bg-slate-50/50">
                 <div className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-4 text-xs font-bold text-slate-700`}>
-                  <p>Chronological Logs</p>
-                  <p className="mt-1 text-[10px] text-slate-400 font-normal">
-                    Sorted by ride code, including technical, weather, and Dark Day entries.
-                  </p>
+                  <EditableText contentKey="comp_logs_col_title" defaultText="Chronological Logs" as="p" className="font-bold text-slate-700 block" />
+                  <EditableText
+                    contentKey="comp_logs_col_desc"
+                    defaultText="Sorted by ride code, including technical, weather, and Dark Day entries."
+                    as="p"
+                    className="mt-1 text-[10px] text-slate-400 font-normal block"
+                  />
                 </div>
                 {activeResults.map((res, idx) => (
                   <div key={idx} className={`${columnCount === 2 ? "col-span-4" : "col-span-3"} p-3 max-h-96 overflow-y-auto space-y-3`}>
@@ -750,7 +778,6 @@ function SlotConfigCard({
         setRangeStartKey(key);
         return;
       }
-      // Select all dates between rangeStartKey and key
       const start = rangeStartKey < key ? rangeStartKey : key;
       const end = rangeStartKey < key ? key : rangeStartKey;
       const inRange = availableDateKeys.filter(k => k >= start && k <= end);
@@ -762,7 +789,6 @@ function SlotConfigCard({
       return;
     }
 
-    // Single click toggle
     const next = new Set(slot.dateKeys);
     if (next.has(key)) next.delete(key);
     else next.add(key);
@@ -808,7 +834,6 @@ function SlotConfigCard({
 
         {/* Controls: Select Dates + Select Rides Popovers */}
         <div className="grid grid-cols-2 gap-2 pt-1">
-          {/* Date Selector Popover with Interactive Calendar */}
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -862,7 +887,6 @@ function SlotConfigCard({
                   </div>
                 </div>
 
-                {/* Quick presets in comparison calendar */}
                 <div className="flex items-center gap-1 pb-1">
                   <span className="text-[10px] font-bold text-slate-400">Presets:</span>
                   <Button
@@ -897,41 +921,40 @@ function SlotConfigCard({
                   </div>
                 )}
 
-                 <div className="flex justify-center p-1">
-                   <Calendar
-                     mode="multiple"
-                     selected={Array.from(slot.dateKeys).map(k => new Date(`${k}T12:00:00`))}
-                     onDayClick={handleDayClick}
-                     disabled={date => {
-                       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                       return !availableDateKeys.includes(key);
-                     }}
-                     weekStartsOn={1}
-                     modifiers={{
-                       saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
-                     }}
-                     modifiersClassNames={{
-                       saved: "font-bold text-[#3D52A0]",
-                     }}
-                     className="rounded-xl border border-slate-200 bg-[#f8f9ff]/70 p-2"
-                   />
-                 </div>
- 
-                 <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-                   <span className="truncate max-w-[200px]">
-                     {slot.dateKeys.size === 0
-                       ? "None chosen"
-                       : Array.from(slot.dateKeys).sort().map(formatDMy).join(", ")}
-                   </span>
-                   <span className="text-[10px] text-slate-400 shrink-0">
-                     {isRangeMode ? "2-click range" : "Click to toggle"}
-                   </span>
-                 </div>
-               </div>
-             </PopoverContent>
-           </Popover>
+                <div className="flex justify-center p-1">
+                  <Calendar
+                    mode="multiple"
+                    selected={Array.from(slot.dateKeys).map(k => new Date(`${k}T12:00:00`))}
+                    onDayClick={handleDayClick}
+                    disabled={date => {
+                      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                      return !availableDateKeys.includes(key);
+                    }}
+                    weekStartsOn={1}
+                    modifiers={{
+                      saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
+                    }}
+                    modifiersClassNames={{
+                      saved: "font-bold text-[#3D52A0]",
+                    }}
+                    className="rounded-xl border border-slate-200 bg-[#f8f9ff]/70 p-2"
+                  />
+                </div>
 
-          {/* Ride Selector Popover */}
+                <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="truncate max-w-[200px]">
+                    {slot.dateKeys.size === 0
+                      ? "None chosen"
+                      : Array.from(slot.dateKeys).sort().map(formatDMy).join(", ")}
+                  </span>
+                  <span className="text-[10px] text-slate-400 shrink-0">
+                    {isRangeMode ? "2-click range" : "Click to toggle"}
+                  </span>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -1026,7 +1049,15 @@ function SlotConfigCard({
   );
 }
 
-function SectionHeader({ title, tone = "blue" }: { title: string; tone?: string }) {
+function SectionHeader({
+  title,
+  tone = "blue",
+  contentKey,
+}: {
+  title: string;
+  tone?: string;
+  contentKey?: string;
+}) {
   const toneBg =
     tone === "amber"
       ? "bg-[#6a3810] text-amber-50"
@@ -1037,12 +1068,17 @@ function SectionHeader({ title, tone = "blue" }: { title: string; tone?: string 
       : "bg-[#1b264f] text-blue-50";
   return (
     <div className={`p-2.5 px-4 font-mono-report font-extrabold text-[11px] tracking-wider uppercase ${toneBg}`}>
-      {title}
+      {contentKey ? (
+        <EditableText contentKey={`comp_sec_${contentKey}`} defaultText={title} />
+      ) : (
+        title
+      )}
     </div>
   );
 }
 
 function SpecRow({
+  contentKey,
   label,
   detail,
   values,
@@ -1051,6 +1087,7 @@ function SpecRow({
   columnCount = 2,
   highlightBest,
 }: {
+  contentKey?: string;
   label: string;
   detail?: string;
   values: string[];
@@ -1063,13 +1100,32 @@ function SpecRow({
   return (
     <div className="grid grid-cols-12 border-b border-slate-100 hover:bg-slate-50/80 transition-colors text-xs">
       <div className={`${colWidth} p-3.5 border-r border-[#adbBda]/40 bg-slate-50/40`}>
-        <p className="font-bold text-slate-900">{label}</p>
-        {detail && <p className="text-[10px] text-slate-400">{detail}</p>}
+        {contentKey ? (
+          <EditableText
+            contentKey={`comp_label_${contentKey}`}
+            defaultText={label}
+            as="p"
+            className="font-bold text-slate-900 block"
+          />
+        ) : (
+          <p className="font-bold text-slate-900">{label}</p>
+        )}
+        {detail && (
+          contentKey ? (
+            <EditableText
+              contentKey={`comp_detail_${contentKey}`}
+              defaultText={detail}
+              as="p"
+              className="text-[10px] text-slate-400 block"
+            />
+          ) : (
+            <p className="text-[10px] text-slate-400">{detail}</p>
+          )
+        )}
       </div>
       {values.map((val, idx) => {
         const isHighlighted = highlightBest ? highlightBest(val, idx) : false;
 
-        // Calculate Delta against Column 1 (idx === 0)
         let deltaBadge: React.ReactNode = null;
         if (
           idx >= 1 &&
@@ -1099,7 +1155,7 @@ function SpecRow({
             }
           } else if (deltaType === "minutes" || deltaType === "evacuation") {
             if (Math.abs(diff) >= 1) {
-              const isBetter = diff < 0; // Fewer minutes of downtime/evacuation is better
+              const isBetter = diff < 0;
               deltaBadge = (
                 <span
                   className={`ml-1.5 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${

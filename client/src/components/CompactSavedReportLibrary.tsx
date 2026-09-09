@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Check, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { EditableText } from "@/contexts/TextEditContext";
 import type { SavedDowntimeReport } from "../../../drizzle/schema";
 
 interface CompactSavedReportLibraryProps {
@@ -34,12 +35,18 @@ export function CompactSavedReportLibrary({
       <div>
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]">
-              Saved report library
-            </p>
-            <h2 className="mt-0.5 text-base font-extrabold tracking-tight text-slate-900">
-              Included source logs
-            </h2>
+            <EditableText
+              contentKey="saved_library_step"
+              defaultText="Saved report library"
+              as="p"
+              className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0] block"
+            />
+            <EditableText
+              contentKey="saved_library_title"
+              defaultText="Included source logs"
+              as="h2"
+              className="mt-0.5 text-base font-extrabold tracking-tight text-slate-900 block"
+            />
           </div>
           <Badge
             variant="outline"
@@ -49,9 +56,12 @@ export function CompactSavedReportLibrary({
           </Badge>
         </div>
 
-        <p className="mt-1 text-[11px] text-slate-500">
-          Select reports to include in the analytics. (Display and recall only)
-        </p>
+        <EditableText
+          contentKey="saved_library_desc"
+          defaultText="Select reports to include in the analytics. (Display and recall only)"
+          as="p"
+          className="mt-1 text-[11px] text-slate-500 block"
+        />
 
         {/* Table container: scrollbar is HIDDEN when collapsed, scrollable when expanded */}
         <div
@@ -64,11 +74,11 @@ export function CompactSavedReportLibrary({
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 z-10 bg-[#ede8f5] uppercase tracking-[0.08em] text-slate-500 text-[10px]">
               <tr>
-                <th className="px-2.5 py-2 w-8">Inc</th>
-                <th className="px-2.5 py-2">Date</th>
-                <th className="px-2.5 py-2">Source file</th>
-                <th className="px-2.5 py-2 text-right">Downtime</th>
-                <th className="px-2.5 py-2 text-center w-12">Del</th>
+                <th className="px-2.5 py-2 w-8"><EditableText contentKey="th_inc" defaultText="Inc" /></th>
+                <th className="px-2.5 py-2"><EditableText contentKey="th_date" defaultText="Date" /></th>
+                <th className="px-2.5 py-2"><EditableText contentKey="th_source" defaultText="Source file" /></th>
+                <th className="px-2.5 py-2 text-right"><EditableText contentKey="th_downtime" defaultText="Downtime" /></th>
+                <th className="px-2.5 py-2 text-center w-12"><EditableText contentKey="th_del" defaultText="Del" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#adbBda]/30">
@@ -123,24 +133,24 @@ export function CompactSavedReportLibrary({
         </div>
       </div>
 
-      {/* "View More" / "Show Less" toggle button */}
-      <div className="mt-2.5 pt-1">
+      {/* View more toggle button at the bottom */}
+      <div className="mt-2.5 pt-2 border-t border-slate-100 flex justify-center">
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full h-7 text-xs font-bold text-[#3D52A0] border-[#8697c4]/50 bg-white/80 hover:bg-indigo-50"
+          className="h-7 w-full text-[11px] font-bold text-[#3D52A0] hover:bg-indigo-50/70 flex items-center justify-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50/40"
         >
           {isExpanded ? (
             <>
-              <ChevronUp className="mr-1.5 h-3.5 w-3.5" />
-              Show less
+              <ChevronUp className="h-3.5 w-3.5" />
+              <EditableText contentKey="saved_btn_show_less" defaultText="Show less (collapse view)" />
             </>
           ) : (
             <>
-              <ChevronDown className="mr-1.5 h-3.5 w-3.5" />
-              View more ({reports.length} reports)
+              <ChevronDown className="h-3.5 w-3.5" />
+              <EditableText contentKey="saved_btn_view_more" defaultText={`View more (${reports.length} reports)`} />
             </>
           )}
         </Button>

@@ -104,17 +104,17 @@ function DashboardLayoutContent({
       setIsPasscodeModalOpen(false);
       setPasscode("");
       setPasscodeError("");
-      toast.success("Signed in successfully as Operator (Passcode 494).");
+      toast.success("Signed in successfully.");
     },
     onError: (err) => {
-      setPasscodeError(err.message || "Invalid passcode.");
+      setPasscodeError(err.message || "Incorrect password.");
     },
   });
 
   const handlePasscodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!passcode.trim()) {
-      setPasscodeError("Please enter the passcode.");
+      setPasscodeError("Please enter the password.");
       return;
     }
     setPasscodeError("");
@@ -256,10 +256,10 @@ function DashboardLayoutContent({
                 <KeyRound className="h-5 w-5" />
               </div>
               <DialogTitle className="text-center text-lg font-extrabold text-[#293252]">
-                Operator Sign In
+                Sign In
               </DialogTitle>
               <DialogDescription className="text-center text-xs text-slate-500">
-                Enter the 3-digit operator passcode to unlock text editing and delete permissions.
+                Enter password to unlock editing and administrative features.
               </DialogDescription>
             </DialogHeader>
 
@@ -267,8 +267,7 @@ function DashboardLayoutContent({
               <div className="space-y-1.5">
                 <Input
                   type="password"
-                  maxLength={6}
-                  placeholder="Enter passcode"
+                  placeholder="Enter password"
                   value={passcode}
                   onChange={(e) => {
                     setPasscode(e.target.value);

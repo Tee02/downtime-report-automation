@@ -9,12 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.19";
+export const CURRENT_VERSION = "v1.20";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.19",
+    version: "v1.20",
     commit: "pending",
+    date: "2026-09-08",
+    time: "18:15:00",
+    timestamp: "2026-09-08 18:15:00",
+    title: "Universal Front-End Text Editability & Pure Password Security",
+    tasks: [
+      "Converted password prompt to a standard masked password field with zero hints or length indicators",
+      "Expanded front-end text editing coverage to every element, header, subtitle, and card in Downtime Studio",
+      "Added full inline editability to all bottom sections in Analysis Studio (Saved report library, Evac, Daily comparison, Weekday pattern, Ride ranking, Incident log intelligence)",
+      "Added full inline editability to Comparison Studio section headers, metric categories, and table labels",
+      "Enhanced visual edit cues with dashed hover outlines and seamless one-click Save Page Texts persistence",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.19",
+    commit: "4136991",
     date: "2026-09-08",
     time: "17:40:00",
     timestamp: "2026-09-08 17:40:00",
@@ -29,7 +45,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added prominent 'Start Comparison' trigger button and 5-slot comparison history recall",
       "Added side-by-side delta metrics (+/- min, +/- %) beside Column 2 for instant variance quantification",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.18",

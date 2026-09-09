@@ -72,12 +72,6 @@ function severityForMinutes(minutes: number) {
   return { label: "Monitor · under 30 min", color: "#7091E6" };
 }
 
-function IncidentDescription({ record }: { record: ReviewRecord }) {
-  if (!record.isLateHandover) return <p className="line-clamp-2">{record.description || "No description"}</p>;
-  const fault = /\s*(\([^)]*\))\s*$/.exec(record.description);
-  return <p className="line-clamp-2">{record.description.slice(0, fault?.index).trimEnd()}{fault ? <> <span className="font-bold text-red-600">{fault[1]}</span></> : null}</p>;
-}
-
 function FileDropzone({ label, note, file, onFile }: { label: string; note: string; file?: File; onFile: (file: File) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const accept = (candidate?: File) => {
@@ -88,14 +82,67 @@ function FileDropzone({ label, note, file, onFile }: { label: string; note: stri
     }
     onFile(candidate);
   };
-  return <button type="button" onClick={() => inputRef.current?.click()} onDragOver={event => event.preventDefault()} onDrop={(event: DragEvent<HTMLButtonElement>) => { event.preventDefault(); accept(event.dataTransfer.files?.[0]); }} className="group relative min-h-44 w-full overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white/70 px-5 py-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-500 hover:bg-sky-50/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"><input ref={inputRef} aria-label={label} className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event: ChangeEvent<HTMLInputElement>) => accept(event.target.files?.[0])} /><div className="flex h-full flex-col justify-between gap-6"><div className="flex items-start justify-between gap-3"><div className="rounded-xl bg-slate-950 p-2.5 text-white shadow-sm"><FileSpreadsheet className="h-5 w-5" /></div>{file ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Ready</Badge> : <Badge variant="outline" className="border-slate-200 text-slate-500">XLSX</Badge>}</div><div><p className="text-sm font-extrabold tracking-tight text-slate-900">{file ? file.name : label}</p><p className="mt-1 text-xs leading-5 text-slate-500">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · click to replace` : note}</p></div></div></button>;
+  return (
+    <button
+      type="button"
+      onClick={() => inputRef.current?.click()}
+      onDragOver={event => event.preventDefault()}
+      onDrop={(event: DragEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        accept(event.dataTransfer.files?.[0]);
+      }}
+      className="group relative min-h-44 w-full overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white/70 px-5 py-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-500 hover:bg-sky-50/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+    >
+      <input
+        ref={inputRef}
+        aria-label={label}
+        className="sr-only"
+        type="file"
+        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={(event: ChangeEvent<HTMLInputElement>) => accept(event.target.files?.[0])}
+      />
+      <div className="flex h-full flex-col justify-between gap-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="rounded-xl bg-slate-950 p-2.5 text-white shadow-sm">
+            <FileSpreadsheet className="h-5 w-5" />
+          </div>
+          {file ? (
+            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Ready</Badge>
+          ) : (
+            <Badge variant="outline" className="border-slate-200 text-slate-500">XLSX</Badge>
+          )}
+        </div>
+        <div>
+          <p className="text-sm font-extrabold tracking-tight text-slate-900">
+            {file ? file.name : <EditableText contentKey="home_dropzone_label" defaultText={label} />}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · click to replace` : <EditableText contentKey="home_dropzone_desc" defaultText={note} />}
+          </p>
+        </div>
+      </div>
+    </button>
+  );
 }
 
 function RideChartTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: SummaryRide }> }) {
   if (!active || !payload?.[0]?.payload) return null;
   const ride = payload[0].payload;
   const severity = severityForMinutes(ride.minutes);
-  return <div className="rounded-xl border border-[#adbBda]/70 bg-[#f8f9ff] px-3 py-2.5 text-xs text-slate-700 shadow-lg"><p className="font-bold text-slate-900">{ride.attraction}</p><p className="mt-1 font-mono-report text-[#3d52a0]">{ride.rideCode}</p><div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1 text-slate-600"><span>Technical time</span><strong className="text-right text-slate-900">{ride.minutes} min</strong><span>Downtime events</span><strong className="text-right text-slate-900">{ride.events}</strong><span>Severity</span><strong className="text-right" style={{ color: severity.color }}>{severity.label}</strong></div></div>;
+  return (
+    <div className="rounded-xl border border-[#adbBda]/70 bg-[#f8f9ff] px-3 py-2.5 text-xs text-slate-700 shadow-lg">
+      <p className="font-bold text-slate-900">{ride.attraction}</p>
+      <p className="mt-1 font-mono-report text-[#3d52a0]">{ride.rideCode}</p>
+      <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1 text-slate-600">
+        <span>Technical time</span>
+        <strong className="text-right text-slate-900">{ride.minutes} min</strong>
+        <span>Downtime events</span>
+        <strong className="text-right text-slate-900">{ride.events}</strong>
+        <span>Severity</span>
+        <strong className="text-right" style={{ color: severity.color }}>{severity.label}</strong>
+      </div>
+    </div>
+  );
 }
 
 export default function Home() {
@@ -144,22 +191,446 @@ export default function Home() {
     setClosureToAdd(undefined);
     setResponse(undefined);
   };
-  const removeHandoverClosure = (rideCode: string) => { setHandoverClosedRides(current => current.filter(code => code !== rideCode)); setResponse(undefined); };
+  const removeHandoverClosure = (rideCode: string) => {
+    setHandoverClosedRides(current => current.filter(code => code !== rideCode));
+    setResponse(undefined);
+  };
 
-  return <DashboardLayout><div className="min-h-[calc(100vh-2rem)] text-slate-900"><section className="park-sky paper-grid relative overflow-hidden rounded-3xl border border-emerald-100 px-6 py-8 shadow-sm sm:px-9"><div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-sky-200/35 blur-3xl" /><div className="absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-amber-200/45 blur-3xl" /><div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"><div className="max-w-2xl"><div className="mb-4 flex items-center gap-2"><Badge className="rounded-full bg-emerald-800 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800">Park operations</Badge><span className="font-mono-report text-xs text-emerald-800/70">Technical 11-1 only</span></div><h1 className="text-3xl font-extrabold tracking-[-0.055em] text-emerald-950 sm:text-4xl">Downtime Report Studio</h1><p className="mt-3 max-w-xl text-sm leading-6 text-emerald-950/70">Upload a daily Operations downtime log, add any confirmed handover closures or weather annotations, then generate a template-ready report for review.</p></div><div className="flex max-w-md items-start gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" /><p className="text-xs leading-5 text-slate-600"><strong className="text-slate-900">Template-safe output.</strong> Only Technical 11-1 downtime contributes to availability. Weather maps in light yellow and 11-10 fire alarms map in green; neither changes downtime percentage.</p></div></div></section>
+  return (
+    <DashboardLayout>
+      <div className="min-h-[calc(100vh-2rem)] text-slate-900">
+        {/* Header Hero */}
+        <section className="park-sky paper-grid relative overflow-hidden rounded-3xl border border-emerald-100 px-6 py-8 shadow-sm sm:px-9">
+          <div className="absolute -right-20 -top-24 h-72 w-72 rounded-full bg-sky-200/35 blur-3xl" />
+          <div className="absolute bottom-0 left-1/3 h-40 w-40 rounded-full bg-amber-200/45 blur-3xl" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-4 flex items-center gap-2">
+                <Badge className="rounded-full bg-emerald-800 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-800">
+                  <EditableText contentKey="home_badge_pill" defaultText="Park operations" />
+                </Badge>
+                <span className="font-mono-report text-xs text-emerald-800/70">
+                  <EditableText contentKey="home_badge_sub" defaultText="Technical 11-1 only" />
+                </span>
+              </div>
+              <EditableText
+                contentKey="home_main_title"
+                defaultText="Downtime Report Studio"
+                as="h1"
+                className="text-3xl font-extrabold tracking-[-0.055em] text-emerald-950 sm:text-4xl block"
+              />
+              <EditableText
+                contentKey="home_main_desc"
+                defaultText="Upload a daily Operations downtime log, add any confirmed handover closures or weather annotations, then generate a template-ready report for review."
+                as="p"
+                className="mt-3 max-w-xl text-sm leading-6 text-emerald-950/70 block"
+              />
+            </div>
+            <div className="flex max-w-md items-start gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700" />
+              <p className="text-xs leading-5 text-slate-600">
+                <EditableText
+                  contentKey="home_template_safe_heading"
+                  defaultText="Template-safe output."
+                  as="strong"
+                  className="text-slate-900 mr-1"
+                />
+                <EditableText
+                  contentKey="home_template_safe_text"
+                  defaultText="Only Technical 11-1 downtime contributes to availability. Weather maps in light yellow and 11-10 fire alarms map in green; neither changes downtime percentage."
+                  as="span"
+                />
+              </p>
+            </div>
+          </div>
+        </section>
 
-    <section className="mt-7"><Card className="border-slate-200 bg-white shadow-sm"><CardContent className="p-6 sm:p-7"><div className="flex items-start justify-between gap-4"><div><p className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-700">01 · Configure report</p><h2 className="mt-2 text-xl font-extrabold tracking-tight">Build a clean report review</h2></div><div className="rounded-xl bg-amber-50 p-2.5 text-amber-700"><FileUp className="h-5 w-5" /></div></div><div className="mt-6"><FileDropzone label="Operations downtime log" note="Drop any daily Operations downtime XLSX workbook here. Its date is placed in the cleared V2 template automatically." file={operationsFile} onFile={setOperationsFile} /></div>
+        {/* Configuration Card */}
+        <section className="mt-7">
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-6 sm:p-7">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <EditableText
+                    contentKey="home_step1"
+                    defaultText="01 · Configure report"
+                    as="p"
+                    className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-emerald-700 block"
+                  />
+                  <EditableText
+                    contentKey="home_step1_title"
+                    defaultText="Build a clean report review"
+                    as="h2"
+                    className="mt-2 text-xl font-extrabold tracking-tight block"
+                  />
+                </div>
+                <div className="rounded-xl bg-amber-50 p-2.5 text-amber-700">
+                  <FileUp className="h-5 w-5" />
+                </div>
+              </div>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-2"><div className="rounded-2xl border border-amber-100 bg-amber-50/55 p-4 sm:p-5"><div className="flex items-start justify-between gap-4"><div className="flex gap-3"><div className="rounded-xl bg-amber-100 p-2 text-amber-800"><CircleOff className="h-4 w-4" /></div><div><p className="text-sm font-extrabold text-slate-900">Handover closure check <span className="ml-1 font-normal text-slate-500">(optional)</span></p><p className="mt-1 text-xs leading-5 text-slate-600">Optional — add a ride only when it did not hand over but is not marked CLOSED in the Operations log.</p></div></div><Badge variant="outline" className="h-fit border-amber-200 bg-white text-amber-800">{handoverClosedRides.length} selected</Badge></div><div className="mt-4 flex flex-col gap-2 sm:flex-row"><Select value={closureToAdd} onValueChange={setClosureToAdd}><SelectTrigger className="h-11 flex-1 rounded-xl bg-white"><SelectValue placeholder="Select a closed ride" /></SelectTrigger><SelectContent>{HANDOVER_RIDES.filter(([code]) => !handoverClosedRides.includes(code)).map(([code, name]) => <SelectItem key={code} value={code}><span className="font-mono-report font-bold">{code}</span><span className="ml-2 text-slate-500">{name}</span></SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" onClick={addHandoverClosure} disabled={!closureToAdd} className="h-11 rounded-xl border-amber-200 bg-white px-4 font-bold text-amber-900 hover:bg-amber-100">Add ride</Button></div>{handoverClosedRides.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{handoverClosedRides.map(code => <button key={code} type="button" onClick={() => removeHandoverClosure(code)} className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-900 transition-colors hover:bg-amber-100"><span className="font-mono-report">{code}</span><X className="h-3.5 w-3.5" /></button>)}</div>}</div>
+              <div className="mt-6">
+                <FileDropzone
+                  label="Operations downtime log"
+                  note="Drop any daily Operations downtime XLSX workbook here. Its date is placed in the cleared V2 template automatically."
+                  file={operationsFile}
+                  onFile={setOperationsFile}
+                />
+              </div>
 
-      <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 sm:p-5"><div className="flex items-start justify-between gap-4"><div className="flex gap-3"><div className="rounded-xl bg-sky-100 p-2 text-sky-800"><CloudSun className="h-4 w-4" /></div><div><p className="text-sm font-extrabold text-slate-900">Add weather messages</p><p className="mt-1 text-xs leading-5 text-slate-600">Paste WhatsApp start and resume updates to draw confirmed weather intervals in the workbook.</p></div></div><Switch aria-label="Enable weather mapping" checked={weatherEnabled} onCheckedChange={setWeatherEnabled} /></div>{weatherEnabled && <div className="mt-4"><Textarea value={weatherText} onChange={event => setWeatherText(event.target.value)} placeholder="Paste weather messages here, including 11-3 starts and 11-8 resumes…" className="min-h-32 resize-y rounded-xl border-sky-200 bg-white text-sm leading-5 focus-visible:ring-sky-600" /><p className="mt-2 text-[11px] leading-5 text-sky-800">Only recognised ride codes with both a weather start and resume are mapped. Operator initials and incomplete intervals are ignored.</p></div>}</div></div>
+              <div className="mt-5 grid gap-5 xl:grid-cols-2">
+                {/* Handover closure check */}
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/55 p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-3">
+                      <div className="rounded-xl bg-amber-100 p-2 text-amber-800">
+                        <CircleOff className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-extrabold text-slate-900">
+                          <EditableText contentKey="home_handover_title" defaultText="Handover closure check" />
+                          <span className="ml-1 font-normal text-slate-500">(optional)</span>
+                        </p>
+                        <EditableText
+                          contentKey="home_handover_desc"
+                          defaultText="Optional — add a ride only when it did not hand over but is not marked CLOSED in the Operations log."
+                          as="p"
+                          className="mt-1 text-xs leading-5 text-slate-600 block"
+                        />
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="h-fit border-amber-200 bg-white text-amber-800">
+                      {handoverClosedRides.length} selected
+                    </Badge>
+                  </div>
 
-      <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4"><Switch id="save-report" checked={saveToStorage} onCheckedChange={setSaveToStorage} className="mt-0.5" /><div><label htmlFor="save-report" className="cursor-pointer text-sm font-extrabold text-slate-900">Save this report to the website</label><p className="mt-1 text-xs leading-5 text-slate-600">Store the source downtime log and its generated workbook in the Saved reports library. Leave off for a one-time download.</p></div><Archive className="ml-auto h-5 w-5 shrink-0 text-emerald-700" /></div>
-      {error && <div className="mt-4 flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"><TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
-      <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between"><p className="max-w-2xl text-xs leading-5 text-slate-500">The tool selects <strong>Technical 11-1</strong> downtime only, excludes AVL, applies any handover closures and completed weather mappings, and writes availability only in the first weekly day column.</p><Button disabled={processing} onClick={buildReview} className="h-11 rounded-xl bg-emerald-800 px-5 font-bold text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97]">{processing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Building review</> : <>Build review <ArrowRight className="ml-2 h-4 w-4" /></>}</Button></div></CardContent></Card></section>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <Select value={closureToAdd} onValueChange={setClosureToAdd}>
+                      <SelectTrigger className="h-11 flex-1 rounded-xl bg-white">
+                        <SelectValue placeholder="Select a closed ride" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {HANDOVER_RIDES.filter(([code]) => !handoverClosedRides.includes(code)).map(([code, name]) => (
+                          <SelectItem key={code} value={code}>
+                            <span className="font-mono-report font-bold">{code}</span>
+                            <span className="ml-2 text-slate-500">{name}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={addHandoverClosure}
+                      disabled={!closureToAdd}
+                      className="h-11 rounded-xl border-amber-200 bg-white px-4 font-bold text-amber-900 hover:bg-amber-100"
+                    >
+                      <EditableText contentKey="home_add_ride_btn" defaultText="Add ride" />
+                    </Button>
+                  </div>
 
-    {response && <section className="mt-7 space-y-5"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[{ label: "Matched Technical 11-1", value: response.matchedCount, note: response.unmatchedCount ? `${response.unmatchedCount} need attention` : "AVL excluded", tone: "text-emerald-700 bg-emerald-50" }, { label: "Technical downtime", value: `${response.totalTechnicalMinutes} min`, note: "start → ride readiness", tone: "text-sky-700 bg-sky-50" }, { label: "Total downtime percentage", value: `${response.totalNetworkPercentage.toFixed(3)}%`, note: "total minutes ÷ minutes of 19 rides", tone: "text-amber-800 bg-amber-50" }, { label: "Evac of 11-7/11-17 (mins)", value: `${response.totalEvacuationMinutes} min`, note: "technical-event evacuation time", tone: "text-cyan-800 bg-cyan-50" }, { label: "Evacuation count", value: response.totalEvacuationEvents, note: "11-7 / 11-17 occurrences", tone: "text-indigo-800 bg-indigo-50" }, { label: "Visual mappings", value: (response.weatherIntervalCount ?? 0) + (response.fireAlarmCount ?? 0), note: `${response.weatherIntervalCount ?? 0} weather · ${response.fireAlarmCount ?? 0} fire alarm`, tone: "text-orange-800 bg-orange-50" }].map(stat => <Card key={stat.label} className="border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><p className="text-xs font-bold text-slate-500">{stat.label}</p><p className="mt-2 text-2xl font-extrabold tracking-tight">{stat.value}</p><span className={`mt-3 inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${stat.tone}`}>{stat.note}</span></CardContent></Card>)}</div>
-      <div className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]"><Card className="border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-start justify-between"><div><p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-emerald-700">02 · Reporting view</p><h2 className="mt-2 text-lg font-extrabold tracking-tight">Technical downtime by ride</h2><p className="mt-1 text-xs text-slate-500">Bar colours flag incident severity by total downtime minutes per ride.</p></div><ChevronRight className="h-5 w-5 text-amber-500" /></div><div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500">{[0, 30, 60, 120].map(minutes => { const severity = severityForMinutes(minutes); return <span key={minutes} className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: severity.color }} />{severity.label}</span>; })}</div><div className="mt-5 h-72">{chartData.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 2, left: 4 }}><CartesianGrid vertical={false} stroke="rgb(112 145 230 / 0.28)" /><XAxis dataKey="rideCode" tickLine={false} axisLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#596783" }} /><YAxis width={68} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} tickFormatter={(value: number) => `${value} min`} /><Tooltip cursor={{ fill: "rgb(112 145 230 / 0.12)" }} content={<RideChartTooltip />} /><Bar dataKey="minutes" radius={[7, 7, 0, 0]}>{chartData.map(item => <Cell key={item.rideCode} fill={severityForMinutes(item.minutes).color} />)}</Bar></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-500">No matched ride data available.</div>}</div></CardContent></Card>
-      <Card className="border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-emerald-700">03 · Pre-export review</p><h2 className="mt-2 text-lg font-extrabold tracking-tight">Technical records only</h2><p className="mt-1 text-xs text-slate-500">Before exporting, check the <strong>Match</strong> column to ensure every downtime item has been successfully mapped in the XLSX file.</p></div><Button asChild className="h-10 shrink-0 rounded-xl bg-emerald-800 font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97]"><a href={response.downloadUrl} download={response.outputFileName}><Download className="mr-2 h-4 w-4" />Download XLSX</a></Button></div><div className="mt-5 max-h-72 overflow-auto rounded-xl border border-slate-200"><table className="w-full min-w-[820px] text-left text-xs"><thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr><th className="px-3 py-3">Match</th><th className="px-3 py-3">Ride</th><th className="px-3 py-3">Incident</th><th className="px-3 py-3">Technical</th><th className="px-3 py-3">%</th><th className="px-3 py-3">Ops</th><th className="px-3 py-3">Evac</th></tr></thead><tbody className="divide-y divide-slate-100">{response.records.map(record => <tr key={`${record.sourceRow}-${record.rideCode ?? record.attraction}`} className="align-top"><td className="px-3 py-3">{record.status !== "matched" ? <span className="font-bold text-rose-700">Needs match</span> : record.isClosed ? <span className="inline-flex items-center gap-1 font-bold text-purple-800">Closed</span> : <span className="inline-flex items-center gap-1 font-bold text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{record.rideCode}</span>}</td><td className="px-3 py-3 font-semibold text-slate-700">{record.attraction}<span className="mt-1 block font-mono-report text-[10px] font-normal text-slate-400">{record.dateLabel} · {record.sourceRow ? `Row ${record.sourceRow}` : "Handover selection"}</span></td><td className="max-w-56 px-3 py-3 leading-5 text-slate-600"><p className="line-clamp-2">{record.description || "No description"}</p>{record.status === "unmatched" && <p className="mt-1 text-[10px] text-rose-600">{record.matchNote}</p>}</td><td className={`px-3 py-3 whitespace-nowrap font-mono-report ${record.isClosed ? "text-purple-800" : "text-sky-800"}`}>{record.isClosed ? "10:00–18:00" : <>{displayTime(record.technicalStart)}–{displayTime(record.technicalEnd)}<span className="mt-1 block text-[10px] text-sky-600">{record.technicalMinutes} min</span></>}</td><td className={`px-3 py-3 whitespace-nowrap font-mono-report ${record.downtimePercentage >= 1 ? "font-bold text-red-600" : "text-amber-800"}`}>{record.isClosed ? "—" : `${record.downtimePercentage.toFixed(3)}%`}</td><td className="px-3 py-3 whitespace-nowrap font-mono-report text-pink-700">{record.isClosed || record.operationsEnd === undefined ? "—" : `${record.operationsMinutes} min`}</td><td className="px-3 py-3 whitespace-nowrap font-mono-report text-cyan-800">{record.isClosed || record.evacuationEnd === undefined ? "—" : `${record.evacuationMinutes} min`}</td></tr>)}</tbody></table></div></CardContent></Card></div></section>}
-  </div></DashboardLayout>;
+                  {handoverClosedRides.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {handoverClosedRides.map(code => (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => removeHandoverClosure(code)}
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-900 transition-colors hover:bg-amber-100"
+                        >
+                          <span className="font-mono-report">{code}</span>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add weather messages */}
+                <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex gap-3">
+                      <div className="rounded-xl bg-sky-100 p-2 text-sky-800">
+                        <CloudSun className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <EditableText
+                          contentKey="home_weather_title"
+                          defaultText="Add weather messages"
+                          as="p"
+                          className="text-sm font-extrabold text-slate-900 block"
+                        />
+                        <EditableText
+                          contentKey="home_weather_desc"
+                          defaultText="Paste WhatsApp start and resume updates to draw confirmed weather intervals in the workbook."
+                          as="p"
+                          className="mt-1 text-xs leading-5 text-slate-600 block"
+                        />
+                      </div>
+                    </div>
+                    <Switch
+                      aria-label="Enable weather mapping"
+                      checked={weatherEnabled}
+                      onCheckedChange={setWeatherEnabled}
+                    />
+                  </div>
+
+                  {weatherEnabled && (
+                    <div className="mt-4">
+                      <Textarea
+                        value={weatherText}
+                        onChange={event => setWeatherText(event.target.value)}
+                        placeholder="Paste weather messages here, including 11-3 starts and 11-8 resumes…"
+                        className="min-h-32 resize-y rounded-xl border-sky-200 bg-white text-sm leading-5 focus-visible:ring-sky-600"
+                      />
+                      <EditableText
+                        contentKey="home_weather_note"
+                        defaultText="Only recognised ride codes with both a weather start and resume are mapped. Operator initials and incomplete intervals are ignored."
+                        as="p"
+                        className="mt-2 text-[11px] leading-5 text-sky-800 block"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Save to Website Card */}
+              <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                <Switch
+                  id="save-report"
+                  checked={saveToStorage}
+                  onCheckedChange={setSaveToStorage}
+                  className="mt-0.5"
+                />
+                <div>
+                  <label htmlFor="save-report" className="cursor-pointer text-sm font-extrabold text-slate-900 block">
+                    <EditableText contentKey="home_save_report_title" defaultText="Save this report to the website" />
+                  </label>
+                  <EditableText
+                    contentKey="home_save_report_desc"
+                    defaultText="Store the source downtime log and its generated workbook in the Saved reports library. Leave off for a one-time download."
+                    as="p"
+                    className="mt-1 text-xs leading-5 text-slate-600 block"
+                  />
+                </div>
+                <Archive className="ml-auto h-5 w-5 shrink-0 text-emerald-700" />
+              </div>
+
+              {error && (
+                <div className="mt-4 flex gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <EditableText
+                  contentKey="home_footer_explainer"
+                  defaultText="The tool selects Technical 11-1 downtime only, excludes AVL, applies any handover closures and completed weather mappings, and writes availability only in the first weekly day column."
+                  as="p"
+                  className="max-w-2xl text-xs leading-5 text-slate-500 block"
+                />
+                <Button
+                  disabled={processing}
+                  onClick={buildReview}
+                  className="h-11 rounded-xl bg-emerald-800 px-5 font-bold text-white shadow-md transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97]"
+                >
+                  {processing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <EditableText contentKey="home_building_btn" defaultText="Building review" />
+                    </>
+                  ) : (
+                    <>
+                      <EditableText contentKey="home_build_btn" defaultText="Build review" />
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Results Section */}
+        {response && (
+          <section className="mt-7 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[
+                { key: "home_stat_1", label: "Matched Technical 11-1", value: response.matchedCount, note: response.unmatchedCount ? `${response.unmatchedCount} need attention` : "AVL excluded", tone: "text-emerald-700 bg-emerald-50" },
+                { key: "home_stat_2", label: "Technical downtime", value: `${response.totalTechnicalMinutes} min`, note: "start → ride readiness", tone: "text-sky-700 bg-sky-50" },
+                { key: "home_stat_3", label: "Total downtime percentage", value: `${response.totalNetworkPercentage.toFixed(3)}%`, note: "total minutes ÷ minutes of 19 rides", tone: "text-amber-800 bg-amber-50" },
+                { key: "home_stat_4", label: "Evac of 11-7/11-17 (mins)", value: `${response.totalEvacuationMinutes} min`, note: "technical-event evacuation time", tone: "text-cyan-800 bg-cyan-50" },
+                { key: "home_stat_5", label: "Evacuation count", value: response.totalEvacuationEvents, note: "11-7 / 11-17 occurrences", tone: "text-indigo-800 bg-indigo-50" },
+                { key: "home_stat_6", label: "Visual mappings", value: (response.weatherIntervalCount ?? 0) + (response.fireAlarmCount ?? 0), note: `${response.weatherIntervalCount ?? 0} weather · ${response.fireAlarmCount ?? 0} fire alarm`, tone: "text-orange-800 bg-orange-50" },
+              ].map(stat => (
+                <Card key={stat.key} className="border-slate-200 bg-white shadow-sm">
+                  <CardContent className="p-5">
+                    <EditableText
+                      contentKey={stat.key}
+                      defaultText={stat.label}
+                      as="p"
+                      className="text-xs font-bold text-slate-500 block"
+                    />
+                    <p className="mt-2 text-2xl font-extrabold tracking-tight">{stat.value}</p>
+                    <span className={`mt-3 inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${stat.tone}`}>
+                      {stat.note}
+                    </span>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[0.88fr_1.12fr]">
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <EditableText
+                        contentKey="home_chart_step"
+                        defaultText="02 · Reporting view"
+                        as="p"
+                        className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-emerald-700 block"
+                      />
+                      <EditableText
+                        contentKey="home_chart_title"
+                        defaultText="Technical downtime by ride"
+                        as="h2"
+                        className="mt-2 text-lg font-extrabold tracking-tight block"
+                      />
+                      <EditableText
+                        contentKey="home_chart_desc"
+                        defaultText="Bar colours flag incident severity by total downtime minutes per ride."
+                        as="p"
+                        className="mt-1 text-xs text-slate-500 block"
+                      />
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-amber-500" />
+                  </div>
+
+                  <div className="mt-5 h-72">
+                    {chartData.length ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 2, left: 4 }}>
+                          <CartesianGrid vertical={false} stroke="rgb(112 145 230 / 0.28)" />
+                          <XAxis dataKey="rideCode" tickLine={false} axisLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#596783" }} />
+                          <YAxis width={68} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} tickFormatter={(value: number) => `${value} min`} />
+                          <Tooltip cursor={{ fill: "rgb(112 145 230 / 0.12)" }} content={<RideChartTooltip />} />
+                          <Bar dataKey="minutes" radius={[7, 7, 0, 0]}>
+                            {chartData.map(item => (
+                              <Cell key={item.rideCode} fill={severityForMinutes(item.minutes).color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center rounded-xl bg-slate-50 text-sm text-slate-500">
+                        No matched ride data available.
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 bg-white shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <EditableText
+                        contentKey="home_preview_step"
+                        defaultText="03 · Pre-export review"
+                        as="p"
+                        className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-emerald-700 block"
+                      />
+                      <EditableText
+                        contentKey="home_preview_title"
+                        defaultText="Technical records only"
+                        as="h2"
+                        className="mt-2 text-lg font-extrabold tracking-tight block"
+                      />
+                      <EditableText
+                        contentKey="home_preview_desc"
+                        defaultText="Before exporting, check the Match column to ensure every downtime item has been successfully mapped in the XLSX file."
+                        as="p"
+                        className="mt-1 text-xs text-slate-500 block"
+                      />
+                    </div>
+                    <Button asChild className="h-10 shrink-0 rounded-xl bg-emerald-800 font-bold text-white shadow-sm transition-all duration-200 hover:bg-emerald-700 active:scale-[0.97]">
+                      <a href={response.downloadUrl} download={response.outputFileName}>
+                        <Download className="mr-2 h-4 w-4" />
+                        <EditableText contentKey="home_download_btn" defaultText="Download XLSX" />
+                      </a>
+                    </Button>
+                  </div>
+
+                  <div className="mt-5 max-h-72 overflow-auto rounded-xl border border-slate-200">
+                    <table className="w-full min-w-[820px] text-left text-xs">
+                      <thead className="sticky top-0 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
+                        <tr>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_match" defaultText="Match" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_ride" defaultText="Ride" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_incident" defaultText="Incident" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_tech" defaultText="Technical" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_pct" defaultText="%" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_ops" defaultText="Ops" /></th>
+                          <th className="px-3 py-3"><EditableText contentKey="th_home_evac" defaultText="Evac" /></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {response.records.map(record => (
+                          <tr key={`${record.sourceRow}-${record.rideCode ?? record.attraction}`} className="align-top">
+                            <td className="px-3 py-3">
+                              {record.status !== "matched" ? (
+                                <span className="font-bold text-rose-700">Needs match</span>
+                              ) : record.isClosed ? (
+                                <span className="inline-flex items-center gap-1 font-bold text-purple-800">Closed</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  {record.rideCode}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 font-semibold text-slate-700">
+                              {record.attraction}
+                              <span className="mt-1 block font-mono-report text-[10px] font-normal text-slate-400">
+                                {record.dateLabel} · {record.sourceRow ? `Row ${record.sourceRow}` : "Handover selection"}
+                              </span>
+                            </td>
+                            <td className="max-w-56 px-3 py-3 leading-5 text-slate-600">
+                              <p className="line-clamp-2">{record.description || "No description"}</p>
+                              {record.status === "unmatched" && (
+                                <p className="mt-1 text-[10px] text-rose-600">{record.matchNote}</p>
+                              )}
+                            </td>
+                            <td className={`px-3 py-3 whitespace-nowrap font-mono-report ${record.isClosed ? "text-purple-800" : "text-sky-800"}`}>
+                              {record.isClosed ? "10:00–18:00" : (
+                                <>
+                                  {displayTime(record.technicalStart)}–{displayTime(record.technicalEnd)}
+                                  <span className="mt-1 block text-[10px] text-sky-600">{record.technicalMinutes} min</span>
+                                </>
+                              )}
+                            </td>
+                            <td className={`px-3 py-3 whitespace-nowrap font-mono-report ${record.downtimePercentage >= 1 ? "font-bold text-red-600" : "text-amber-800"}`}>
+                              {record.isClosed ? "—" : `${record.downtimePercentage.toFixed(3)}%`}
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap font-mono-report text-pink-700">
+                              {record.isClosed || record.operationsEnd === undefined ? "—" : `${record.operationsMinutes} min`}
+                            </td>
+                            <td className="px-3 py-3 whitespace-nowrap font-mono-report text-cyan-800">
+                              {record.isClosed || record.evacuationEnd === undefined ? "—" : `${record.evacuationMinutes} min`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+        )}
+      </div>
+    </DashboardLayout>
+  );
 }

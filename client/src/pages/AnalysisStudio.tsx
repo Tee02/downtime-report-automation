@@ -54,11 +54,13 @@ function dateKey(value: Date) {
 }
 
 function Metric({
+  contentKey,
   label,
   value,
   detail,
   tone = "blue",
 }: {
+  contentKey?: string;
   label: string;
   value: string | number;
   detail: string;
@@ -74,7 +76,16 @@ function Metric({
   return (
     <Card className="border-[#adbBda]/70 bg-white/80 shadow-[0_14px_35px_rgba(61,82,160,0.10)]">
       <CardContent className="p-5">
-        <p className="text-xs font-bold text-slate-500">{label}</p>
+        {contentKey ? (
+          <EditableText
+            contentKey={`metric_${contentKey}`}
+            defaultText={label}
+            as="p"
+            className="text-xs font-bold text-slate-500 block"
+          />
+        ) : (
+          <p className="text-xs font-bold text-slate-500">{label}</p>
+        )}
         <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{value}</p>
         <span className={`mt-3 inline-block rounded-full px-2.5 py-1 text-[10px] font-bold ${classes[tone]}`}>
           {detail}
@@ -547,23 +558,27 @@ export default function AnalysisStudio() {
                   {/* Metrics grid row 1 */}
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Metric
+                      contentKey="total_tech"
                       label="Total technical downtime"
                       value={`${analysis.totalTechnicalMinutes} min`}
                       detail={`${analysis.selectedDayCount} selected day${analysis.selectedDayCount === 1 ? "" : "s"}`}
                     />
                     <Metric
+                      contentKey="recorded_incidents"
                       label="Recorded incidents"
                       value={analysis.totalEvents}
                       detail={`${analysis.averageEventsPerDay.toFixed(1)} average per day`}
                       tone="rose"
                     />
                     <Metric
+                      contentKey="evac_mins"
                       label="Evac of 11-7/11-17 (mins)"
                       value={`${analysis.totalEvacuationMinutes} min`}
                       detail="technical-record evacuation time"
                       tone="amber"
                     />
                     <Metric
+                      contentKey="evac_count"
                       label="Evacuation count"
                       value={analysis.totalEvacuationEvents}
                       detail="11-7 / 11-17 occurrences"
@@ -574,24 +589,28 @@ export default function AnalysisStudio() {
                   {/* Metrics grid row 2 */}
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <Metric
+                      contentKey="avg_dt_pct"
                       label="Average downtime %"
                       value={`${analysis.averageDowntimePercentage.toFixed(3)}%`}
                       detail="mean of selected daily rates"
                       tone="amber"
                     />
                     <Metric
+                      contentKey="avg_interruption"
                       label="Average interruption"
                       value={`${analysis.averageIncidentMinutes.toFixed(1)} min`}
                       detail="technical minutes per event"
                       tone="blue"
                     />
                     <Metric
+                      contentKey="peak_day"
                       label="Peak downtime day"
                       value={analysis.peakDay ? `${analysis.peakDay.minutes} min` : "—"}
                       detail={analysis.peakDay ? analysis.peakDay.label : "no technical events"}
                       tone="rose"
                     />
                     <Metric
+                      contentKey="rides_affected"
                       label="Rides affected"
                       value={analysis.affectedRideCount}
                       detail={`${analysis.selectedRideCount} ride${analysis.selectedRideCount === 1 ? "" : "s"} in scope`}
@@ -606,15 +625,24 @@ export default function AnalysisStudio() {
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0]">
-                              Daily comparison
-                            </p>
-                            <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-                              Technical downtime trend
-                            </h2>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Colour reflects incident severity by total downtime minutes per date.
-                            </p>
+                            <EditableText
+                              contentKey="analysis_daily_step"
+                              defaultText="Daily comparison"
+                              as="p"
+                              className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0] block"
+                            />
+                            <EditableText
+                              contentKey="analysis_daily_title"
+                              defaultText="Technical downtime trend"
+                              as="h2"
+                              className="mt-2 text-lg font-extrabold tracking-tight block"
+                            />
+                            <EditableText
+                              contentKey="analysis_daily_desc"
+                              defaultText="Colour reflects incident severity by total downtime minutes per date."
+                              as="p"
+                              className="mt-1 text-xs text-slate-500 block"
+                            />
                           </div>
                           <TrendingDown className="h-5 w-5 text-[#3D52A0]" />
                         </div>
@@ -684,15 +712,24 @@ export default function AnalysisStudio() {
                       <CardContent className="p-6">
                         <div className="flex items-start justify-between">
                           <div>
-                            <p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0]">
-                              Weekday pattern
-                            </p>
-                            <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-                              Most downtime by day of week
-                            </h2>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Compare totals and average minutes on matching weekdays (Monday to Sunday).
-                            </p>
+                            <EditableText
+                              contentKey="analysis_weekday_step"
+                              defaultText="Weekday pattern"
+                              as="p"
+                              className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0] block"
+                            />
+                            <EditableText
+                              contentKey="analysis_weekday_title"
+                              defaultText="Most downtime by day of week"
+                              as="h2"
+                              className="mt-2 text-lg font-extrabold tracking-tight block"
+                            />
+                            <EditableText
+                              contentKey="analysis_weekday_desc"
+                              defaultText="Compare totals and average minutes on matching weekdays (Monday to Sunday)."
+                              as="p"
+                              className="mt-1 text-xs text-slate-500 block"
+                            />
                           </div>
                           <CalendarDays className="h-5 w-5 text-[#3D52A0]" />
                         </div>
@@ -756,15 +793,24 @@ export default function AnalysisStudio() {
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0]">
-                            Ride ranking
-                          </p>
-                          <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-                            Lowest availability first
-                          </h2>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Top 5 rides displayed by default. Scroll inside the table to view the remaining fleet rankings.
-                          </p>
+                          <EditableText
+                            contentKey="analysis_ranking_step"
+                            defaultText="Ride ranking"
+                            as="p"
+                            className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0] block"
+                          />
+                          <EditableText
+                            contentKey="analysis_ranking_title"
+                            defaultText="Lowest availability first"
+                            as="h2"
+                            className="mt-2 text-lg font-extrabold tracking-tight block"
+                          />
+                          <EditableText
+                            contentKey="analysis_ranking_desc"
+                            defaultText="Top 5 rides displayed by default. Scroll inside the table to view the remaining fleet rankings."
+                            as="p"
+                            className="mt-1 text-xs text-slate-500 block"
+                          />
                         </div>
                         <Medal className="h-5 w-5 text-[#3D52A0]" />
                       </div>
@@ -772,12 +818,12 @@ export default function AnalysisStudio() {
                         <table className="w-full min-w-[760px] text-left text-xs">
                           <thead className="sticky top-0 z-10 bg-[#ede8f5] uppercase tracking-[0.08em] text-slate-500">
                             <tr>
-                              <th className="px-4 py-3">Rank</th>
-                              <th className="px-4 py-3">Ride</th>
-                              <th className="px-4 py-3">Availability</th>
-                              <th className="px-4 py-3">Technical downtime</th>
-                              <th className="px-4 py-3">Events</th>
-                              <th className="px-4 py-3">Evacuation</th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_rank" defaultText="Rank" /></th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_ride" defaultText="Ride" /></th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_avail" defaultText="Availability" /></th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_tech_dt" defaultText="Technical downtime" /></th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_events" defaultText="Events" /></th>
+                              <th className="px-4 py-3"><EditableText contentKey="th_evac" defaultText="Evacuation" /></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#adbBda]/40">
@@ -829,17 +875,28 @@ export default function AnalysisStudio() {
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0]">
-                            Incident log intelligence
-                          </p>
-                          <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-                            Ride Incident Logs
-                          </h2>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {selectedRideCodes.length === 0
-                              ? "Displaying incident remarks for all rides across the selected dates."
-                              : `Displaying incident remarks filtered for ${selectedRideCodes.join(", ")}.`}
-                          </p>
+                          <EditableText
+                            contentKey="analysis_incident_step"
+                            defaultText="Incident log intelligence"
+                            as="p"
+                            className="font-mono-report text-[11px] uppercase tracking-[0.16em] text-[#3D52A0] block"
+                          />
+                          <EditableText
+                            contentKey="analysis_incident_title"
+                            defaultText="Ride Incident Logs"
+                            as="h2"
+                            className="mt-2 text-lg font-extrabold tracking-tight block"
+                          />
+                          <EditableText
+                            contentKey="analysis_incident_desc"
+                            defaultText={
+                              selectedRideCodes.length === 0
+                                ? "Displaying incident remarks for all rides across the selected dates."
+                                : `Displaying incident remarks filtered for ${selectedRideCodes.join(", ")}.`
+                            }
+                            as="p"
+                            className="mt-1 text-xs text-slate-500 block"
+                          />
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge

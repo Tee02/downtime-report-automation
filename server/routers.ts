@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { deleteSavedDowntimeReport, getSavedDowntimeReportsByIds, getSiteContent, listDarkDays, listSavedDowntimeReports, setDarkDay, setSiteContent, upsertUser } from "./db";
+import { deleteSavedDowntimeReport, getSavedDowntimeReportsByIds, getSiteContent, listAllSiteContent, listDarkDays, listSavedDowntimeReports, setDarkDay, setSiteContent, upsertUser } from "./db";
 import { buildAnalysis, exportCompiledDowntimeLog, loadSavedDowntimeReports } from "./downtimeAnalysis";
 
 const analysisInput = z.object({
@@ -24,7 +24,7 @@ export const appRouter = router({
         if (input.passcode.trim() !== "494") {
           throw new TRPCError({
             code: "UNAUTHORIZED",
-            message: "Invalid passcode. Please try again.",
+            message: "Incorrect password. Please try again.",
           });
         }
 
@@ -77,6 +77,9 @@ export const appRouter = router({
     }),
   }),
   siteContent: router({
+    list: publicProcedure.query(async () => {
+      return listAllSiteContent();
+    }),
     get: publicProcedure
       .input(z.object({ key: z.string() }))
       .query(async ({ input }) => {

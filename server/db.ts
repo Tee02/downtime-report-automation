@@ -148,6 +148,17 @@ export async function getSiteContent(contentKey: string): Promise<string | null>
   return rows[0]?.contentValue ?? null;
 }
 
+export async function listAllSiteContent(): Promise<Record<string, string>> {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.select().from(siteContent);
+  const map: Record<string, string> = {};
+  rows.forEach(r => {
+    map[r.contentKey] = r.contentValue;
+  });
+  return map;
+}
+
 export async function setSiteContent(contentKey: string, contentValue: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("The database is temporarily unavailable.");
