@@ -761,7 +761,6 @@ function SlotConfigCard({
   const [isEditingName, setIsEditingName] = useState(false);
   const [searchRide, setSearchRide] = useState("");
   const [rangeStartKey, setRangeStartKey] = useState<string | null>(null);
-  const [isRangeMode, setIsRangeMode] = useState(false);
 
   const filteredRides = FLEET_RIDES.filter(([c, n]) => {
     if (!searchRide) return true;
@@ -769,30 +768,66 @@ function SlotConfigCard({
     return c.toLowerCase().includes(q) || n.toLowerCase().includes(q);
   });
 
+  const sortedSlotKeys = useMemo(
+    () => Array.from(slot.dateKeys).sort(),
+    [slot.dateKeys]
+  );
+
+  const rangeStartObj = useMemo(() => {
+    if (rangeStartKey) return new Date(`${rangeStartKey}T12:00:00`);
+    if (sortedSlotKeys.length > 1) return new Date(`${sortedSlotKeys[0]}T12:00:00`);
+    return undefined;
+  }, [rangeStartKey, sortedSlotKeys]);
+
+  const rangeEndObj = useMemo(() => {
+    if (rangeStartKey) return undefined;
+    if (sortedSlotKeys.length > 1) return new Date(`${sortedSlotKeys[sortedSlotKeys.length - 1]}T12:00:00`);
+    return undefined;
+  }, [rangeStartKey, sortedSlotKeys]);
+
+  const rangeMiddleObjs = useMemo(() => {
+    if (!rangeStartObj || !rangeEndObj) return [];
+    const dates: Date[] = [];
+    const cursor = new Date(rangeStartObj);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor < rangeEndObj) {
+      dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return dates;
+  }, [rangeStartObj, rangeEndObj]);
+
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
+
   const handleDayClick = (day: Date) => {
     const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
     if (!availableDateKeys.includes(key)) return;
 
-    if (isRangeMode) {
-      if (!rangeStartKey) {
-        setRangeStartKey(key);
-        return;
-      }
-      const start = rangeStartKey < key ? rangeStartKey : key;
-      const end = rangeStartKey < key ? key : rangeStartKey;
-      const inRange = availableDateKeys.filter(k => k >= start && k <= end);
-      const next = new Set(slot.dateKeys);
-      inRange.forEach(k => next.add(k));
-      onDatesChange(next);
-      setRangeStartKey(null);
-      toast.success(`Selected range from ${formatDMy(start)} to ${formatDMy(end)}.`);
+    if (!rangeStartKey) {
+      setRangeStartKey(key);
+      toast.info(`Start date set to ${formatDMy(key)}. Click end date to highlight all dates in between.`);
       return;
     }
 
-    const next = new Set(slot.dateKeys);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    onDatesChange(next);
+    if (rangeStartKey === key) {
+      onDatesChange(new Set([key]));
+      setRangeStartKey(null);
+      toast.info(`Selected single date: ${formatDMy(key)}`);
+      return;
+    }
+
+    const start = rangeStartKey < key ? rangeStartKey : key;
+    const end = rangeStartKey < key ? key : rangeStartKey;
+    const inRange = availableDateKeys.filter(k => k >= start && k <= end);
+    onDatesChange(new Set(inRange));
+    setRangeStartKey(null);
+    toast.success(`Selected ${inRange.length} dates from ${formatDMy(start)} to ${formatDMy(end)}.`);
   };
 
   return (
@@ -858,19 +893,6 @@ function SlotConfigCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
-                        setIsRangeMode(!isRangeMode);
-                        setRangeStartKey(null);
-                      }}
-                      className={`h-6 px-1.5 text-[10px] font-bold ${
-                        isRangeMode ? "bg-indigo-100 text-[#3D52A0]" : "text-slate-500"
-                      }`}
-                    >
-                      {isRangeMode ? "Range: ON" : "Range Mode"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
                       onClick={() => onDatesChange(new Set(availableDateKeys))}
                       className="h-6 px-1.5 text-[10px] text-[#3D52A0] font-bold"
                     >
@@ -879,7 +901,10 @@ function SlotConfigCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onDatesChange(new Set())}
+                      onClick={() => {
+                        setRangeStartKey(null);
+                        onDatesChange(new Set());
+                      }}
                       className="h-6 px-1.5 text-[10px] text-slate-400"
                     >
                       Clear
@@ -894,6 +919,7 @@ function SlotConfigCard({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      setRangeStartKey(null);
                       if (availableDateKeys.length >= 2) {
                         onDatesChange(new Set([availableDateKeys[availableDateKeys.length - 2]]));
                       }
@@ -907,17 +933,35 @@ function SlotConfigCard({
                     variant="outline"
                     size="sm"
                     onClick={() => {
+                      setRangeStartKey(null);
                       onDatesChange(new Set(availableDateKeys.slice(-7)));
                     }}
                     className="h-5 px-1.5 text-[10px] font-semibold border-indigo-200 text-[#3D52A0]"
                   >
                     Last 7 Days
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRangeStartKey(null);
+                      if (availableDateKeys.includes(todayKey)) {
+                        onDatesChange(new Set([todayKey]));
+                      } else if (availableDateKeys.length > 0) {
+                        onDatesChange(new Set([availableDateKeys[availableDateKeys.length - 1]]));
+                      }
+                    }}
+                    className="h-5 px-1.5 text-[10px] font-semibold border-indigo-200 text-[#3D52A0]"
+                  >
+                    Latest
+                  </Button>
                 </div>
 
                 {rangeStartKey && (
-                  <div className="rounded bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] text-[#3D52A0]">
-                    Start date: <strong>{formatDMy(rangeStartKey)}</strong>. Click end date.
+                  <div className="rounded bg-indigo-50 border border-indigo-200 px-2 py-1 text-[11px] text-[#3D52A0] flex items-center justify-between">
+                    <span>Start: <strong>{formatDMy(rangeStartKey)}</strong>. Click end date.</span>
+                    <button type="button" onClick={() => setRangeStartKey(null)} className="text-[10px] text-slate-400 hover:text-slate-700 ml-2">Cancel</button>
                   </div>
                 )}
 
@@ -933,6 +977,10 @@ function SlotConfigCard({
                     weekStartsOn={1}
                     modifiers={{
                       saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
+                      rangePending: rangeStartKey ? [new Date(`${rangeStartKey}T12:00:00`)] : [],
+                      range_start: rangeStartObj ? [rangeStartObj] : [],
+                      range_end: rangeEndObj ? [rangeEndObj] : [],
+                      range_middle: rangeMiddleObjs,
                     }}
                     modifiersClassNames={{
                       saved: "font-bold text-[#3D52A0]",
@@ -948,7 +996,7 @@ function SlotConfigCard({
                       : Array.from(slot.dateKeys).sort().map(formatDMy).join(", ")}
                   </span>
                   <span className="text-[10px] text-slate-400 shrink-0">
-                    {isRangeMode ? "2-click range" : "Click to toggle"}
+                    2-click range select
                   </span>
                 </div>
               </div>

@@ -185,6 +185,12 @@ function CalendarDayButton({
   }, [modifiers.focused]);
 
   const isDarkDay = Boolean(modifiers.darkDay || modifiers.darkday);
+  const isRangePending = Boolean(modifiers.rangePending || modifiers.rangepending);
+  const isRangeStart = Boolean(modifiers.range_start || modifiers.rangeStart);
+  const isRangeEnd = Boolean(modifiers.range_end || modifiers.rangeEnd);
+  const isRangeMiddle = Boolean(modifiers.range_middle || modifiers.rangeMiddle);
+  const isSingle = Boolean(modifiers.selected && !isRangeStart && !isRangeEnd && !isRangeMiddle && !isRangePending);
+
   const buttonElement = (
     <Button
       ref={ref}
@@ -192,17 +198,18 @@ function CalendarDayButton({
       size="icon"
       data-day={day.date.toLocaleDateString()}
       data-dark-day={isDarkDay}
-      data-selected-single={
-        modifiers.selected &&
-        !modifiers.range_start &&
-        !modifiers.range_end &&
-        !modifiers.range_middle
-      }
-      data-range-start={modifiers.range_start}
-      data-range-end={modifiers.range_end}
-      data-range-middle={modifiers.range_middle}
+      data-range-pending={isRangePending}
+      data-selected-single={isSingle}
+      data-range-start={isRangeStart}
+      data-range-end={isRangeEnd}
+      data-range-middle={isRangeMiddle}
       className={cn(
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 dark:hover:text-accent-foreground flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md [&>span]:text-xs [&>span]:opacity-70",
+        "flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] transition-all [&>span]:text-xs [&>span]:opacity-70",
+        isSingle && "!bg-[#3D52A0] !text-white font-bold !rounded-lg shadow-sm hover:!bg-[#293252]",
+        isRangeStart && "!bg-[#3D52A0] !text-white font-extrabold !rounded-l-lg !rounded-r-none shadow-sm z-10 hover:!bg-[#293252]",
+        isRangeEnd && "!bg-[#3D52A0] !text-white font-extrabold !rounded-r-lg !rounded-l-none shadow-sm z-10 hover:!bg-[#293252]",
+        isRangeMiddle && "!bg-indigo-100/90 !text-[#293252] font-semibold !rounded-none hover:!bg-indigo-200",
+        isRangePending && "!bg-amber-500 !text-white font-extrabold ring-2 ring-amber-400 ring-offset-1 !rounded-lg shadow-md animate-pulse",
         isDarkDay && "!bg-slate-400 !text-slate-900 hover:!bg-slate-400 hover:!text-slate-950 font-extrabold border border-slate-500 shadow-inner",
         defaultClassNames.day,
         className

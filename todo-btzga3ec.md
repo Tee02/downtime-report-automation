@@ -81,3 +81,15 @@
  - [x] 64. Run vitest test suite and typescript check
  - [x] 65. Capture browser screenshots to visually verify editing across all 3 pages
  - [x] 66. Save checkpoint and deliver result
+
+## Iteration 7: Favicon Restoration, Sidebar Collapse Fix, and Calendar Range Highlighting
+
+ - [x] 67. Update versionHistory.ts to record v20 (975a6e02) and initialize v1.21 (Version 21)
+ - [x] 68. Restore missing favicon: generate and place favicon.ico, favicon.png, and favicon.svg into client/public, and link properly in client/index.html
+ - [x] 69. Fix sidebar collapse bug: ensure logo and branding hide cleanly when the sidebar is collapsed (prevent logo leaking onto main content)
+ - [x] 70. Implement seamless 2-click date range selection (start date + end date) in Analysis Studio with in-between date highlighting
+ - [x] 71. Ensure "Latest" preset selects today if a log exists for today, or the latest available downtime log date, and highlights it in calendar
+ - [x] 72. Implement seamless 2-click date range selection (start date + end date) in Comparison Studio with in-between date highlighting
+ - [x] 73. Run vitest test suite and typescript check
+ - [x] 74. Capture browser screenshots to visually verify collapsed sidebar, favicon link, and range highlighting
+ - [x] 75. Save checkpoint and deliver result

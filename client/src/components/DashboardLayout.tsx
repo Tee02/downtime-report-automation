@@ -165,19 +165,33 @@ function DashboardLayoutContent({
           className="border-r border-[#adbBda]/70 bg-[#ede8f5] text-slate-800 shadow-[10px_0_35px_rgba(61,82,160,0.08)]"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-20 justify-center border-b border-[#adbBda]/70">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
+          <SidebarHeader className="h-20 justify-center border-b border-[#adbBda]/70 overflow-hidden">
+            <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3 px-2"} transition-all w-full overflow-hidden`}>
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
                 aria-label="Toggle navigation"
+                title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
-              {!isCollapsed ? <div className="flex min-w-0 items-center gap-2.5">
-                <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-9 w-9 rounded-lg border border-[#8697c4]/60 bg-white object-cover p-0.5 shadow-sm" />
-                <div className="min-w-0"><span className="block truncate text-sm font-extrabold tracking-tight text-[#293252]">SkyWorlds 11-1</span><span className="block truncate text-[10px] font-medium uppercase tracking-[0.14em] text-[#5368b4]">Downtime Studio</span></div>
-              </div> : <img src={SKYWORLDS_LOGO_URL} alt="Genting SkyWorlds" className="h-7 w-7 rounded-md border border-[#8697c4]/60 bg-white object-cover p-0.5" />}
+              {!isCollapsed && (
+                <div className="flex min-w-0 items-center gap-2.5 overflow-hidden">
+                  <img
+                    src={SKYWORLDS_LOGO_URL}
+                    alt="Genting SkyWorlds"
+                    className="h-9 w-9 rounded-lg border border-[#8697c4]/60 bg-white object-cover p-0.5 shadow-sm shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-extrabold tracking-tight text-[#293252]">
+                      SkyWorlds 11-1
+                    </span>
+                    <span className="block truncate text-[10px] font-medium uppercase tracking-[0.14em] text-[#5368b4]">
+                      Downtime Studio
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </SidebarHeader>
 

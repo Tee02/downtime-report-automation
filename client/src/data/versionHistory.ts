@@ -9,12 +9,29 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.20";
+export const CURRENT_VERSION = "v1.21";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.20",
+    version: "v1.21",
     commit: "pending",
+    date: "2026-09-09",
+    time: "22:45 GMT+8",
+    timestamp: "2026-09-09 22:45:00",
+    title: "Favicon Restoration, Sidebar Collapse Fix & Calendar Range Highlighting",
+    tasks: [
+      "Restored favicon: generated and deployed static favicon.ico, favicon.png, and apple-touch-icon.png with standard meta tags",
+      "Fixed sidebar collapse bug: eliminated logo overflow so the logo hides completely when the sidebar is collapsed to icon mode",
+      "Implemented 2-click First Date + End Date range selection with continuous connecting highlight for in-between dates in Analysis Studio",
+      "Updated Latest preset to dynamically target today if a downtime log exists, or fall back to the latest available date",
+      "Implemented seamless 2-click date range selection and middle-date highlighting in Comparison Studio slot calendars",
+      "Added pulsing amber visual cue when a range start date is selected while awaiting the end date click",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.20",
+    commit: "975a6e0",
     date: "2026-09-08",
     time: "18:15:00",
     timestamp: "2026-09-08 18:15:00",
@@ -26,7 +43,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added full inline editability to Comparison Studio section headers, metric categories, and table labels",
       "Enhanced visual edit cues with dashed hover outlines and seamless one-click Save Page Texts persistence",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.19",

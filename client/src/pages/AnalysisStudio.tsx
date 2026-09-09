@@ -232,10 +232,48 @@ export default function AnalysisStudio() {
         .filter(date => selectedDateKeys.has(dateKey(date))),
     [availableDateKeys, selectedDateKeys]
   );
+
+  const sortedSelectedKeys = useMemo(
+    () => Array.from(selectedDateKeys).sort(),
+    [selectedDateKeys]
+  );
+
+  const rangeStartObj = useMemo(() => {
+    if (rangeStartKey) return new Date(`${rangeStartKey}T12:00:00`);
+    if (sortedSelectedKeys.length > 1) return new Date(`${sortedSelectedKeys[0]}T12:00:00`);
+    return undefined;
+  }, [rangeStartKey, sortedSelectedKeys]);
+
+  const rangeEndObj = useMemo(() => {
+    if (rangeStartKey) return undefined;
+    if (sortedSelectedKeys.length > 1) return new Date(`${sortedSelectedKeys[sortedSelectedKeys.length - 1]}T12:00:00`);
+    return undefined;
+  }, [rangeStartKey, sortedSelectedKeys]);
+
+  const rangeMiddleObjs = useMemo(() => {
+    if (!rangeStartObj || !rangeEndObj) return [];
+    const dates: Date[] = [];
+    const cursor = new Date(rangeStartObj);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor < rangeEndObj) {
+      dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return dates;
+  }, [rangeStartObj, rangeEndObj]);
+
   const darkDayDateObjects = useMemo(
     () => darkDaysList.map(key => new Date(`${key}T12:00:00`)),
     [darkDaysList]
   );
+
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
 
   const handleDayClick = (day: Date) => {
     const key = dateKey(day);
@@ -253,7 +291,14 @@ export default function AnalysisStudio() {
 
     if (!rangeStartKey) {
       setRangeStartKey(key);
-      toast.info(`Range start set to ${key}. Click an end date to select all dates in between.`);
+      toast.info(`Start date set to ${key}. Click end date to select all dates in between.`);
+      return;
+    }
+
+    if (rangeStartKey === key) {
+      setSelectedDateKeys(new Set([key]));
+      setRangeStartKey(null);
+      toast.info(`Selected single date: ${key}`);
       return;
     }
 
@@ -262,7 +307,7 @@ export default function AnalysisStudio() {
     const inRange = availableDateKeys.filter(k => k >= start && k <= end);
     setSelectedDateKeys(new Set(inRange));
     setRangeStartKey(null);
-    toast.info(`Selected ${inRange.length} date${inRange.length === 1 ? "" : "s"} from ${start} to ${end}`);
+    toast.success(`Selected ${inRange.length} date${inRange.length === 1 ? "" : "s"} from ${start} to ${end}. All dates in between are highlighted.`);
   };
 
   const analysis = analysisQuery.data;
@@ -394,7 +439,14 @@ export default function AnalysisStudio() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            if (availableDateKeys.length >= 2) {
+                            setRangeStartKey(null);
+                            const now = new Date();
+                            now.setDate(now.getDate() - 1);
+                            const yesterdayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+                            if (availableDateKeys.includes(yesterdayKey)) {
+                              setSelectedDateKeys(new Set([yesterdayKey]));
+                              toast.success(`Selected yesterday (${yesterdayKey}).`);
+                            } else if (availableDateKeys.length >= 2) {
                               setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 2]]));
                             } else if (availableDateKeys.length === 1) {
                               setSelectedDateKeys(new Set([availableDateKeys[0]]));
@@ -409,8 +461,12 @@ export default function AnalysisStudio() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
+                            setRangeStartKey(null);
                             const last7 = availableDateKeys.slice(-7);
                             setSelectedDateKeys(new Set(last7));
+                            if (last7.length > 0) {
+                              toast.success(`Highlighted last ${last7.length} days (${last7[0]} to ${last7[last7.length - 1]}).`);
+                            }
                           }}
                           className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
                         >
@@ -421,19 +477,27 @@ export default function AnalysisStudio() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            if (availableDateKeys.length > 0) {
+                            setRangeStartKey(null);
+                            if (availableDateKeys.includes(todayKey)) {
+                              setSelectedDateKeys(new Set([todayKey]));
+                              toast.success(`Selected today's downtime log (${todayKey}).`);
+                            } else if (availableDateKeys.length > 0) {
                               setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 1]]));
+                              toast.success(`Selected latest available log (${availableDateKeys[availableDateKeys.length - 1]}).`);
                             }
                           }}
                           className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
                         >
-                          Latest Only
+                          Latest
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setSelectedDateKeys(new Set(availableDateKeys))}
+                          onClick={() => {
+                            setRangeStartKey(null);
+                            setSelectedDateKeys(new Set(availableDateKeys));
+                          }}
                           className="h-6 px-2 text-[10px] font-bold border-slate-200 bg-white hover:bg-slate-100 text-slate-600"
                         >
                           All ({availableDateKeys.length})
@@ -442,7 +506,10 @@ export default function AnalysisStudio() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedDateKeys(new Set())}
+                          onClick={() => {
+                            setRangeStartKey(null);
+                            setSelectedDateKeys(new Set());
+                          }}
                           className="h-6 px-1.5 text-[10px] text-slate-400 hover:text-slate-600"
                         >
                           Clear
@@ -460,6 +527,10 @@ export default function AnalysisStudio() {
                           modifiers={{
                             saved: availableDateKeys.map(key => new Date(`${key}T12:00:00`)),
                             darkDay: darkDayDateObjects,
+                            rangePending: rangeStartKey ? [new Date(`${rangeStartKey}T12:00:00`)] : [],
+                            range_start: rangeStartObj ? [rangeStartObj] : [],
+                            range_end: rangeEndObj ? [rangeEndObj] : [],
+                            range_middle: rangeMiddleObjs,
                           }}
                           modifiersClassNames={{
                             saved: "font-bold text-[#3D52A0]",
