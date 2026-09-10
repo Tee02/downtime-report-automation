@@ -290,7 +290,9 @@ export default function AnalysisStudio() {
     }
 
     if (!rangeStartKey) {
+      // Start a fresh selection: immediately clear previous range and select only this start date
       setRangeStartKey(key);
+      setSelectedDateKeys(new Set([key]));
       toast.info(`Start date set to ${key}. Click end date to select all dates in between.`);
       return;
     }
@@ -478,17 +480,31 @@ export default function AnalysisStudio() {
                           size="sm"
                           onClick={() => {
                             setRangeStartKey(null);
-                            if (availableDateKeys.includes(todayKey)) {
-                              setSelectedDateKeys(new Set([todayKey]));
-                              toast.success(`Selected today's downtime log (${todayKey}).`);
-                            } else if (availableDateKeys.length > 0) {
-                              setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 1]]));
-                              toast.success(`Selected latest available log (${availableDateKeys[availableDateKeys.length - 1]}).`);
+                            // Dynamically select previous month (e.g. August when in September)
+                            const now = new Date();
+                            const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                            const prevYear = prevDate.getFullYear();
+                            const prevMonth = String(prevDate.getMonth() + 1).padStart(2, "0");
+                            const prefix = `${prevYear}-${prevMonth}`;
+                            let matching = availableDateKeys.filter(k => k.startsWith(prefix));
+                            if (matching.length === 0 && availableDateKeys.length > 0) {
+                              const latestKey = availableDateKeys[availableDateKeys.length - 1];
+                              const [y, m] = latestKey.split("-").map(Number);
+                              const fallbackPrev = new Date(y, m - 2, 1);
+                              const fallbackPrefix = `${fallbackPrev.getFullYear()}-${String(fallbackPrev.getMonth() + 1).padStart(2, "0")}`;
+                              matching = availableDateKeys.filter(k => k.startsWith(fallbackPrefix));
+                            }
+                            if (matching.length > 0) {
+                              setSelectedDateKeys(new Set(matching));
+                              const monthName = prevDate.toLocaleString("default", { month: "long" });
+                              toast.success(`Selected whole ${monthName} month (${matching.length} days: ${matching[0]} to ${matching[matching.length - 1]}).`);
+                            } else {
+                              toast.info("No saved reports found for last month.");
                             }
                           }}
                           className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
                         >
-                          Latest
+                          Last Month
                         </Button>
                         <Button
                           type="button"
@@ -509,10 +525,11 @@ export default function AnalysisStudio() {
                           onClick={() => {
                             setRangeStartKey(null);
                             setSelectedDateKeys(new Set());
+                            toast.info("Cleared all date selections.");
                           }}
                           className="h-6 px-1.5 text-[10px] text-slate-400 hover:text-slate-600"
                         >
-                          Clear
+                          Clear all
                         </Button>
                       </div>
 
@@ -558,15 +575,16 @@ export default function AnalysisStudio() {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          disabled={selectedDateKeys.size === 0}
+                          disabled={selectedDateKeys.size === 0 && !rangeStartKey}
                           onClick={() => {
                             setSelectedDateKeys(new Set());
                             setRangeStartKey(null);
+                            toast.info("Cleared all date selections.");
                           }}
                           className="h-7 px-2 text-xs font-bold text-[#3D52A0] hover:text-[#293252]"
                         >
                           <X className="mr-1 h-3 w-3" />
-                          Clear
+                          Clear all
                         </Button>
                       </div>
                     </div>

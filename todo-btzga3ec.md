@@ -114,3 +114,16 @@
  - [x] 88. Update versionHistory.ts for Version 23
  - [x] 89. Run vitest test suite and typescript check
  - [x] 90. Save checkpoint and deliver result
+
+## Iteration 10: WK_template_v3, Last Month Preset, Calendar Highlight Clear Fix, Direct Icon Navigation, Clean Comparison Labels & 10-Item History Cards
+
+ - [x] 91. Replace template WK_template_v2_46a53c64.xlsx with uploaded WK_template_v3.xlsx, update processor to load v3 by default, and verify mapping
+ - [x] 92. In Analysis Studio, replace 'Latest' preset button with 'Last Month' (dynamically selecting the previous month, e.g. August when in September)
+ - [x] 93. Fix calendar highlight state and clearing bug: ensure pending range clicks, range selections, and clear-all reliably reset all modifiers and highlights
+ - [x] 94. Fix collapsed sidebar navigation: ensure clicking any nav icon directly navigates to that page without requiring panel expansion
+ - [x] 95. In Comparison Studio, remove 'col 1', 'col 2', 'col 3' labels
+ - [x] 96. Upgrade comparison history to store up to 10 previous comparisons with a horizontal scrollbar (latest on left, oldest on right)
+ - [x] 97. Format history card labels to include sample day counts in brackets: e.g. 'All rides on 26/8–1/9 (7d) vs All rides on 27/8–2/9 (7d)'
+ - [x] 98. Update versionHistory.ts for Version 24
+ - [x] 99. Run vitest test suite and typescript check
+ - [x] 100. Save checkpoint and deliver result

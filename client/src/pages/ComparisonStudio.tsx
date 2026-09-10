@@ -100,7 +100,7 @@ export default function ComparisonStudio() {
   // Comparison calculation trigger state
   const [isCalculated, setIsCalculated] = useState(false);
 
-  // Comparison history (up to 5 previous comparisons)
+  // Comparison history (up to 10 previous comparisons)
   const [history, setHistory] = useState<ComparisonHistoryItem[]>(() => {
     try {
       const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
@@ -218,8 +218,11 @@ export default function ComparisonStudio() {
     }
     setIsCalculated(true);
 
-    // Auto-save this comparison into history (max 5 items)
-    const label = activeSlots.map(s => s.name).join(" vs ");
+    // Auto-save this comparison into history (max 10 items) with day counts: e.g. "All rides on 26/8–1/9 (7d) vs All rides on 27/8–2/9 (7d)"
+    const label = activeSlots.map(s => {
+      const days = s.dateKeys.size;
+      return days > 0 ? `${s.name} (${days}d)` : s.name;
+    }).join(" vs ");
     const newHistoryItem: ComparisonHistoryItem = {
       id: Date.now().toString(),
       timestamp: Date.now(),
@@ -235,7 +238,7 @@ export default function ComparisonStudio() {
 
     setHistory(prev => {
       const filtered = prev.filter(h => h.label !== label);
-      const updated = [newHistoryItem, ...filtered].slice(0, 5);
+      const updated = [newHistoryItem, ...filtered].slice(0, 10);
       try {
         localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
       } catch {}
@@ -345,26 +348,26 @@ export default function ComparisonStudio() {
           </Card>
         ) : (
           <>
-            {/* Previous Comparison History (up to 5 saved comparisons) */}
+            {/* Previous Comparison History (up to 10 saved comparisons with horizontal scrollbar) */}
             {history.length > 0 && (
               <div className="rounded-2xl border border-[#adbBda]/70 bg-white/85 p-4 shadow-sm space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
                     <History className="h-4 w-4 text-[#3D52A0]" />
-                    <EditableText contentKey="comp_history_title" defaultText="Previous Comparison History (Saved up to 5)" />
+                    <EditableText contentKey="comp_history_title" defaultText="Previous Comparison History (Saved up to 10)" />
                   </div>
-                  <EditableText contentKey="comp_history_hint" defaultText="Click any history card to reload" as="span" className="text-[11px] text-slate-400 block" />
+                  <EditableText contentKey="comp_history_hint" defaultText="Click any history card to reload • Scroll right for older searches" as="span" className="text-[11px] text-slate-400 block" />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-0.5 scrollbar-thin">
                   {history.map(item => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => restoreHistory(item)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200/80 bg-indigo-50/70 hover:bg-indigo-100 text-xs font-semibold text-[#293252] transition-all hover:shadow-xs active:scale-98"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200/80 bg-indigo-50/70 hover:bg-indigo-100 text-xs font-semibold text-[#293252] transition-all hover:shadow-xs active:scale-98 shrink-0 whitespace-nowrap"
                     >
-                      <Sparkles className="h-3 w-3 text-[#3D52A0]" />
-                      <span className="truncate max-w-[280px]">{item.label}</span>
+                      <Sparkles className="h-3 w-3 text-[#3D52A0] shrink-0" />
+                      <span>{item.label}</span>
                     </button>
                   ))}
                 </div>
@@ -484,12 +487,14 @@ export default function ComparisonStudio() {
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1">
-                      <span className="truncate font-extrabold text-[#293252] text-xs">
-                        {slot.name}
-                      </span>
-                      <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-white/80 border border-[#8697c4]/40 text-[#3D52A0] shrink-0">
-                        Col {idx + 1}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#3D52A0] text-white text-[9px] font-bold shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span className="truncate font-extrabold text-[#293252] text-xs">
+                          {slot.name}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-500 font-normal">
                       <span className={slot.dateKeys.size === 0 ? "text-amber-700 font-bold" : "text-slate-700 font-semibold"}>
@@ -811,6 +816,7 @@ function SlotConfigCard({
 
     if (!rangeStartKey) {
       setRangeStartKey(key);
+      onDatesChange(new Set([key]));
       toast.info(`Start date set to ${formatDMy(key)}. Click end date to highlight all dates in between.`);
       return;
     }
@@ -946,15 +952,26 @@ function SlotConfigCard({
                     size="sm"
                     onClick={() => {
                       setRangeStartKey(null);
-                      if (availableDateKeys.includes(todayKey)) {
-                        onDatesChange(new Set([todayKey]));
-                      } else if (availableDateKeys.length > 0) {
-                        onDatesChange(new Set([availableDateKeys[availableDateKeys.length - 1]]));
+                      const now = new Date();
+                      const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                      const prevYear = prevDate.getFullYear();
+                      const prevMonth = String(prevDate.getMonth() + 1).padStart(2, "0");
+                      const prefix = `${prevYear}-${prevMonth}`;
+                      let matching = availableDateKeys.filter(k => k.startsWith(prefix));
+                      if (matching.length === 0 && availableDateKeys.length > 0) {
+                        const latestKey = availableDateKeys[availableDateKeys.length - 1];
+                        const [y, m] = latestKey.split("-").map(Number);
+                        const fallbackPrev = new Date(y, m - 2, 1);
+                        const fallbackPrefix = `${fallbackPrev.getFullYear()}-${String(fallbackPrev.getMonth() + 1).padStart(2, "0")}`;
+                        matching = availableDateKeys.filter(k => k.startsWith(fallbackPrefix));
+                      }
+                      if (matching.length > 0) {
+                        onDatesChange(new Set(matching));
                       }
                     }}
                     className="h-5 px-1.5 text-[10px] font-semibold border-indigo-200 text-[#3D52A0]"
                   >
-                    Latest
+                    Last Month
                   </Button>
                 </div>
 

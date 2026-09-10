@@ -24,7 +24,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import DotField from "@/components/DotField";
 import { BarChart3, Columns3, FileSpreadsheet, KeyRound, Lock, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -202,15 +202,21 @@ function DashboardLayoutContent({
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
+                      asChild
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal`}
                     >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span>{item.label}</span>
+                      <Link
+                        href={item.path}
+                        onClick={() => setLocation(item.path)}
+                        className="flex items-center gap-2 w-full h-full cursor-pointer"
+                      >
+                        <item.icon
+                          className={`h-4 w-4 shrink-0 ${isActive ? "text-primary" : ""}`}
+                        />
+                        <span>{item.label}</span>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

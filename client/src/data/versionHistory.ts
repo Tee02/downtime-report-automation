@@ -9,12 +9,30 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.23";
+export const CURRENT_VERSION = "v1.24";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.23",
+    version: "v1.24",
     commit: "pending",
+    date: "2026-09-10",
+    time: "11:50 GMT+8",
+    timestamp: "2026-09-10 11:50:00",
+    title: "WK_template_v3 Integration, Last Month Preset, Direct Icon Navigation & 10-Item Comparison History",
+    tasks: [
+      "Replaced mapping template with WK_template_v3.xlsx, uploaded to S3 storage with local fallback, maintaining identical formulas, closure rules, and timeline highlights",
+      "Replaced 'Latest' preset with dynamic 'Last Month' preset in Analysis Studio (e.g. selecting August when in September)",
+      "Fixed calendar date highlight and clearing bug: starting a new range immediately clears old dates, and Clear All resets all highlight modifiers",
+      "Enabled direct page navigation when clicking collapsed sidebar icons using native client-side links without requiring panel expansion",
+      "Removed 'Col 1' and 'Col 2' badges from Comparison Studio table headers for a cleaner interface",
+      "Upgraded comparison history to store up to 10 previous comparisons in a horizontally scrollable container (latest on left, oldest on right)",
+      "Added sample day count bracket formatting to history cards (e.g., 'All rides on 26/8–1/9 (7d) vs All rides on 27/8–2/9 (7d)')",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.23",
+    commit: "7589a2f",
     date: "2026-09-10",
     time: "11:25 GMT+8",
     timestamp: "2026-09-10 11:25:00",
@@ -26,7 +44,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Refined 11-10 classification: requires explicit 'fire alarm' or 'signal 29' description, preventing non-fire alarm Facilities door alarms on PTA from mapping as false fire alarms",
       "Verified generated Excel report against 09.09.2026 downtime log with 0 false fire alarms, clean D7 cell, and accurate E4 total downtime",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.22",

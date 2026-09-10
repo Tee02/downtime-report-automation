@@ -1,5 +1,8 @@
 import type { Express, Request, Response } from "express";
 import multer from "multer";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { createSavedDowntimeReport, findSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { processDowntimeWorkbooks } from "./downtimeProcessor";
@@ -12,9 +15,17 @@ const upload = multer({
   },
 });
 
-const FIXED_TEMPLATE_KEY = "WK_template_v2_46a53c64.xlsx";
+const FIXED_TEMPLATE_KEY = "WK_template_v3_232fdd97.xlsx";
 
 async function getFixedTemplate(): Promise<Buffer> {
+  const localTemplatePath = path.resolve(process.cwd(), "templates", "WK_template_v3.xlsx");
+  if (existsSync(localTemplatePath)) {
+    try {
+      return await readFile(localTemplatePath);
+    } catch {
+      // fallback to storage
+    }
+  }
   const signedUrl = await storageGetSignedUrl(FIXED_TEMPLATE_KEY);
   const response = await fetch(signedUrl);
   if (!response.ok) throw new Error("The fixed Technical template could not be retrieved. Please contact the report administrator.");
