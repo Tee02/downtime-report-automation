@@ -147,6 +147,19 @@ describe("downtime transformation rules", () => {
     expect(timelineXml).toContain("Signal 29 (Fire Alarm Triggered)");
   });
 
+  it("does not map non-fire-alarm 11-10 records (such as Facilities door alarms) as Signal 29 fire alarms", async () => {
+    const extraRows = '<row r="3"><c r="A3" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B3" t="inlineStr"><is><t>Invasion Of The Planet of the Apes</t></is></c><c r="C3" t="inlineStr"><is><t>Facilities</t></is></c><c r="D3" t="inlineStr"><is><t>11-10</t></is></c><c r="F3" t="inlineStr"><is><t>Alarm S.Active. Estop 1 [3.4] Facilities Door Not Closed Alarm (Surveillances Issue)</t></is></c><c r="G3" t="inlineStr"><is><t>16:53</t></is></c><c r="H3" t="inlineStr"><is><t>17:44</t></is></c></row>';
+    const [operations, template] = await Promise.all([
+      buildMinimalOperationsWorkbook({ extraRows }),
+      buildMinimalTemplateWorkbook()
+    ]);
+    const result = await processDowntimeWorkbooks(operations, template);
+    expect(result.fireAlarmCount).toBe(0);
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    expect(timelineXml).not.toContain("Signal 29 (Fire Alarm Triggered)");
+  });
+
   it("uses black technical mapping and red fault-code text for late handover while retaining evacuation totals", async () => {
     const [operations, template] = await Promise.all([buildMinimalOperationsWorkbook({ description: "Late handover (Brake sensor fault)", evacuationStart: "10:01", evacuationEnd: "10:04" }), buildMinimalTemplateWorkbook()]);
     const result = await processDowntimeWorkbooks(operations, template);

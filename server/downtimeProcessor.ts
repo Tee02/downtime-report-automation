@@ -483,7 +483,9 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
     const department = row.cells.get("C")?.value.trim() ?? "";
     const description = row.cells.get("F")?.value.trim() ?? "";
     const isTechnical = department.toUpperCase() === "TECHNICAL";
-    const isFireAlarm = code.toUpperCase() === "11-10";
+    const isFireAlarm =
+      code.toUpperCase() === "11-10" &&
+      (/fire\s*alarm/i.test(description) || /signal\s*29/i.test(description) || /signal29/i.test(description));
     const isTechnicalClosure = code.toUpperCase() === "CLOSED" && /technical|maintenance|ndt/i.test(description);
     const isClosed = isTechnicalClosure;
     if (!((code === "11-1" && isTechnical) || isTechnicalClosure || isFireAlarm)) continue;
@@ -831,10 +833,10 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
       additions.push(withXfAttributes(xf, { fillId: fillIds[kind], applyFill: "1" }));
     });
     percentage.set(base, String(nextStyle++));
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1" }));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" }));
     percentageAlert.set(base, String(nextStyle++));
     const redFontId = withRedFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1" }));
+    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: "0", applyFill: "1" }));
     lateHandoverText.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { fillId: withLateHandoverFill.fillId, applyFill: "1", fontId: redFontId, applyFont: "1" }));
     availability.standard.set(base, String(nextStyle++));
@@ -944,20 +946,6 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
   return updates;
 }
 
-function prepareDefaultAfpBlankUpdates(records: DowntimeRecord[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
-  const row = maps.timelineRows.get(`${timelineDateKey(records[0]?.dateKey ?? "")}|AFP`);
-  if (!row) return new Map();
-  return new Map([[row, (xml: string) => {
-    let revised = clearCell(xml, `D${row}`);
-    for (let minute = 600; minute < 1080; minute++) {
-      const reference = `${numberToColumn(maps.timeStartColumn + minute - 600)}${row}`;
-      revised = setStyle(revised, reference, deriveStyle(findCell(revised, reference), variants.timeline.blank));
-      revised = clearCell(revised, reference);
-    }
-    return revised;
-  }]]);
-}
-
 type DailyAggregate = {
   dateKey: string;
   rideCode: string;
@@ -1045,23 +1033,16 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
     const row = maps.timelineRows.get(`${timelineDateKey(aggregate.dateKey)}|${aggregate.rideCode}`);
     if (row) entries.set(row, aggregate);
   }
-  const hasAfpRecord = records.some(record => record.status === "matched" && record.rideCode === "AFP");
-  const blankAfpRows = new Set(
-    hasAfpRecord
-      ? []
-      : Array.from(maps.timelineRows.entries())
-          .filter(([key]) => key.endsWith("|AFP"))
-          .map(([, row]) => row)
-  );
   const updates = new Map<number, (rowXml: string) => string>();
   for (const [dayKey, range] of Array.from(maps.dayRows.entries())) {
     for (let row = range.start; row <= range.end; row++) {
       updates.set(row, xml => {
-        let revised = blankAfpRows.has(row)
-          ? clearCell(xml, `D${row}`)
-          : closedRows.has(row)
-            ? setText(xml, `D${row}`, "CLOSED")
-            : setNumber(xml, `D${row}`, 0);
+        let revised = closedRows.has(row)
+          ? setText(xml, `D${row}`, "CLOSED")
+          : setNumber(xml, `D${row}`, 0);
+        if (!closedRows.has(row)) {
+          revised = setStyle(revised, `D${row}`, deriveStyle(findCell(revised, `D${row}`), variants.percentage));
+        }
         if (row === range.start) revised = setNumber(revised, `E${row}`, 0);
         return revised;
       });
@@ -1071,22 +1052,28 @@ function prepareDailyPercentageUpdates(records: DowntimeRecord[], aggregates: Ma
     const previousUpdate = updates.get(row);
     updates.set(row, xml => {
       let revised = previousUpdate ? previousUpdate(xml) : xml;
-    const percentageReference = `D${row}`;
-    revised = setFormula(revised, percentageReference, `${aggregate.technicalMinutes}/${DAILY_OPERATING_MINUTES}`, aggregate.technicalMinutes / DAILY_OPERATING_MINUTES);
-    const percentageStyle = aggregate.technicalMinutes / DAILY_OPERATING_MINUTES >= 0.01 ? variants.percentageAlert : variants.percentage;
-    revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), percentageStyle));
-    const dayKey = timelineDateKey(aggregate.dateKey);
-    const dayRange = dayKey ? maps.dayRows.get(dayKey) : undefined;
-    if (dayRange?.start === row) {
-      const totalMinutes = Array.from(aggregates.values())
-        .filter(item => timelineDateKey(item.dateKey) === dayKey)
-        .reduce((total, item) => total + item.technicalMinutes, 0);
-      const totalReference = `E${row}`;
-      revised = setFormula(revised, totalReference, `SUM(D${dayRange.start}:D${dayRange.end})/19`, totalMinutes / FLEET_OPERATING_MINUTES);
-      const totalStyle = totalMinutes / FLEET_OPERATING_MINUTES >= 0.01 ? variants.percentageAlert : variants.percentage;
+      const percentageReference = `D${row}`;
+      const fraction = aggregate.technicalMinutes / DAILY_OPERATING_MINUTES;
+      revised = setFormula(revised, percentageReference, `${aggregate.technicalMinutes}/${DAILY_OPERATING_MINUTES}`, fraction);
+      const percentageStyle = fraction >= 0.01 ? variants.percentageAlert : variants.percentage;
+      revised = setStyle(revised, percentageReference, deriveStyle(findCell(revised, percentageReference), percentageStyle));
+      return revised;
+    });
+  }
+  for (const [dayKey, range] of Array.from(maps.dayRows.entries())) {
+    const totalRow = range.start;
+    const totalMinutes = records
+      .filter(item => item.status === "matched" && !item.isClosed && !item.isFireAlarm && timelineDateKey(item.dateKey) === dayKey)
+      .reduce((total, item) => total + item.technicalMinutes, 0);
+    const totalFraction = totalMinutes / FLEET_OPERATING_MINUTES;
+    const previousUpdate = updates.get(totalRow);
+    updates.set(totalRow, xml => {
+      let revised = previousUpdate ? previousUpdate(xml) : xml;
+      const totalReference = `E${totalRow}`;
+      revised = setFormula(revised, totalReference, `SUM(D${range.start}:D${range.end})/19`, totalFraction);
+      const totalStyle = totalFraction >= 0.01 ? variants.percentageAlert : variants.percentage;
       revised = setStyle(revised, totalReference, deriveStyle(findCell(revised, totalReference), totalStyle));
-    }
-    return revised;
+      return revised;
     });
   }
   return updates;
@@ -1150,7 +1137,6 @@ function prepareAvailabilityUpdates(records: DowntimeRecord[], aggregates: Map<s
     }
     Object.entries(AVAILABILITY_ROWS).forEach(([rideCode, row]) => {
       if (index > 0) add(row, xml => clearCell(xml, `${column}${row}`));
-      else if (rideCode === "AFP" && !hasAfpRecord) add(row, xml => clearCell(xml, `${column}${row}`));
       else {
         const downtime = downtimeForRide(rideCode, aggregateByRide, closedRides);
         add(row, xml => {
@@ -1257,11 +1243,6 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
   const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
   const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate, styleVariants);
-  const defaultAfpBlankUpdates = prepareDefaultAfpBlankUpdates(records, maps, styleVariants);
-  for (const [row, update] of Array.from(defaultAfpBlankUpdates.entries())) {
-    const previousUpdate = timelineUpdates.get(row);
-    timelineUpdates.set(row, (xml: string) => previousUpdate ? previousUpdate(update(xml)) : update(xml));
-  }
   for (const [row, update] of Array.from(dailyPercentageUpdates.entries())) {
     const previousUpdate = timelineUpdates.get(row);
     timelineUpdates.set(row, (xml: string) => update(previousUpdate ? previousUpdate(xml) : xml));

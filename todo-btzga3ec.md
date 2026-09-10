@@ -103,3 +103,14 @@
  - [x] 80. Update versionHistory.ts to record v21 commit and initialize v1.22 (Version 22)
  - [x] 81. Run vitest test suite and typescript check
  - [x] 82. Save checkpoint and deliver result
+
+## Iteration 9: Fix AFP D7 Highlight & Percentage, and Remove PTA False Fire Alarm
+
+ - [x] 83. Inspect AFP rows in 09.09.2026 log and downtimeProcessor.ts to find why cell D7 is highlighted and percentage is blank
+ - [x] 84. Inspect PTA 11-10 row in 09.09.2026 log to see exact columns and description
+ - [x] 85. Update fire alarm condition: only map as Signal 29 fire alarm if description explicitly indicates fire alarm / signal 29
+ - [x] 86. Fix AFP D7 cell styling and ensure AFP downtime percentage and total network percentage display properly
+ - [x] 87. Test processing of 09.09.2026 log to verify D7, percentages, and PTA timeline
+ - [x] 88. Update versionHistory.ts for Version 23
+ - [x] 89. Run vitest test suite and typescript check
+ - [x] 90. Save checkpoint and deliver result

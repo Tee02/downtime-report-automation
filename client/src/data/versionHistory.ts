@@ -9,12 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.22";
+export const CURRENT_VERSION = "v1.23";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.22",
+    version: "v1.23",
     commit: "pending",
+    date: "2026-09-10",
+    time: "11:25 GMT+8",
+    timestamp: "2026-09-10 11:25:00",
+    title: "Fix AFP D7 Highlight & Percentage, and Remove PTA False Fire Alarm",
+    tasks: [
+      "Fixed cell D7 for Alpha Fighter Pilots (AFP): removed legacy blanking override so D7 no longer has the peach closure highlight and displays downtime percentage properly (0.00%)",
+      "Fixed total fleet downtime percentage in column E (E4:E24): decoupled daily total calculation from first ride aggregate, ensuring total downtime percentage displays accurately for all reporting days",
+      "Enforced fillId: '0' across percentage and percentageAlert styles to prevent template closure fills from bleeding into operating ride percentage cells",
+      "Refined 11-10 classification: requires explicit 'fire alarm' or 'signal 29' description, preventing non-fire alarm Facilities door alarms on PTA from mapping as false fire alarms",
+      "Verified generated Excel report against 09.09.2026 downtime log with 0 false fire alarms, clean D7 cell, and accurate E4 total downtime",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.22",
+    commit: "dcefc51",
     date: "2026-09-10",
     time: "11:05 GMT+8",
     timestamp: "2026-09-10 11:05:00",
@@ -26,7 +42,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Persists extracted weather data into database for automatic recall across Analysis Studio and Comparison Studio",
       "Maintains optional manual WhatsApp message paste box as an override",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.21",
