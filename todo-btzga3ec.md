@@ -93,3 +93,13 @@
  - [x] 73. Run vitest test suite and typescript check
  - [x] 74. Capture browser screenshots to visually verify collapsed sidebar, favicon link, and range highlighting
  - [x] 75. Save checkpoint and deliver result
+
+## Iteration 8: Automatic 11-3 Weather Data Extraction & Mapping from Downtime Log
+
+ - [x] 76. Inspect /home/ubuntu/upload/09.09.2026Tech-SkyWorldsDowntimeLog.xlsx to identify sheet and format of 11-3 weather data
+ - [x] 77. Update downtimeProcessor.ts to automatically detect and extract 11-3 weather data from uploaded downtime log
+ - [x] 78. Map automatically extracted 11-3 weather data into Excel with identical color codes, timeline blocks, and moderated notes
+ - [x] 79. Persist automatically extracted weather data for Analysis Studio and Comparison Studio recall
+ - [x] 80. Update versionHistory.ts to record v21 commit and initialize v1.22 (Version 22)
+ - [x] 81. Run vitest test suite and typescript check
+ - [x] 82. Save checkpoint and deliver result

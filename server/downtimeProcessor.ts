@@ -40,6 +40,8 @@ export type ProcessingResult = {
   closedRideCount: number;
   weatherIntervalCount: number;
   fireAlarmCount: number;
+  weatherText?: string;
+  outputDate?: string;
   summaryByRide: Array<{
     rideCode: string;
     attraction: string;
@@ -306,10 +308,10 @@ export function resolveRideCode(attraction: string, description = ""): string | 
   if (direct) return direct;
   const context = normalizeText(`${attraction} ${description}`);
   if (context.includes("BOOTCAMP") || context.includes("BCT")) {
-    if (context.includes("EXTREMEVERT")) return "BCT (EV)";
-    if (context.includes("ROPESCOURSE")) return "BCT (RC)";
-    if (context.includes("UNHARNESSZONES")) return "BCT (UZ)";
-    if (context.includes("ZIPCOASTER")) return "BCT (ZC)";
+    if (context.includes("EXTREMEVERT") || context.includes("EV")) return "BCT (EV)";
+    if (context.includes("ROPESCOURSE") || context.includes("RC")) return "BCT (RC)";
+    if (context.includes("UNHARNESSZONES") || context.includes("UNHARNESSED") || context.includes("UZ")) return "BCT (UZ)";
+    if (context.includes("ZIPCOASTER") || context.includes("ZC")) return "BCT (ZC)";
   }
   return ATTRACTION_CODES[context];
 }
@@ -404,6 +406,73 @@ export function parseWeatherIntervals(value: string, dateKey: string): WeatherIn
     }
   }
   return intervals;
+}
+
+/**
+ * Automatically extracts 11-3 Weather rows directly from an uploaded Operations downtime log sheet.
+ */
+export function parseWorkbookWeatherIntervals(recordsSheet: SheetInfo, sharedStrings: string[], fallbackDateKey = ""): WeatherInterval[] {
+  const rows = parseRows(recordsSheet.xml, sharedStrings);
+  const intervals: WeatherInterval[] = [];
+  for (const row of rows) {
+    const code = row.cells.get("D")?.value.trim() ?? "";
+    const department = row.cells.get("C")?.value.trim() ?? "";
+    const description = row.cells.get("F")?.value.trim() ?? "";
+    const attraction = row.cells.get("B")?.value.trim() ?? "";
+
+    const isWeather =
+      department.toUpperCase() === "WEATHER" ||
+      code.toUpperCase() === "11-3" ||
+      /weather/i.test(department) ||
+      /weather/i.test(description) ||
+      /inclement/i.test(description);
+
+    if (!isWeather) continue;
+
+    const rideCode = resolveRideCode(attraction, description);
+    if (!rideCode) continue;
+
+    const rawDate = row.cells.get("A")?.value ?? "";
+    const recordDateKey = excelDateToKey(rawDate) || fallbackDateKey;
+
+    const startedAt = parseTimeToMinutes(row.cells.get("G")?.value ?? "");
+    const resumedAt = parseTimeToMinutes(row.cells.get("H")?.value ?? "");
+    if (startedAt === undefined || resumedAt === undefined) continue;
+
+    const condition =
+      weatherConditionFromText(description) ??
+      (/10\s*-\s*13\s*(blue|green|orange|purple)\b/i.exec(description)?.[1]
+        ? `10-13 ${/10\s*-\s*13\s*(blue|green|orange|purple)\b/i.exec(description)![1].charAt(0).toUpperCase() + /10\s*-\s*13\s*(blue|green|orange|purple)\b/i.exec(description)![1].slice(1).toLowerCase()}`
+        : "Inclement Weather");
+
+    intervals.push({
+      dateKey: recordDateKey,
+      rideCode,
+      startedAt,
+      resumedAt,
+      minutes: durationMinutes(startedAt, resumedAt),
+      condition,
+    });
+  }
+  return intervals;
+}
+
+export function formatWeatherIntervalsToText(intervals: WeatherInterval[]): string {
+  if (!intervals.length) return "";
+  return intervals
+    .map(
+      interval =>
+        `${interval.rideCode} - 11-3: Inclement Weather (${interval.condition}) @${formatTime(interval.startedAt)}H\n11-8: @${formatTime(interval.resumedAt)}H`
+    )
+    .join("\n\n");
+}
+
+export async function readWeatherIntervalsFromBuffer(operationsBuffer: Buffer, fallbackDateKey = ""): Promise<WeatherInterval[]> {
+  const zip = await JSZip.loadAsync(operationsBuffer);
+  const workbook = await getSheets(zip);
+  const sheet = workbook.sheets[0];
+  if (!sheet) return [];
+  return parseWorkbookWeatherIntervals(sheet, workbook.sharedStrings, fallbackDateKey);
 }
 
 function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): DowntimeRecord[] {
@@ -1155,7 +1224,10 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
   const existingClosures = new Set(records.filter(record => record.isClosed && record.rideCode).map(record => record.rideCode!));
   const manualRideCodes = Array.from(new Set((options.manualClosedRideCodes ?? []).map(normalizeManualRideCode).filter((rideCode): rideCode is string => Boolean(rideCode))));
   manualRideCodes.filter(rideCode => !existingClosures.has(rideCode)).forEach(rideCode => records.push(manualClosureRecord(rideCode, outputDate)));
-  const weatherIntervals = parseWeatherIntervals(options.weatherText ?? "", outputDate);
+  const workbookWeatherIntervals = parseWorkbookWeatherIntervals(operationsSheet, operationWorkbook.sharedStrings, outputDate);
+  const manualWeatherIntervals = parseWeatherIntervals(options.weatherText ?? "", outputDate);
+  const weatherIntervals = [...workbookWeatherIntervals, ...manualWeatherIntervals];
+  const combinedWeatherText = options.weatherText?.trim() || formatWeatherIntervalsToText(workbookWeatherIntervals);
   const maps = buildTemplateMaps(templateWorkbook.sheets, templateWorkbook.sharedStrings, outputDate);
   const styleVariants = createStyleVariants(await textFromZip(templateZip, "xl/styles.xml"));
   templateZip.file("xl/styles.xml", styleVariants.stylesheetXml);
@@ -1244,6 +1316,8 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     summaryByRide: [...summaryByRide].sort((a, b) => b.minutes - a.minutes),
     outputBuffer,
     outputFileName: `Technical_Downtime_${outputDate}.xlsx`,
+    outputDate,
+    weatherText: combinedWeatherText,
   };
 }
 

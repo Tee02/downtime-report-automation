@@ -5,12 +5,13 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { __testables, compileDowntimeLogExport, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
 
-async function buildMinimalOperationsWorkbook(options: { code?: string; description?: string; evacuationStart?: string; evacuationEnd?: string } = {}) {
+async function buildMinimalOperationsWorkbook(options: { code?: string; description?: string; evacuationStart?: string; evacuationEnd?: string; extraRows?: string } = {}) {
   const zip = new JSZip();
   zip.file("xl/workbook.xml", '<workbook><sheets><sheet name="Operations" sheetId="1" r:id="rId1"/></sheets></workbook>');
   zip.file("xl/_rels/workbook.xml.rels", '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>');
   const evacuationCells = options.evacuationStart && options.evacuationEnd ? `<c r="M2" t="inlineStr"><is><t>${options.evacuationStart}</t></is></c><c r="N2" t="inlineStr"><is><t>${options.evacuationEnd}</t></is></c>` : "";
-  zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData><row r="2"><c r="A2" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C2" t="inlineStr"><is><t>Technical</t></is></c><c r="D2" t="inlineStr"><is><t>${options.code ?? "11-1"}</t></is></c><c r="F2" t="inlineStr"><is><t>${options.description ?? "Brake check"}</t></is></c><c r="G2" t="inlineStr"><is><t>10:00</t></is></c><c r="H2" t="inlineStr"><is><t>10:10</t></is></c>${evacuationCells}</row></sheetData></worksheet>`);
+  const baseRow = `<row r="2"><c r="A2" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C2" t="inlineStr"><is><t>Technical</t></is></c><c r="D2" t="inlineStr"><is><t>${options.code ?? "11-1"}</t></is></c><c r="F2" t="inlineStr"><is><t>${options.description ?? "Brake check"}</t></is></c><c r="G2" t="inlineStr"><is><t>10:00</t></is></c><c r="H2" t="inlineStr"><is><t>10:10</t></is></c>${evacuationCells}</row>`;
+  zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData>${baseRow}${options.extraRows ?? ""}</sheetData></worksheet>`);
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
@@ -54,7 +55,26 @@ describe("downtime transformation rules", () => {
     expectedMappings.forEach(([attraction, rideCode]) => expect(resolveRideCode(attraction)).toBe(rideCode));
     expect(resolveRideCode("Night At The Museum")).toBe("NTM");
     expect(resolveRideCode("BCT", "Zip Coaster restraint check")).toBe("BCT (ZC)");
+    expect(resolveRideCode("Boot Camp Training (EV)")).toBe("BCT (EV)");
+    expect(resolveRideCode("Boot Camp Training (RC)")).toBe("BCT (RC)");
+    expect(resolveRideCode("Boot Camp Training (UZ)")).toBe("BCT (UZ)");
     expect(resolveRideCode("Unknown Demonstration Ride")).toBeUndefined();
+  });
+
+  it("automatically extracts 11-3 weather rows from uploaded operations workbook without manual entry", async () => {
+    const extraWeatherRow = '<row r="3"><c r="A3" t="inlineStr"><is><t>03/09/2026</t></is></c><c r="B3" t="inlineStr"><is><t>Epic Voyage to Moonhaven</t></is></c><c r="C3" t="inlineStr"><is><t>Weather</t></is></c><c r="D3" t="inlineStr"><is><t>11-3</t></is></c><c r="F3" t="inlineStr"><is><t>Inclement Weather (10-13 Orange)</t></is></c><c r="G3" t="inlineStr"><is><t>10:15</t></is></c><c r="H3" t="inlineStr"><is><t>10:30</t></is></c></row>';
+    const [operations, template] = await Promise.all([
+      buildMinimalOperationsWorkbook({ extraRows: extraWeatherRow }),
+      buildMinimalTemplateWorkbook(),
+    ]);
+    const result = await processDowntimeWorkbooks(operations, template);
+    expect(result.weatherIntervalCount).toBe(1);
+    expect(result.weatherText).toContain("VTM - 11-3: Inclement Weather (10-13 Orange)");
+
+    const output = await JSZip.loadAsync(result.outputBuffer);
+    const timelineXml = await output.file("xl/worksheets/sheet1.xml")?.async("string") ?? "";
+    expect(timelineXml).toContain("Inclement Weather (10-13 Orange)  ");
+    expect(timelineXml).toContain("(Moderated)");
   });
 
   it("retains a populated cell immediately after a blank template cell", () => {

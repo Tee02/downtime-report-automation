@@ -89,7 +89,7 @@ export function registerDowntimeRoutes(app: Express) {
             totalTechnicalMinutes: result.totalTechnicalMinutes,
             totalNetworkPercentage: result.totalNetworkPercentage,
             weatherIntervalCount: result.weatherIntervalCount,
-            weatherText: weatherText ?? null,
+            weatherText: weatherText?.trim() || result.weatherText || null,
           });
         }
         return response.json({

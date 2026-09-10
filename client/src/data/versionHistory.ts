@@ -9,12 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.21";
+export const CURRENT_VERSION = "v1.22";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.21",
+    version: "v1.22",
     commit: "pending",
+    date: "2026-09-10",
+    time: "11:05 GMT+8",
+    timestamp: "2026-09-10 11:05:00",
+    title: "Automatic 11-3 Weather Extraction & Mapping from Downtime Logs",
+    tasks: [
+      "Automatically parses 11-3 Weather rows directly from uploaded Operations downtime logs without requiring manual text entry",
+      "Correctly resolves all 12 weather-affected attractions including Boot Camp Training variants (EV, RC, UZ, ZC)",
+      "Maps automated weather intervals into generated Excel timeline with standard yellow fill (FFFFE699) and red '(Moderated)' notes",
+      "Persists extracted weather data into database for automatic recall across Analysis Studio and Comparison Studio",
+      "Maintains optional manual WhatsApp message paste box as an override",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.21",
+    commit: "b607e9f",
     date: "2026-09-09",
     time: "22:45 GMT+8",
     timestamp: "2026-09-09 22:45:00",
@@ -27,7 +43,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Implemented seamless 2-click date range selection and middle-date highlighting in Comparison Studio slot calendars",
       "Added pulsing amber visual cue when a range start date is selected while awaiting the end date click",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.20",

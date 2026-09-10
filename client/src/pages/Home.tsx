@@ -362,7 +362,7 @@ export default function Home() {
                         />
                         <EditableText
                           contentKey="home_weather_desc"
-                          defaultText="Paste WhatsApp start and resume updates to draw confirmed weather intervals in the workbook."
+                          defaultText="Automatic 11-3 weather mapping active: 11-3 weather rows in uploaded downtime logs are automatically mapped into the report. You can also paste manual WhatsApp updates here if needed."
                           as="p"
                           className="mt-1 text-xs leading-5 text-slate-600 block"
                         />

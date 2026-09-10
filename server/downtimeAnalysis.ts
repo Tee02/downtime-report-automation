@@ -1,5 +1,13 @@
 import { type SavedDowntimeReport } from "../drizzle/schema";
-import { compileDowntimeLogExport, formatTime, parseWeatherIntervals, readTechnicalDowntimeRecords, type DowntimeRecord } from "./downtimeProcessor";
+import {
+  compileDowntimeLogExport,
+  formatTime,
+  formatWeatherIntervalsToText,
+  parseWeatherIntervals,
+  readTechnicalDowntimeRecords,
+  readWeatherIntervalsFromBuffer,
+  type DowntimeRecord,
+} from "./downtimeProcessor";
 import { storageGetSignedUrl, storagePut } from "./storage";
 
 const FLEET_RIDE_COUNT = 19;
@@ -111,7 +119,18 @@ export async function loadSavedDowntimeReports(reports: SavedDowntimeReport[]): 
       const buffer = Buffer.from(await response.arrayBuffer());
       const records = await readTechnicalDowntimeRecords(buffer);
       reportRecordCache.set(report.sourceFileUrl, { buffer, records });
-      return { report, buffer, records };
+      let weatherText = report.weatherText;
+      if (!weatherText) {
+        try {
+          const autoWeather = await readWeatherIntervalsFromBuffer(buffer, report.reportDate);
+          if (autoWeather.length > 0) {
+            weatherText = formatWeatherIntervalsToText(autoWeather);
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return { report: { ...report, weatherText }, buffer, records };
     })
   );
 }
