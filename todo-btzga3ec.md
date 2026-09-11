@@ -140,3 +140,13 @@
  - [x] 108. Update versionHistory.ts to Version 25
  - [x] 109. Run vitest test suite and typescript check
  - [x] 110. Save checkpoint and deliver result
+
+## Iteration 12: Last Week Preset & Excel-Preserving Cards Incident Format
+
+ - [x] 111. In Analysis Studio, replace 'Last 7 Days' preset with 'Last Week' (Monday to Sunday of previous calendar week, e.g. 31/8 until 6/9)
+ - [x] 112. In Analysis Studio, remove the Excel table view toggle from Ride Incident Logs, keeping only the cards format
+ - [x] 113. Ensure the cards incident sentences use inline CSS styles (color: #FF0000; font-weight: bold;) so direct mouse selection and copying into Excel preserves red text
+ - [x] 114. Add a prominent 'Copy for Excel' button to copy the exact card sentences (*Date, Description, Duration, Evacuation) into the clipboard as formatted HTML/rich text
+ - [x] 115. Update versionHistory.ts to Version 26
+ - [x] 116. Run vitest test suite and typescript check
+ - [x] 117. Save checkpoint and deliver result

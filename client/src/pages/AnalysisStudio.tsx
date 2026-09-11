@@ -1,6 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import { ExcelIncidentTable } from "@/components/ExcelIncidentTable";
 import { IncidentLogEntry } from "@/components/IncidentLogEntry";
 import { CompactSavedReportLibrary } from "@/components/CompactSavedReportLibrary";
 import { RideCombinationSwitch, FLEET_RIDES } from "@/components/RideCombinationSwitch";
@@ -38,11 +37,12 @@ import {
 import {
   Archive,
   CalendarDays,
+  Check,
+  Copy,
   FileText,
   Loader2,
   Medal,
   Moon,
-  Table as TableIcon,
   TrendingDown,
   TriangleAlert,
   X,
@@ -151,7 +151,7 @@ function WeekdayTooltip({
 
 export default function AnalysisStudio() {
   const utils = trpc.useUtils();
-  const [incidentViewMode, setIncidentViewMode] = useState<"excel" | "cards">("excel");
+  const [cardsCopied, setCardsCopied] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const { data: reports, isLoading: reportsLoading, error: reportsError } = trpc.savedReports.list.useQuery();
   const { data: darkDaysList = [] } = trpc.darkDays.list.useQuery();
@@ -179,6 +179,64 @@ export default function AnalysisStudio() {
       toast.success("Severity thresholds updated!");
     } catch {
       // ignore
+    }
+  };
+
+  const handleCopyIncidentCardsForExcel = async () => {
+    const groups = analysis?.rideIncidentGroups ?? [];
+    if (groups.length === 0) {
+      toast.error("No incident logs to copy.");
+      return;
+    }
+
+    const html = `
+<div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.6;">
+${groups.map(group => `
+  <div style="margin-top: 12px; margin-bottom: 4px; font-weight: bold; color: #1E293B;">
+    ${group.rideCode}: ${group.attraction}
+  </div>
+  ${group.logs.map(log => {
+    if (log.kind === "darkDay") {
+      return `<div>*${log.dateLabel}, <span style="color: #FF0000; font-weight: bold;">Dark Day</span>.</div>`;
+    }
+    if (log.kind === "weather") {
+      return `<div>*${log.dateLabel}, <span style="color: #FF0000; font-weight: bold;">${log.description}</span>, ${log.durationLabel} (${log.timeRange}), <span style="color: #FF0000; font-weight: bold;">Moderated</span>.</div>`;
+    }
+    const evac = log.evacuationLabel && log.evacuationRange
+      ? `, <span style="color: #FF0000; font-weight: bold;">${log.evacuationLabel}</span> (${log.evacuationRange})`
+      : "";
+    return `<div>*${log.dateLabel}, <span style="color: #FF0000; font-weight: bold;">${log.description}</span>, ${log.durationLabel} (${log.timeRange})${evac}.</div>`;
+  }).join("\n")}
+`).join("\n")}
+</div>`;
+
+    const plainText = groups.map(group => {
+      const lines = group.logs.map(log => {
+        if (log.kind === "darkDay") return `*${log.dateLabel}, Dark Day.`;
+        if (log.kind === "weather") return `*${log.dateLabel}, ${log.description}, ${log.durationLabel} (${log.timeRange}), Moderated.`;
+        const evac = log.evacuationLabel && log.evacuationRange ? `, ${log.evacuationLabel} (${log.evacuationRange})` : "";
+        return `*${log.dateLabel}, ${log.description}, ${log.durationLabel} (${log.timeRange})${evac}.`;
+      }).join("\n");
+      return `${group.rideCode}: ${group.attraction}\n${lines}`;
+    }).join("\n\n");
+
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([plainText], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+      setCardsCopied(true);
+      toast.success("Copied incident remarks for Excel! Paste directly into Excel with red text formatting preserved.");
+      setTimeout(() => setCardsCopied(false), 2500);
+    } catch (err) {
+      console.error("Clipboard copy failed:", err);
+      toast.error("Could not write to clipboard. You can select the sentences and press Ctrl+C.");
     }
   };
 
@@ -467,15 +525,31 @@ export default function AnalysisStudio() {
                           size="sm"
                           onClick={() => {
                             setRangeStartKey(null);
-                            const last7 = availableDateKeys.slice(-7);
-                            setSelectedDateKeys(new Set(last7));
-                            if (last7.length > 0) {
-                              toast.success(`Highlighted last ${last7.length} days (${last7[0]} to ${last7[last7.length - 1]}).`);
+                            const today = new Date();
+                            const currentDayOfWeek = today.getDay(); // 0 (Sun) to 6 (Sat)
+                            const daysSinceMonday = (currentDayOfWeek + 6) % 7;
+                            const currentMonday = new Date(today);
+                            currentMonday.setDate(today.getDate() - daysSinceMonday);
+                            const lastWeekMonday = new Date(currentMonday);
+                            lastWeekMonday.setDate(currentMonday.getDate() - 7);
+                            const lastWeekSunday = new Date(lastWeekMonday);
+                            lastWeekSunday.setDate(lastWeekMonday.getDate() + 6);
+                            const formatDateKey = (d: Date) =>
+                              `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                            const startKey = formatDateKey(lastWeekMonday);
+                            const endKey = formatDateKey(lastWeekSunday);
+                            const matching = availableDateKeys.filter(k => k >= startKey && k <= endKey);
+                            if (matching.length > 0) {
+                              setSelectedDateKeys(new Set(matching));
+                              toast.success(`Selected Last Week (${startKey} until ${endKey}).`);
+                            } else {
+                              setSelectedDateKeys(new Set([startKey, endKey]));
+                              toast.info(`Selected Last Week range (${startKey} until ${endKey}).`);
                             }
                           }}
                           className="h-6 px-2 text-[10px] font-bold border-indigo-200 bg-white hover:bg-indigo-50 text-[#3D52A0]"
                         >
-                          Last 7 Days
+                          Last Week
                         </Button>
                         <Button
                           type="button"
@@ -990,33 +1064,15 @@ export default function AnalysisStudio() {
                             className="mt-1 text-xs text-slate-500 block"
                           />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setIncidentViewMode("excel")}
-                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
-                                incidentViewMode === "excel"
-                                  ? "bg-white text-emerald-800 shadow-xs"
-                                  : "text-slate-600 hover:text-slate-900"
-                              }`}
-                            >
-                              <TableIcon className="h-3.5 w-3.5 text-emerald-600" />
-                              <span>Excel Preview</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIncidentViewMode("cards")}
-                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
-                                incidentViewMode === "cards"
-                                  ? "bg-white text-indigo-800 shadow-xs"
-                                  : "text-slate-600 hover:text-slate-900"
-                              }`}
-                            >
-                              <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                              <span>Cards</span>
-                            </button>
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleCopyIncidentCardsForExcel}
+                            className="h-7 gap-1.5 rounded-lg bg-emerald-700 px-2.5 text-xs font-semibold text-white shadow-xs hover:bg-emerald-800 active:scale-95 transition-all"
+                          >
+                            {cardsCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            <span>{cardsCopied ? "Copied for Excel!" : "📋 Copy for Excel"}</span>
+                          </Button>
                           <Badge
                             variant="outline"
                             className="border-[#8697c4]/60 bg-white/70 text-[#3D52A0]"
@@ -1027,11 +1083,7 @@ export default function AnalysisStudio() {
                         </div>
                       </div>
 
-                      <div className="mt-4">
-                        {incidentViewMode === "excel" ? (
-                          <ExcelIncidentTable groups={analysis.rideIncidentGroups ?? []} />
-                        ) : (
-                          <div className="max-h-[360px] overflow-y-auto rounded-xl border border-[#adbBda]/65 bg-[#f8f9ff]/70 p-4">
+                      <div className="mt-4 max-h-[360px] overflow-y-auto rounded-xl border border-[#adbBda]/65 bg-[#f8f9ff]/70 p-4 select-text">
                         {analysis.rideIncidentGroups?.length ? (
                           <div className="space-y-4 divide-y divide-slate-200/80">
                             {analysis.rideIncidentGroups.map(group => (
@@ -1069,8 +1121,6 @@ export default function AnalysisStudio() {
                         ) : (
                           <div className="flex h-32 items-center justify-center text-xs text-slate-500">
                             No incident logs found for the selected rides and dates.
-                          </div>
-                        )}
                           </div>
                         )}
                       </div>

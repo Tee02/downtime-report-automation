@@ -9,12 +9,27 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.25";
+export const CURRENT_VERSION = "v1.26";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.25",
+    version: "v1.26",
     commit: "pending",
+    date: "2026-09-11",
+    time: "17:45 GMT+8",
+    timestamp: "2026-09-11 17:45:00",
+    title: "Last Week Calendar Preset & Excel-Preserving Cards Incident Sentences",
+    tasks: [
+      "Replaced 'Last 7 Days' preset with 'Last Week' in Analysis Studio to select the previous full calendar week from Monday to Sunday (e.g. 31/8 until 6/9)",
+      "Removed the Excel table toggle from Ride Incident Logs, retaining exclusively the clean cards layout as requested",
+      "Added explicit inline CSS styles (color: #FF0000; font-weight: bold;) on all cause descriptions, weather moderations, Dark Days, and evacuation durations within the card sentences",
+      "Added one-click 'Copy for Excel' button to copy formatted card sentences (*Date, Description, Duration, Evacuation) to clipboard with red text colors preserved when pasting into Excel",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.25",
+    commit: "c48af500",
     date: "2026-09-11",
     time: "16:50 GMT+8",
     timestamp: "2026-09-11 16:50:00",
