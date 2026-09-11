@@ -9,12 +9,30 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.24";
+export const CURRENT_VERSION = "v1.25";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.24",
+    version: "v1.25",
     commit: "pending",
+    date: "2026-09-11",
+    time: "16:50 GMT+8",
+    timestamp: "2026-09-11 16:50:00",
+    title: "WK_template_v4 Integration, 10-7 Park Close PDF Dropzone, Center-Aligned Percentages & Excel Incident Table Copy",
+    tasks: [
+      "Replaced base template with WK_template_v4.xlsx, removing static red timeline highlights and maintaining identical closure formulas and structures",
+      "Added dedicated 10-7 Park Operations Log PDF dropzone in Downtime Report Studio alongside the Operations XLSX dropzone",
+      "Implemented high-accuracy 10-7 PDF coordinate parser to extract individual attraction park close times (e.g. 18:05 for ACR, 18:09 for IDD, 18:00 standard)",
+      "Dynamically mapped red timeline cells (FFFF0000) for each operating ride at its exact 10-7 closure interval in generated Excel reports",
+      "Enforced horizontal and vertical center-alignment on all downtime percentage cells across column D (D4:D24) and column E in generated workbooks",
+      "Added Excel Spreadsheet Table Preview to Ride Incident Logs in Analysis Studio displaying structured tabular gridlines",
+      "Implemented one-click 'Copy Formatted Table for Excel' using rich HTML clipboard items to preserve red text colors and table borders when pasting into Excel",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.24",
+    commit: "70b6326b",
     date: "2026-09-10",
     time: "11:50 GMT+8",
     timestamp: "2026-09-10 11:50:00",

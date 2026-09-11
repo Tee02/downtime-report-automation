@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
+import { ExcelIncidentTable } from "@/components/ExcelIncidentTable";
 import { IncidentLogEntry } from "@/components/IncidentLogEntry";
 import { CompactSavedReportLibrary } from "@/components/CompactSavedReportLibrary";
 import { RideCombinationSwitch, FLEET_RIDES } from "@/components/RideCombinationSwitch";
@@ -41,6 +42,7 @@ import {
   Loader2,
   Medal,
   Moon,
+  Table as TableIcon,
   TrendingDown,
   TriangleAlert,
   X,
@@ -149,6 +151,7 @@ function WeekdayTooltip({
 
 export default function AnalysisStudio() {
   const utils = trpc.useUtils();
+  const [incidentViewMode, setIncidentViewMode] = useState<"excel" | "cards">("excel");
   const { user, loading: authLoading } = useAuth();
   const { data: reports, isLoading: reportsLoading, error: reportsError } = trpc.savedReports.list.useQuery();
   const { data: darkDaysList = [] } = trpc.darkDays.list.useQuery();
@@ -987,7 +990,33 @@ export default function AnalysisStudio() {
                             className="mt-1 text-xs text-slate-500 block"
                           />
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100/80 p-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setIncidentViewMode("excel")}
+                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                                incidentViewMode === "excel"
+                                  ? "bg-white text-emerald-800 shadow-xs"
+                                  : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              <TableIcon className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Excel Preview</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIncidentViewMode("cards")}
+                              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all ${
+                                incidentViewMode === "cards"
+                                  ? "bg-white text-indigo-800 shadow-xs"
+                                  : "text-slate-600 hover:text-slate-900"
+                              }`}
+                            >
+                              <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                              <span>Cards</span>
+                            </button>
+                          </div>
                           <Badge
                             variant="outline"
                             className="border-[#8697c4]/60 bg-white/70 text-[#3D52A0]"
@@ -995,11 +1024,14 @@ export default function AnalysisStudio() {
                             {analysis.incidentLogs?.length ?? 0} log
                             {analysis.incidentLogs?.length === 1 ? "" : "s"}
                           </Badge>
-                          <FileText className="h-5 w-5 text-[#3D52A0]" />
                         </div>
                       </div>
 
-                      <div className="mt-4 max-h-[360px] overflow-y-auto rounded-xl border border-[#adbBda]/65 bg-[#f8f9ff]/70 p-4">
+                      <div className="mt-4">
+                        {incidentViewMode === "excel" ? (
+                          <ExcelIncidentTable groups={analysis.rideIncidentGroups ?? []} />
+                        ) : (
+                          <div className="max-h-[360px] overflow-y-auto rounded-xl border border-[#adbBda]/65 bg-[#f8f9ff]/70 p-4">
                         {analysis.rideIncidentGroups?.length ? (
                           <div className="space-y-4 divide-y divide-slate-200/80">
                             {analysis.rideIncidentGroups.map(group => (
@@ -1037,6 +1069,8 @@ export default function AnalysisStudio() {
                         ) : (
                           <div className="flex h-32 items-center justify-center text-xs text-slate-500">
                             No incident logs found for the selected rides and dates.
+                          </div>
+                        )}
                           </div>
                         )}
                       </div>

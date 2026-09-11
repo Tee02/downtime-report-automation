@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Archive, ArrowRight, CheckCircle2, ChevronRight, CircleOff, CloudSun, Download, FileSpreadsheet, FileUp, Loader2, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowRight, CheckCircle2, ChevronRight, CircleOff, CloudSun, Download, FileSpreadsheet, FileText, FileUp, Loader2, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -51,6 +51,8 @@ type ProcessingResponse = {
   summaryByRide: SummaryRide[];
   outputFileName: string;
   downloadUrl: string;
+  parkCloseMappedCount?: number;
+  parkCloseTimes?: Record<string, string>;
 };
 
 const HANDOVER_RIDES = [
@@ -72,56 +74,94 @@ function severityForMinutes(minutes: number) {
   return { label: "Monitor · under 30 min", color: "#7091E6" };
 }
 
-function FileDropzone({ label, note, file, onFile }: { label: string; note: string; file?: File; onFile: (file: File) => void }) {
+function FileDropzone({
+  label,
+  note,
+  file,
+  onFile,
+  acceptExt = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  badgeLabel = "XLSX",
+  icon: Icon = FileSpreadsheet,
+  onClear,
+}: {
+  label: string;
+  note: string;
+  file?: File;
+  onFile: (file: File) => void;
+  acceptExt?: string;
+  badgeLabel?: string;
+  icon?: typeof FileSpreadsheet;
+  onClear?: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const accept = (candidate?: File) => {
     if (!candidate) return;
-    if (!candidate.name.toLowerCase().endsWith(".xlsx")) {
+    const ext = candidate.name.split(".").pop()?.toLowerCase();
+    if (acceptExt.includes(".pdf") && ext !== "pdf") {
+      toast.error("Please choose a PDF operations log.");
+      return;
+    }
+    if (acceptExt.includes(".xlsx") && ext !== "xlsx") {
       toast.error("Please choose an XLSX workbook.");
       return;
     }
     onFile(candidate);
   };
   return (
-    <button
-      type="button"
-      onClick={() => inputRef.current?.click()}
-      onDragOver={event => event.preventDefault()}
-      onDrop={(event: DragEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        accept(event.dataTransfer.files?.[0]);
-      }}
-      className="group relative min-h-44 w-full overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white/70 px-5 py-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-500 hover:bg-sky-50/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
-    >
-      <input
-        ref={inputRef}
-        aria-label={label}
-        className="sr-only"
-        type="file"
-        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        onChange={(event: ChangeEvent<HTMLInputElement>) => accept(event.target.files?.[0])}
-      />
-      <div className="flex h-full flex-col justify-between gap-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="rounded-xl bg-slate-950 p-2.5 text-white shadow-sm">
-            <FileSpreadsheet className="h-5 w-5" />
+    <div className="relative w-full">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={event => event.preventDefault()}
+        onDrop={(event: DragEvent<HTMLButtonElement>) => {
+          event.preventDefault();
+          accept(event.dataTransfer.files?.[0]);
+        }}
+        className="group relative min-h-44 w-full overflow-hidden rounded-2xl border border-dashed border-slate-300 bg-white/70 px-5 py-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-500 hover:bg-sky-50/60 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-600"
+      >
+        <input
+          ref={inputRef}
+          aria-label={label}
+          className="sr-only"
+          type="file"
+          accept={acceptExt}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => accept(event.target.files?.[0])}
+        />
+        <div className="flex h-full flex-col justify-between gap-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="rounded-xl bg-slate-950 p-2.5 text-white shadow-sm">
+              <Icon className="h-5 w-5" />
+            </div>
+            {file ? (
+              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Ready</Badge>
+            ) : (
+              <Badge variant="outline" className="border-slate-200 text-slate-500">{badgeLabel}</Badge>
+            )}
           </div>
-          {file ? (
-            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Ready</Badge>
-          ) : (
-            <Badge variant="outline" className="border-slate-200 text-slate-500">XLSX</Badge>
-          )}
+          <div>
+            <p className="text-sm font-extrabold tracking-tight text-slate-900">
+              {file ? file.name : label}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · click to replace` : note}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-extrabold tracking-tight text-slate-900">
-            {file ? file.name : <EditableText contentKey="home_dropzone_label" defaultText={label} />}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            {file ? `${(file.size / 1024 / 1024).toFixed(1)} MB · click to replace` : <EditableText contentKey="home_dropzone_desc" defaultText={note} />}
-          </p>
-        </div>
-      </div>
-    </button>
+      </button>
+      {file && onClear && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClear();
+          }}
+          className="absolute top-4 right-4 z-10 rounded-full bg-slate-100 p-1.5 text-slate-500 hover:bg-rose-100 hover:text-rose-700 transition-colors"
+          title="Remove file"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -147,6 +187,7 @@ function RideChartTooltip({ active, payload }: { active?: boolean; payload?: Arr
 
 export default function Home() {
   const [operationsFile, setOperationsFile] = useState<File>();
+  const [parkCloseFile, setParkCloseFile] = useState<File>();
   const [processing, setProcessing] = useState(false);
   const [response, setResponse] = useState<ProcessingResponse>();
   const [error, setError] = useState<string>();
@@ -171,6 +212,7 @@ export default function Home() {
       formData.append("closedRideCodes", JSON.stringify(handoverClosedRides));
       formData.append("saveToStorage", String(saveToStorage));
       if (weatherEnabled && weatherText.trim()) formData.append("weatherText", weatherText.trim());
+      if (parkCloseFile) formData.append("parkCloseFile", parkCloseFile);
       const result = await fetch("/api/downtime/analyze", { method: "POST", body: formData });
       const payload = await result.json() as ProcessingResponse & { error?: string };
       if (!result.ok) throw new Error(payload.error ?? "The workbook could not be processed.");
@@ -269,12 +311,26 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
                 <FileDropzone
-                  label="Operations downtime log"
-                  note="Drop any daily Operations downtime XLSX workbook here. Its date is placed in the cleared V2 template automatically."
+                  label="Operations downtime log (XLSX)"
+                  note="Drop any daily Operations downtime XLSX workbook here. Mapped into WK_template_v4 automatically."
                   file={operationsFile}
                   onFile={setOperationsFile}
+                  acceptExt=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  badgeLabel="XLSX"
+                  icon={FileSpreadsheet}
+                  onClear={() => setOperationsFile(undefined)}
+                />
+                <FileDropzone
+                  label="Park Close (10-7) Log (PDF)"
+                  note="Optional — drop daily Park Operations Log PDF to automatically read 10-7 close times and highlight them in red on the timeline."
+                  file={parkCloseFile}
+                  onFile={setParkCloseFile}
+                  acceptExt=".pdf,application/pdf"
+                  badgeLabel="PDF"
+                  icon={FileText}
+                  onClear={() => setParkCloseFile(undefined)}
                 />
               </div>
 
@@ -463,6 +519,7 @@ export default function Home() {
                 { key: "home_stat_4", label: "Evac of 11-7/11-17 (mins)", value: `${response.totalEvacuationMinutes} min`, note: "technical-event evacuation time", tone: "text-cyan-800 bg-cyan-50" },
                 { key: "home_stat_5", label: "Evacuation count", value: response.totalEvacuationEvents, note: "11-7 / 11-17 occurrences", tone: "text-indigo-800 bg-indigo-50" },
                 { key: "home_stat_6", label: "Visual mappings", value: (response.weatherIntervalCount ?? 0) + (response.fireAlarmCount ?? 0), note: `${response.weatherIntervalCount ?? 0} weather · ${response.fireAlarmCount ?? 0} fire alarm`, tone: "text-orange-800 bg-orange-50" },
+                ...(response.parkCloseMappedCount ? [{ key: "home_stat_7", label: "10-7 Park Close Mapped", value: `${response.parkCloseMappedCount} rides`, note: "highlighted red at close time", tone: "text-rose-800 bg-rose-50" }] : []),
               ].map(stat => (
                 <Card key={stat.key} className="border-slate-200 bg-white shadow-sm">
                   <CardContent className="p-5">

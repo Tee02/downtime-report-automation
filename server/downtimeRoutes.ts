@@ -6,19 +6,21 @@ import path from "node:path";
 import { createSavedDowntimeReport, findSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { processDowntimeWorkbooks } from "./downtimeProcessor";
+import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { files: 1, fileSize: 15 * 1024 * 1024 },
+  limits: { files: 2, fileSize: 20 * 1024 * 1024 },
   fileFilter: (_request, file, callback) => {
-    callback(null, file.originalname.toLowerCase().endsWith(".xlsx"));
+    const name = file.originalname.toLowerCase();
+    callback(null, name.endsWith(".xlsx") || name.endsWith(".pdf"));
   },
 });
 
-const FIXED_TEMPLATE_KEY = "WK_template_v3_232fdd97.xlsx";
+const FIXED_TEMPLATE_KEY = "WK_template_v4_74dd9c19.xlsx";
 
 async function getFixedTemplate(): Promise<Buffer> {
-  const localTemplatePath = path.resolve(process.cwd(), "templates", "WK_template_v3.xlsx");
+  const localTemplatePath = path.resolve(process.cwd(), "templates", "WK_template_v4.xlsx");
   if (existsSync(localTemplatePath)) {
     try {
       return await readFile(localTemplatePath);
@@ -65,15 +67,28 @@ function safeFileName(value: string): string {
 export function registerDowntimeRoutes(app: Express) {
   app.post(
     "/api/downtime/analyze",
-    upload.single("operationsFile"),
+    upload.fields([
+      { name: "operationsFile", maxCount: 1 },
+      { name: "parkCloseFile", maxCount: 1 },
+    ]),
     async (request, response) => {
-      const operationsFile = request.file;
+      const files = request.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const operationsFile = files?.["operationsFile"]?.[0] || request.file;
+      const parkCloseFile = files?.["parkCloseFile"]?.[0];
       if (!operationsFile) return failure(response, 400, "Upload an Operations downtime XLSX file.");
       try {
         const manualClosedRideCodes = parseManualClosures(request.body.closedRideCodes);
         const weatherText = parseWeatherText(request.body.weatherText);
         const saveToStorage = parseSavePreference(request.body.saveToStorage);
-        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText });
+        let parkCloseTimes: Record<string, string> | undefined;
+        if (parkCloseFile) {
+          try {
+            parkCloseTimes = await parseParkCloseTimesFromPdf(parkCloseFile.buffer);
+          } catch (err) {
+            console.warn("Failed to parse 10-7 park close PDF:", err);
+          }
+        }
+        const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText, parkCloseTimes });
         const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
         if (!reportDate) throw new Error("The generated report date could not be saved.");
         if (saveToStorage && await findSavedDowntimeReport(reportDate)) {
@@ -105,6 +120,8 @@ export function registerDowntimeRoutes(app: Express) {
         }
         return response.json({
           ...result,
+          parkCloseMappedCount: parkCloseTimes ? Object.keys(parkCloseTimes).filter(k => parkCloseTimes![k] !== "CLOSED").length : 0,
+          parkCloseTimes,
           outputBuffer: undefined,
           downloadUrl: stored.url,
           savedToLibrary: saveToStorage,

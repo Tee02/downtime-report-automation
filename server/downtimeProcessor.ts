@@ -58,6 +58,7 @@ export type ProcessingResult = {
 export type ProcessingOptions = {
   manualClosedRideCodes?: string[];
   weatherText?: string;
+  parkCloseTimes?: Record<string, string>;
 };
 
 export type DowntimeLogCell = { column: string; value: string; style?: string };
@@ -160,6 +161,18 @@ function escapeXml(value: string): string {
 
 function normalizeText(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function withCenterAlignment(xf: string): string {
+  let result = withXfAttributes(xf, { applyAlignment: "1" });
+  if (result.includes("<alignment")) {
+    result = result.replace(/<alignment\b[^>]*\/?>/, '<alignment horizontal="center" vertical="center"/>');
+  } else if (result.endsWith("/>")) {
+    result = result.replace(/\/>$/, '><alignment horizontal="center" vertical="center"/></xf>');
+  } else if (result.includes("</xf>")) {
+    result = result.replace("</xf>", '<alignment horizontal="center" vertical="center"/></xf>');
+  }
+  return result;
 }
 
 function columnFromReference(reference: string): string {
@@ -701,7 +714,7 @@ function setStyle(rowXml: string, reference: string, style: string): string {
   return replaceCell(rowXml, reference, `>${body}`, style);
 }
 
-type TimelineStyleKind = "technical" | "lateHandover" | "operations" | "evacuation" | "weather" | "fireAlarm" | "closed" | "blank";
+type TimelineStyleKind = "technical" | "lateHandover" | "operations" | "evacuation" | "weather" | "fireAlarm" | "closed" | "blank" | "parkClose";
 type StyleVariants = {
   stylesheetXml: string;
   timeline: Record<TimelineStyleKind, Map<string, string>>;
@@ -793,7 +806,8 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
   const withWeatherFill = addSolidFill(withClosedFill.stylesheetXml, WEATHER_FILL_HEX);
   const withFireAlarmFill = addSolidFill(withWeatherFill.stylesheetXml, FIRE_ALARM_FILL_HEX);
   const withLateHandoverFill = addSolidFill(withFireAlarmFill.stylesheetXml, LATE_HANDOVER_FILL_HEX);
-  const withAvailabilityFill = addSolidFill(withLateHandoverFill.stylesheetXml, "FFFFF2CC");
+  const withParkCloseFill = addSolidFill(withLateHandoverFill.stylesheetXml, "FFFF0000");
+  const withAvailabilityFill = addSolidFill(withParkCloseFill.stylesheetXml, "FFFFF2CC");
   const withRedFonts = addColorFonts(withAvailabilityFill.stylesheetXml, "FFFF0000");
   const withPurpleFonts = addColorFonts(withRedFonts.stylesheetXml, "FF7030A0");
   const container = /(<cellXfs\b[^>]*>)([\s\S]*?)(<\/cellXfs>)/.exec(withPurpleFonts.stylesheetXml);
@@ -809,6 +823,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     lateHandover: withLateHandoverFill.fillId,
     closed: withClosedFill.fillId,
     blank: "0",
+    parkClose: withParkCloseFill.fillId,
   };
   const timeline = {
     technical: new Map<string, string>(),
@@ -819,6 +834,7 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
     fireAlarm: new Map<string, string>(),
     closed: new Map<string, string>(),
     blank: new Map<string, string>(),
+    parkClose: new Map<string, string>(),
   };
   const percentage = new Map<string, string>();
   const percentageAlert = new Map<string, string>();
@@ -833,19 +849,19 @@ function createStyleVariants(stylesheetXml: string): StyleVariants {
       additions.push(withXfAttributes(xf, { fillId: fillIds[kind], applyFill: "1" }));
     });
     percentage.set(base, String(nextStyle++));
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" }));
+    additions.push(withCenterAlignment(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" })));
     percentageAlert.set(base, String(nextStyle++));
     const redFontId = withRedFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: "0", applyFill: "1" }));
+    additions.push(withCenterAlignment(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: "0", applyFill: "1" })));
     lateHandoverText.set(base, String(nextStyle++));
     additions.push(withXfAttributes(xf, { fillId: withLateHandoverFill.fillId, applyFill: "1", fontId: redFontId, applyFont: "1" }));
     availability.standard.set(base, String(nextStyle++));
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" }));
+    additions.push(withCenterAlignment(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fillId: "0", applyFill: "1" })));
     availability.downtime.set(base, String(nextStyle++));
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: withAvailabilityFill.fillId, applyFill: "1" }));
+    additions.push(withCenterAlignment(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: redFontId, applyFont: "1", fillId: withAvailabilityFill.fillId, applyFill: "1" })));
     availability.closed.set(base, String(nextStyle++));
     const purpleFontId = withPurpleFonts.fontIds.get(attribute(xf, "fontId") ?? "0") ?? "0";
-    additions.push(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: purpleFontId, applyFont: "1", fillId: "0", applyFill: "1" }));
+    additions.push(withCenterAlignment(withXfAttributes(xf, { numFmtId: "10", applyNumberFormat: "1", fontId: purpleFontId, applyFont: "1", fillId: "0", applyFill: "1" })));
   });
   const updatedOpen = /\bcount="\d+"/.test(container[1])
     ? container[1].replace(/\bcount="\d+"/, `count="${nextStyle}"`)
@@ -872,7 +888,13 @@ function changeRows(xml: string, updates: Map<number, (rowXml: string) => string
   });
 }
 
-function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: WeatherInterval[], maps: TemplateMaps, variants: StyleVariants): Map<number, (rowXml: string) => string> {
+function prepareTimelineUpdates(
+  records: DowntimeRecord[],
+  weatherIntervals: WeatherInterval[],
+  maps: TemplateMaps,
+  variants: StyleVariants,
+  parkCloseTimes?: Record<string, string>
+): Map<number, (rowXml: string) => string> {
   const byRow = new Map<number, DowntimeRecord[]>();
   for (const record of records.filter(item => item.status === "matched" && item.rideCode && (item.isClosed || (item.technicalStart !== undefined && item.technicalEnd !== undefined)))) {
     const key = `${timelineDateKey(record.dateKey)}|${record.rideCode}`;
@@ -885,8 +907,19 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
     const row = maps.timelineRows.get(`${timelineDateKey(interval.dateKey)}|${interval.rideCode}`);
     if (row) weatherByRow.set(row, [...(weatherByRow.get(row) ?? []), interval]);
   }
+  const allDayRows: number[] = [];
+  for (const range of Array.from(maps.dayRows.values())) {
+    for (let r = range.start; r <= range.end; r++) {
+      allDayRows.push(r);
+    }
+  }
+  const rowToRide = new Map<number, string>();
+  for (const [key, row] of Array.from(maps.timelineRows.entries())) {
+    const parts = key.split("|");
+    if (parts.length >= 2) rowToRide.set(row, parts[1]);
+  }
   const updates = new Map<number, (rowXml: string) => string>();
-  for (const rowNumber of Array.from(new Set([...Array.from(byRow.keys()), ...Array.from(weatherByRow.keys())]))) {
+  for (const rowNumber of Array.from(new Set([...allDayRows, ...Array.from(byRow.keys()), ...Array.from(weatherByRow.keys())]))) {
     const rowRecords = byRow.get(rowNumber) ?? [];
     const rowWeather = weatherByRow.get(rowNumber) ?? [];
     updates.set(rowNumber, rowXml => {
@@ -930,6 +963,21 @@ function prepareTimelineUpdates(records: DowntimeRecord[], weatherIntervals: Wea
           const faultMatch = /\s*(\([^)]*\))\s*$/.exec(record.description);
           descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description.slice(0, faultMatch?.index).trimEnd() + (faultMatch ? " " : ""), redSuffix: faultMatch?.[1] ?? record.description });
         } else descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
+      }
+      const rideCode = rowToRide.get(rowNumber);
+      const isRideClosed = rowRecords.some(r => r.isClosed) || (rideCode && parkCloseTimes?.[rideCode] === "CLOSED");
+      if (!isRideClosed && rideCode) {
+        const closeTime = parkCloseTimes?.[rideCode] ?? "18:00";
+        if (closeTime && closeTime !== "CLOSED") {
+          const [ch, cm] = closeTime.split(":").map(Number);
+          if (Number.isFinite(ch) && Number.isFinite(cm)) {
+            const closeMinute = ch * 60 + cm;
+            const roundedMinute = Math.round(closeMinute / 5) * 5;
+            const column = maps.timeStartColumn + roundedMinute - 600;
+            const reference = `${numberToColumn(column)}${rowNumber}`;
+            cellStyles.set(reference, { kind: "parkClose", priority: 5 });
+          }
+        }
       }
       let revised = rowXml;
       for (const description of descriptions) {
@@ -1239,7 +1287,7 @@ export async function processDowntimeWorkbooks(operationsBuffer: Buffer, templat
     }
   }
   const aggregates = aggregateRecords(records);
-  const timelineUpdates = prepareTimelineUpdates(records, weatherIntervals, maps, styleVariants);
+  const timelineUpdates = prepareTimelineUpdates(records, weatherIntervals, maps, styleVariants, options.parkCloseTimes);
   const dailyPercentageUpdates = prepareDailyPercentageUpdates(records, aggregates, maps, styleVariants);
   const reportDateUpdates = prepareReportDateUpdates(outputDate, maps);
   const availabilityUpdates = prepareAvailabilityUpdates(records, aggregates, outputDate, styleVariants);

@@ -127,3 +127,16 @@
  - [x] 98. Update versionHistory.ts for Version 24
  - [x] 99. Run vitest test suite and typescript check
  - [x] 100. Save checkpoint and deliver result
+
+## Iteration 11: WK_template_v4, 10-7 Park Close PDF Mapping, Center-Align Percentages, Excel Preview for Incident Logs & System Improvements
+
+ - [x] 101. Inspect WK_template_v4.xlsx vs v3, copy to templates/, and upload to storage as default template
+ - [x] 102. Inspect 10.09.2026GentingSkyWorldsParkOperationsLogV1.1.pdf and implement PDF table/text extraction for 10-7 park close times
+ - [x] 103. Implement 10-7 park close mapping in downtimeProcessor.ts: map ride close time to the exact 5-min timeline column in red color fill
+ - [x] 104. Center-align all percentage cells in column D (D4:D24) and total network percentage cell E4 in generated Excel workbooks
+ - [x] 105. Add 10-7 PDF dropzone in Downtime Report Studio with file upload handler and processing pipeline
+ - [x] 106. In Analysis Studio, add an Excel-formatted preview table and rich HTML copy-to-clipboard for Ride Incident Logs with preserved red text styling
+ - [x] 107. Review and formulate concrete system improvements and future enhancement recommendations
+ - [x] 108. Update versionHistory.ts to Version 25
+ - [x] 109. Run vitest test suite and typescript check
+ - [x] 110. Save checkpoint and deliver result
