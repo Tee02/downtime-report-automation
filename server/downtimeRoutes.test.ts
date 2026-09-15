@@ -4,16 +4,20 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  combineMappedWorkbooks: vi.fn(),
   processDowntimeWorkbooks: vi.fn(),
   storageGetSignedUrl: vi.fn(),
   storagePut: vi.fn(),
   createSavedDowntimeReport: vi.fn(),
   findSavedDowntimeReport: vi.fn(),
+  getSavedDowntimeReportsByIds: vi.fn(),
+  loadSavedDowntimeReports: vi.fn(),
 }));
 
-vi.mock("./downtimeProcessor", () => ({ processDowntimeWorkbooks: mocks.processDowntimeWorkbooks }));
+vi.mock("./downtimeProcessor", () => ({ combineMappedWorkbooks: mocks.combineMappedWorkbooks, processDowntimeWorkbooks: mocks.processDowntimeWorkbooks }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: mocks.storageGetSignedUrl, storagePut: mocks.storagePut }));
-vi.mock("./db", () => ({ createSavedDowntimeReport: mocks.createSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport }));
+vi.mock("./db", () => ({ createSavedDowntimeReport: mocks.createSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds }));
+vi.mock("./downtimeAnalysis", () => ({ loadSavedDowntimeReports: mocks.loadSavedDowntimeReports }));
 
 import { registerDowntimeRoutes } from "./downtimeRoutes";
 
@@ -95,5 +99,71 @@ describe("downtime analyze upload route", () => {
     expect(response.status).toBe(409);
     expect(mocks.storagePut).not.toHaveBeenCalled();
     expect(mocks.createSavedDowntimeReport).not.toHaveBeenCalled();
+  });
+});
+
+describe("saved downtime mapping route", () => {
+  it("sorts selected saved logs chronologically and returns one combined Mapping Excel", async () => {
+    const later = { id: 2, reportDate: "2026-09-13", sourceFileName: "13.xlsx", sourceFileUrl: "/manus-storage/13.xlsx", outputFileName: "old-13.xlsx", outputFileUrl: "/manus-storage/old-13.xlsx", totalTechnicalMinutes: 139, totalNetworkPercentage: 1.5, weatherIntervalCount: 0, weatherText: null, createdAt: new Date() };
+    const earlier = { id: 1, reportDate: "2026-09-12", sourceFileName: "12.xlsx", sourceFileUrl: "/manus-storage/12.xlsx", outputFileName: "old-12.xlsx", outputFileUrl: "/manus-storage/old-12.xlsx", totalTechnicalMinutes: 36, totalNetworkPercentage: 0.4, weatherIntervalCount: 0, weatherText: null, createdAt: new Date() };
+    mocks.getSavedDowntimeReportsByIds.mockResolvedValue([later, earlier]);
+    mocks.loadSavedDowntimeReports.mockImplementation(async (reports: typeof later[]) => reports.map(report => ({ report, buffer: Buffer.from(report.reportDate), records: [] })));
+    mocks.processDowntimeWorkbooks
+      .mockResolvedValueOnce({ records: [], matchedCount: 5, unmatchedCount: 0, totalTechnicalMinutes: 36, totalOperationsMinutes: 0, totalEvacuationMinutes: 0, totalEvacuationEvents: 0, totalNetworkPercentage: 0.4, closedRideCount: 0, weatherIntervalCount: 0, fireAlarmCount: 0, summaryByRide: [], outputBuffer: Buffer.from("mapped-12"), outputFileName: "Technical_Downtime_2026-09-12.xlsx" })
+      .mockResolvedValueOnce({ records: [], matchedCount: 11, unmatchedCount: 0, totalTechnicalMinutes: 139, totalOperationsMinutes: 0, totalEvacuationMinutes: 0, totalEvacuationEvents: 0, totalNetworkPercentage: 1.5, closedRideCount: 0, weatherIntervalCount: 0, fireAlarmCount: 0, summaryByRide: [], outputBuffer: Buffer.from("mapped-13"), outputFileName: "Technical_Downtime_2026-09-13.xlsx" });
+    mocks.combineMappedWorkbooks.mockResolvedValue(Buffer.from("combined workbook"));
+    mocks.storagePut.mockResolvedValue({ key: "mapping.xlsx", url: "/manus-storage/mapping.xlsx" });
+
+    const app = express();
+    app.use(express.json());
+    registerDowntimeRoutes(app);
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/downtime/map-saved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reportIds: [2, 1], closedRideCodes: [] }),
+    });
+    const body = await response.json() as { sourceDates: string[]; outputFileName: string; matchedCount: number; downloadUrl: string };
+
+    expect(response.status).toBe(200);
+    expect(mocks.loadSavedDowntimeReports.mock.calls[0]?.[0].map((report: typeof later) => report.reportDate)).toEqual(["2026-09-12", "2026-09-13"]);
+    expect(mocks.combineMappedWorkbooks).toHaveBeenCalledWith([
+      { reportDate: "2026-09-12", buffer: Buffer.from("mapped-12") },
+      { reportDate: "2026-09-13", buffer: Buffer.from("mapped-13") },
+    ]);
+    expect(body).toMatchObject({
+      sourceDates: ["2026-09-12", "2026-09-13"],
+      outputFileName: "Mapping_Excel_2026-09-12_to_2026-09-13.xlsx",
+      matchedCount: 16,
+      downloadUrl: "/manus-storage/mapping.xlsx",
+    });
+  });
+
+  it("rejects more than one saved source for the same report date", async () => {
+    mocks.getSavedDowntimeReportsByIds.mockResolvedValue([
+      { id: 1, reportDate: "2026-09-12" },
+      { id: 2, reportDate: "2026-09-12" },
+    ]);
+    const app = express();
+    app.use(express.json());
+    registerDowntimeRoutes(app);
+    const server = app.listen(0, "127.0.0.1");
+    servers.push(server);
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/downtime/map-saved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reportIds: [1, 2] }),
+    });
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ error: expect.stringContaining("one saved downtime log") }));
+    expect(mocks.loadSavedDowntimeReports).not.toHaveBeenCalled();
   });
 });

@@ -175,6 +175,7 @@ function CalendarDayButton({
   className,
   day,
   modifiers,
+  children,
   ...props
 }: React.ComponentProps<typeof DayButton>) {
   const defaultClassNames = getDefaultClassNames();
@@ -190,6 +191,10 @@ function CalendarDayButton({
   const isRangeEnd = Boolean(modifiers.range_end || modifiers.rangeEnd);
   const isRangeMiddle = Boolean(modifiers.range_middle || modifiers.rangeMiddle);
   const isSingle = Boolean(modifiers.selected && !isRangeStart && !isRangeEnd && !isRangeMiddle && !isRangePending);
+  const isMappingSelected = Boolean(modifiers.mappingSelected);
+  const mappingOrderKey = Object.keys(modifiers).find(key => key.startsWith("mappingOrder") && modifiers[key]);
+  const mappingOrder = mappingOrderKey?.replace("mappingOrder", "");
+  const isSavedLog = Boolean(modifiers.savedLog);
 
   const buttonElement = (
     <Button
@@ -203,9 +208,12 @@ function CalendarDayButton({
       data-range-start={isRangeStart}
       data-range-end={isRangeEnd}
       data-range-middle={isRangeMiddle}
+      data-mapping-selected={isMappingSelected}
+      data-saved-log={isSavedLog}
       className={cn(
-        "flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] transition-all [&>span]:text-xs [&>span]:opacity-70",
-        isSingle && "!bg-[#3D52A0] !text-white font-bold !rounded-lg shadow-sm hover:!bg-[#293252]",
+        "relative flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] transition-all [&>span]:text-xs",
+        isSingle && !isMappingSelected && "!bg-[#3D52A0] !text-white font-bold !rounded-lg shadow-sm hover:!bg-[#293252]",
+        isMappingSelected && "!bg-emerald-700 !text-white font-extrabold !rounded-lg shadow-sm hover:!bg-emerald-800",
         isRangeStart && "!bg-[#3D52A0] !text-white font-extrabold !rounded-l-lg !rounded-r-none shadow-sm z-10 hover:!bg-[#293252]",
         isRangeEnd && "!bg-[#3D52A0] !text-white font-extrabold !rounded-r-lg !rounded-l-none shadow-sm z-10 hover:!bg-[#293252]",
         isRangeMiddle && "!bg-indigo-100/90 !text-[#293252] font-semibold !rounded-none hover:!bg-indigo-200",
@@ -215,7 +223,20 @@ function CalendarDayButton({
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {mappingOrder && (
+        <span
+          aria-hidden="true"
+          className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full border border-white bg-sky-600 text-[9px] font-extrabold leading-none text-white shadow-sm"
+        >
+          {mappingOrder}
+        </span>
+      )}
+      {isSavedLog && !isMappingSelected && (
+        <span aria-hidden="true" className="absolute bottom-0.5 left-1/2 size-1 -translate-x-1/2 rounded-full bg-sky-500" />
+      )}
+    </Button>
   );
 
   if (isDarkDay) {

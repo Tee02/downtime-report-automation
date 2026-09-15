@@ -3,10 +3,11 @@ import multer from "multer";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createSavedDowntimeReport, findSavedDowntimeReport } from "./db";
+import { createSavedDowntimeReport, findSavedDowntimeReport, getSavedDowntimeReportsByIds } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
-import { processDowntimeWorkbooks } from "./downtimeProcessor";
+import { combineMappedWorkbooks, processDowntimeWorkbooks, type ProcessingResult } from "./downtimeProcessor";
 import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
+import { loadSavedDowntimeReports } from "./downtimeAnalysis";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -62,6 +63,54 @@ function parseWeatherText(value: unknown): string | undefined {
 
 function safeFileName(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-").slice(0, 180) || "downtime-log.xlsx";
+}
+
+function parseReportIds(value: unknown): number[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 60) {
+    throw new Error("Select between 1 and 60 saved downtime logs.");
+  }
+  const ids = value.map(Number);
+  if (ids.some(id => !Number.isInteger(id) || id <= 0) || new Set(ids).size !== ids.length) {
+    throw new Error("The saved downtime log selection is invalid.");
+  }
+  return ids;
+}
+
+function combineProcessingResults(results: ProcessingResult[], reportDates: string[]) {
+  const records = results
+    .flatMap(result => result.records)
+    .sort((left, right) => left.dateKey.localeCompare(right.dateKey) || left.sourceRow - right.sourceRow);
+  const rideSummary = new Map<string, ProcessingResult["summaryByRide"][number]>();
+  results.flatMap(result => result.summaryByRide).forEach(item => {
+    const current = rideSummary.get(item.rideCode) ?? { ...item, minutes: 0, events: 0, evacuationMinutes: 0, percentage: 0, isClosed: false };
+    current.minutes += item.minutes;
+    current.events += item.events;
+    current.evacuationMinutes += item.evacuationMinutes;
+    current.percentage = (current.minutes / (480 * reportDates.length)) * 100;
+    current.isClosed ||= item.isClosed;
+    rideSummary.set(item.rideCode, current);
+  });
+  const totalTechnicalMinutes = results.reduce((sum, result) => sum + result.totalTechnicalMinutes, 0);
+  return {
+    records,
+    matchedCount: results.reduce((sum, result) => sum + result.matchedCount, 0),
+    unmatchedCount: results.reduce((sum, result) => sum + result.unmatchedCount, 0),
+    totalTechnicalMinutes,
+    totalOperationsMinutes: results.reduce((sum, result) => sum + result.totalOperationsMinutes, 0),
+    totalEvacuationMinutes: results.reduce((sum, result) => sum + result.totalEvacuationMinutes, 0),
+    totalEvacuationEvents: results.reduce((sum, result) => sum + result.totalEvacuationEvents, 0),
+    totalNetworkPercentage: (totalTechnicalMinutes / (480 * 19 * reportDates.length)) * 100,
+    closedRideCount: results.reduce((sum, result) => sum + result.closedRideCount, 0),
+    weatherIntervalCount: results.reduce((sum, result) => sum + result.weatherIntervalCount, 0),
+    fireAlarmCount: results.reduce((sum, result) => sum + result.fireAlarmCount, 0),
+    summaryByRide: Array.from(rideSummary.values()).sort((left, right) => right.minutes - left.minutes),
+    dailySummary: results.map((result, index) => ({
+      dateKey: reportDates[index]!,
+      technicalMinutes: result.totalTechnicalMinutes,
+      incidents: result.matchedCount,
+      downtimePercentage: result.totalNetworkPercentage,
+    })),
+  };
 }
 
 export function registerDowntimeRoutes(app: Express) {
@@ -132,4 +181,68 @@ export function registerDowntimeRoutes(app: Express) {
       }
     }
   );
+
+  app.post("/api/downtime/map-saved", async (request: Request, response: Response) => {
+    try {
+      const reportIds = parseReportIds(request.body.reportIds);
+      const manualClosedRideCodes = parseManualClosures(JSON.stringify(request.body.closedRideCodes ?? []));
+      const weatherText = parseWeatherText(request.body.weatherText);
+      const reports = (await getSavedDowntimeReportsByIds(reportIds))
+        .sort((left, right) => left.reportDate.localeCompare(right.reportDate));
+      if (reports.length !== reportIds.length) {
+        return failure(response, 404, "One or more selected saved downtime logs are no longer available. Refresh the calendar and try again.");
+      }
+      if (new Set(reports.map(report => report.reportDate)).size !== reports.length) {
+        return failure(response, 422, "Choose only one saved downtime log for each report date.");
+      }
+
+      const loadedReports = await loadSavedDowntimeReports(reports);
+      const templateBuffer = await getFixedTemplate();
+      const results: ProcessingResult[] = [];
+      for (const loaded of loadedReports) {
+        const savedWeatherText = loaded.report.weatherText?.trim();
+        const combinedWeatherText = [savedWeatherText, reports.length === 1 ? weatherText?.trim() : undefined]
+          .filter((value): value is string => Boolean(value))
+          .join("\n");
+        results.push(await processDowntimeWorkbooks(loaded.buffer, templateBuffer, {
+          manualClosedRideCodes,
+          weatherText: combinedWeatherText || undefined,
+        }));
+      }
+
+      const reportDates = loadedReports.map(item => item.report.reportDate);
+      const outputBuffer = await combineMappedWorkbooks(results.map((result, index) => ({
+        reportDate: reportDates[index]!,
+        buffer: result.outputBuffer,
+      })));
+      const firstDate = reportDates[0]!;
+      const lastDate = reportDates.at(-1)!;
+      const outputFileName = firstDate === lastDate
+        ? `Mapping_Excel_${firstDate}.xlsx`
+        : `Mapping_Excel_${firstDate}_to_${lastDate}.xlsx`;
+      const stored = await storagePut(
+        `mapping-excels/${crypto.randomUUID()}/${outputFileName}`,
+        outputBuffer,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      const combined = combineProcessingResults(results, reportDates);
+
+      return response.json({
+        ...combined,
+        outputFileName,
+        downloadUrl: stored.url,
+        sourceMode: "saved",
+        sourceDates: reportDates,
+        sourceFiles: loadedReports.map(item => ({
+          id: item.report.id,
+          reportDate: item.report.reportDate,
+          fileName: item.report.sourceFileName,
+          url: item.report.sourceFileUrl,
+        })),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The saved downtime logs could not be mapped.";
+      return failure(response, 422, message);
+    }
+  });
 }

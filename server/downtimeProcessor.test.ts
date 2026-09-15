@@ -3,7 +3,7 @@ import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { __testables, compileDowntimeLogExport, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
+import { __testables, combineMappedWorkbooks, compileDowntimeLogExport, durationMinutes, formatTime, parseTimeToMinutes, parseWeatherIntervals, processDowntimeWorkbooks, resolveRideCode } from "./downtimeProcessor";
 
 async function buildMinimalOperationsWorkbook(options: { code?: string; description?: string; evacuationStart?: string; evacuationEnd?: string; extraRows?: string } = {}) {
   const zip = new JSZip();
@@ -354,5 +354,18 @@ describe("supplied workbook integration", () => {
     expect(fillColor("BZ88")).not.toBe("FFFFF2CC");
     expect(fillColor("BZ119")).not.toBe("FFFFF2CC");
     expect(fillColor("BZ123")).not.toBe("FFFFF2CC");
+  }, 30_000);
+
+  it("combines mapped worksheets in ascending report-date order", async () => {
+    const template = await readFile(new URL("../templates/WK_template_v4.xlsx", import.meta.url));
+    const combined = await combineMappedWorkbooks([
+      { reportDate: "2026-09-13", buffer: template },
+      { reportDate: "2026-09-12", buffer: template },
+    ]);
+    const zip = await JSZip.loadAsync(combined);
+    const workbookXml = await zip.file("xl/workbook.xml")?.async("string") ?? "";
+    expect(workbookXml.indexOf('name="12-Sept-2026"')).toBeGreaterThan(-1);
+    expect(workbookXml.indexOf('name="13-Sept-2026"')).toBeGreaterThan(workbookXml.indexOf('name="12-Sept-2026"'));
+    expect(Object.keys(zip.files).filter(path => /^xl\/worksheets\/sheet\d+\.xml$/.test(path))).toHaveLength(2);
   }, 30_000);
 });

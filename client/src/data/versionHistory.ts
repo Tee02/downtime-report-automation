@@ -9,9 +9,25 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.26";
+export const CURRENT_VERSION = "v1.27";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.27",
+    commit: "pending",
+    date: "2026-09-15",
+    time: "08:30 GMT+8",
+    timestamp: "2026-09-15 08:30:00",
+    title: "Downtime Report Studio Workflow Redesign & Multi-Date Mapping Excel",
+    tasks: [
+      "Rebuilt Report Studio around the approved three-step Choose source, Additional context, and Build Mapping Excel workflow",
+      "Added Upload new file and Saved downtime logs tabs with accessible file removal controls, secure source-save messaging, and contextual readiness guidance",
+      "Added a calendar-first saved-log recall flow with multi-date selection, chronological order badges, duplicate-date source choice, and source-file viewing",
+      "Added a real multi-date backend build path that reprocesses each saved source through WK_template_v4 and combines chronologically ordered mapped sheets into one workbook",
+      "Added explicit generation progress, Mapping Excel preview with Downtime % terminology, Summary and Downtime chart tabs, and success/retry/download states",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.26",
     commit: "pending",
@@ -25,7 +41,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added explicit inline CSS styles (color: #FF0000; font-weight: bold;) on all cause descriptions, weather moderations, Dark Days, and evacuation durations within the card sentences",
       "Added one-click 'Copy for Excel' button to copy formatted card sentences (*Date, Description, Duration, Evacuation) to clipboard with red text colors preserved when pasting into Excel",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.25",
@@ -43,7 +59,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added Excel Spreadsheet Table Preview to Ride Incident Logs in Analysis Studio displaying structured tabular gridlines",
       "Implemented one-click 'Copy Formatted Table for Excel' using rich HTML clipboard items to preserve red text colors and table borders when pasting into Excel",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.24",
@@ -61,7 +77,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Upgraded comparison history to store up to 10 previous comparisons in a horizontally scrollable container (latest on left, oldest on right)",
       "Added sample day count bracket formatting to history cards (e.g., 'All rides on 26/8–1/9 (7d) vs All rides on 27/8–2/9 (7d)')",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.23",

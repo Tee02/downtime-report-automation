@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import JSZip from "jszip";
 
 type XmlCell = { reference: string; column: string; value: string; style?: string };
@@ -59,6 +60,11 @@ export type ProcessingOptions = {
   manualClosedRideCodes?: string[];
   weatherText?: string;
   parkCloseTimes?: Record<string, string>;
+};
+
+export type MappedWorkbookPart = {
+  reportDate: string;
+  buffer: Buffer;
 };
 
 export type DowntimeLogCell = { column: string; value: string; style?: string };
@@ -607,6 +613,44 @@ export async function compileDowntimeLogExport(sources: Array<{ reportDate: stri
   const outputName = "Compiled Downtime Log";
   primaryZip.file("xl/workbook.xml", updateSheetName(await textFromZip(primaryZip, "xl/workbook.xml"), primarySheet.name, outputName));
   return primaryZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
+}
+
+function mappedSheetName(reportDate: string): string {
+  const date = new Date(`${reportDate}T00:00:00Z`);
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).replace(/ /g, "-");
+}
+
+export async function combineMappedWorkbooks(parts: MappedWorkbookPart[]): Promise<Buffer> {
+  if (!parts.length) throw new Error("Select at least one saved downtime log before building the Mapping Excel.");
+  const orderedParts = [...parts].sort((left, right) => left.reportDate.localeCompare(right.reportDate));
+  if (orderedParts.length === 1) return orderedParts[0]!.buffer;
+
+  const combined = new ExcelJS.Workbook();
+  combined.creator = "SkyWorlds Downtime Studio";
+  combined.created = new Date();
+  combined.modified = new Date();
+
+  for (const part of orderedParts) {
+    const source = new ExcelJS.Workbook();
+    await source.xlsx.load(part.buffer as unknown as ExcelJS.Buffer);
+    const sourceSheet = source.worksheets[0];
+    if (!sourceSheet) throw new Error(`The mapped workbook for ${part.reportDate} does not contain a worksheet.`);
+
+    const destination = combined.addWorksheet(mappedSheetName(part.reportDate));
+    destination.model = {
+      ...structuredClone(sourceSheet.model),
+      id: destination.id,
+      name: destination.name,
+    };
+  }
+
+  const output = await combined.xlsx.writeBuffer();
+  return Buffer.from(output);
 }
 
 type TemplateMaps = {
