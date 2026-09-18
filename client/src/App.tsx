@@ -1,13 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { TextEditProvider } from "./contexts/TextEditContext";
 import Home from "./pages/Home";
 import AnalysisStudio from "./pages/AnalysisStudio";
-import ComparisonStudio from "./pages/ComparisonStudio";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -15,7 +14,9 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/analysis"} component={AnalysisStudio} />
-      <Route path={"/comparison"} component={ComparisonStudio} />
+      <Route path={"/comparison"}>
+        <Redirect to="/analysis?tab=compare" />
+      </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

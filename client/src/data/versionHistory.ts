@@ -9,9 +9,25 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.27";
+export const CURRENT_VERSION = "v1.28";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.28",
+    commit: "pending",
+    date: "2026-09-18",
+    time: "08:35 GMT+8",
+    timestamp: "2026-09-18 08:35:17",
+    title: "Unified Analysis Studio Overview & Compare Workspace",
+    tasks: [
+      "Merged the former standalone Comparison Studio into a two-tab Analysis Studio: Overview for operational monitoring and Compare for scenario analysis",
+      "Rebuilt Overview with the approved Date range, Ride scope, and View source reports filter row; compact KPI grid; scrollable Ride ranking; severity-banded downtime trend; responsive downtime calendar; and retained Excel-compatible Ride Incident Logs",
+      "Added a calendar-first Saved source reports manager with marked report dates, per-file selection for duplicate dates, technical-downtime summaries, and requested public saved-log deletion confirmation",
+      "Rebuilt Compare around two editable scenario cards, optional third scenario, explicit Start comparison calculation, Scenario A/B and overlap trends, performance difference summary, in-cell metric deltas, and calculated improvement/follow-up ride panels",
+      "Removed Comparison Studio from sidebar navigation and redirected the legacy /comparison route to Analysis Studio Compare",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.27",
     commit: "pending",
@@ -26,7 +42,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added a real multi-date backend build path that reprocesses each saved source through WK_template_v4 and combines chronologically ordered mapped sheets into one workbook",
       "Added explicit generation progress, Mapping Excel preview with Downtime % terminology, Summary and Downtime chart tabs, and success/retry/download states",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.26",

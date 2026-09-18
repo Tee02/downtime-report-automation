@@ -61,7 +61,7 @@ export const appRouter = router({
   }),
   savedReports: router({
     list: publicProcedure.query(() => listSavedDowntimeReports()),
-    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
+    delete: publicProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ input }) => {
       await deleteSavedDowntimeReport(input.id);
       return { success: true };
     }),
