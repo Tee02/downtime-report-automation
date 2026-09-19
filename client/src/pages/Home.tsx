@@ -376,6 +376,7 @@ export default function Home() {
   const [calendarMonth, setCalendarMonth] = useState<Date>();
   const [duplicateDate, setDuplicateDate] = useState<string>();
   const [saveToStorage, setSaveToStorage] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [handoverEnabled, setHandoverEnabled] = useState(false);
@@ -562,30 +563,21 @@ export default function Home() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-[calc(100vh-2rem)] pb-3 text-slate-900">
-        <section className="park-sky paper-grid relative overflow-hidden rounded-3xl border border-[#adbBda]/70 px-5 py-6 shadow-[0_18px_50px_rgba(61,82,160,0.13)] sm:px-8">
-          <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full bg-white/30 blur-3xl" />
-          <div className="relative flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-            <div className="max-w-2xl">
-              <Badge className="rounded-full bg-emerald-700 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white hover:bg-emerald-700">
-                <EditableText contentKey="home_badge_pill" defaultText="Park operations" />
-              </Badge>
-              <EditableText
-                contentKey={mappingStatus === "success" ? "home_generated_title" : mappingStarted ? "home_building_title" : "home_main_title"}
-                defaultText={mappingStatus === "success" ? "Mapping Excel generated" : mappingStarted ? "Building mapping Excel" : "Downtime Report Studio"}
-                as="h1"
-                className="mt-3 block text-3xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-4xl"
-              />
-              <EditableText
-                contentKey={mappingStatus === "success" ? "home_generated_desc_v27" : mappingStarted ? "home_building_desc_v27" : sourceMode === "saved" ? "home_saved_desc_v27" : "home_main_desc_v27"}
-                defaultText={mappingStatus === "success" ? "Your Technical 11-1 downtime mapping is ready to review and download." : mappingStarted ? "Applying selected logs in chronological order." : sourceMode === "saved" ? "Select saved logs and build one Mapping Excel in date order." : "Upload a daily log or reopen a saved log to build a Mapping Excel."}
-                as="p"
-                className="mt-2 block max-w-xl text-sm leading-6 text-slate-700"
-              />
-            </div>
-            <WorkflowStepper status={mappingStatus} sourceReady={validSource} />
-          </div>
-        </section>
+      <div className="min-h-[calc(100vh-2rem)] pb-28 text-slate-900">
+        <header className="px-1 pt-1">
+          <EditableText
+            contentKey={mappingStatus === "success" ? "home_generated_title" : mappingStarted ? "home_building_title" : "home_main_title"}
+            defaultText={mappingStatus === "success" ? "Mapping Excel generated" : mappingStarted ? "Building mapping Excel" : "Downtime Report Studio"}
+            as="h1"
+            className="block text-3xl font-extrabold tracking-[-0.045em] text-[#162b5b] sm:text-4xl"
+          />
+          <EditableText
+            contentKey={mappingStatus === "success" ? "home_generated_desc_v27" : mappingStarted ? "home_building_desc_v27" : sourceMode === "saved" ? "home_saved_desc_v27" : "home_main_desc_v27"}
+            defaultText={mappingStatus === "success" ? "Your Technical 11-1 downtime mapping is ready to review and download." : mappingStarted ? "Applying selected logs in chronological order." : sourceMode === "saved" ? "Select saved logs and build one Mapping Excel in date order." : "Upload a daily log or reopen a saved log to build a Mapping Excel."}
+            as="p"
+            className="mt-1 block max-w-xl text-sm leading-6 text-slate-600"
+          />
+        </header>
 
         {!mappingStarted ? (
           <>
@@ -594,7 +586,7 @@ export default function Home() {
                 <Card className="overflow-hidden border-[#adbBda]/70 bg-white/85 shadow-[0_12px_32px_rgba(61,82,160,0.08)]">
                   <CardContent className="p-0">
                     <div className="px-5 pt-5 sm:px-6">
-                      <EditableText contentKey="home_source_title" defaultText="1. Choose your source" as="h2" className="block text-xl font-extrabold tracking-tight text-slate-950" />
+                      <EditableText contentKey="home_source_title" defaultText="Choose your source" as="h2" className="block text-xl font-extrabold tracking-tight text-slate-950" />
                     </div>
                     <div className="mt-3 grid grid-cols-2 border-b border-slate-200 px-3 sm:px-5" role="tablist" aria-label="Downtime source method">
                       <button
@@ -646,22 +638,15 @@ export default function Home() {
                               icon={FileText}
                             />
                           </div>
-                          {operationsFile && (
-                            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-                              <Switch
-                                id="save-source-log"
-                                checked={saveToStorage && canSaveUpload}
-                                disabled={!canSaveUpload}
-                                onCheckedChange={setSaveToStorage}
-                                className="mt-0.5"
-                              />
-                              <div className="min-w-0">
-                                <label htmlFor="save-source-log" className="cursor-pointer text-sm font-extrabold text-slate-900"><EditableText contentKey="home_save_source_title_v27" defaultText="Save source log to website" /></label>
-                                <p className="mt-1 text-xs leading-5 text-slate-600">
-                                  {canSaveUpload ? "Store this source file securely so it can be recalled and reprocessed from any signed-in device." : "Sign in from the sidebar to enable secure cross-device source recall."}
-                                </p>
-                              </div>
-                              <Archive className="ml-auto h-5 w-5 shrink-0 text-emerald-700" />
+                          <div className="mt-4 flex items-start gap-2 rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-xs font-semibold leading-5 text-sky-800" role="status">
+                            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>New source logs are saved automatically. Existing logs are not duplicated.</span>
+                          </div>
+                          {duplicateDate && (
+                            <div className="mt-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-900" role="status">
+                              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span className="flex-1"><strong className="block">This downtime log already exists in the website.</strong>It will not be saved again.</span>
+                              <button type="button" aria-label="Dismiss duplicate information" onClick={() => setDuplicateDate(undefined)} className="rounded p-0.5 hover:bg-white/70"><X className="h-3.5 w-3.5" /></button>
                             </div>
                           )}
                         </div>
@@ -743,13 +728,15 @@ export default function Home() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-[#adbBda]/70 bg-white/85 shadow-[0_12px_32px_rgba(61,82,160,0.08)]">
-                  <CardContent className="p-5 sm:p-6">
-                    <div className="flex items-center gap-3">
-                      <EditableText contentKey="home_context_title" defaultText="2. Additional context" as="h2" className="block text-xl font-extrabold tracking-tight text-slate-950" />
-                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Optional</Badge>
-                    </div>
-                    <div className="mt-4 space-y-3">
+                <Collapsible open={contextOpen} onOpenChange={setContextOpen} className="overflow-hidden rounded-2xl border border-[#adbBda]/70 bg-white/90 shadow-[0_10px_26px_rgba(61,82,160,0.07)]">
+                  <CollapsibleTrigger className="flex w-full items-center gap-3 p-5 text-left sm:px-6" aria-label="Toggle additional context">
+                    <span className="rounded-xl bg-sky-50 p-2.5 text-sky-700"><FileText className="h-4 w-4" /></span>
+                    <span className="min-w-0 flex-1"><EditableText contentKey="home_context_title" defaultText="Additional context" as="span" className="block text-base font-extrabold tracking-tight text-slate-950" /><EditableText contentKey="home_context_collapsed_desc" defaultText="Add handover closure or 11-3 weather messages if needed." as="span" className="mt-0.5 block text-xs leading-5 text-slate-500" /></span>
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Optional</Badge>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${contextOpen ? "rotate-180" : ""}`} />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="border-t border-slate-100 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+                    <div className="space-y-3">
                       <Collapsible open={handoverOpen} onOpenChange={setHandoverOpen} className="rounded-2xl border border-slate-200 bg-white">
                         <CollapsibleTrigger className="flex w-full items-center gap-3 p-4 text-left">
                           <span className="rounded-xl bg-amber-50 p-2.5 text-amber-700"><CircleOff className="h-4 w-4" /></span>
@@ -794,8 +781,8 @@ export default function Home() {
                         </CollapsibleContent>
                       </Collapsible>
                     </div>
-                  </CardContent>
-                </Card>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
 
               <Card className="border-[#adbBda]/70 bg-white/90 shadow-[0_12px_32px_rgba(61,82,160,0.09)] xl:sticky xl:top-4">
@@ -805,20 +792,12 @@ export default function Home() {
                     <EditableText contentKey="home_readiness_title" defaultText="Mapping readiness" as="h2" className="block text-lg font-extrabold text-slate-950" />
                   </div>
                   {sourceMode === "upload" ? (
-                    <div className="divide-y divide-slate-100">
-                      <StatusRow tone={operationsFile ? "complete" : "pending"} title={operationsFile ? "Downtime log loaded" : "Downtime log required"} detail={operationsFile ? `${operationsFile.name}${reportDateFromFileName(operationsFile.name) ? ` · Detected report date: ${formatDate(reportDateFromFileName(operationsFile.name)!)}` : " · Report date will be detected during mapping."}` : "Add an Operations downtime XLSX file."} />
-                      <StatusRow tone={parkCloseFile ? "complete" : "optional"} title={parkCloseFile ? "Park Close log loaded" : "Park Close log not added — optional"} detail={parkCloseFile?.name ?? "A PDF is not required to build the Mapping Excel."} />
-                      <StatusRow title="Technical 11-1 scope confirmed" detail={weatherText.trim() ? "Technical rows plus supplied weather context." : "Weather, ride, and closure context is used only when available."} />
-                      <StatusRow title="AVL excluded" detail="Not included in this mapping." />
-                    </div>
+                    operationsFile || parkCloseFile ? <div className="divide-y divide-slate-100">
+                      {operationsFile && <StatusRow title="Downtime log loaded" detail={operationsFile.name} />}
+                      {parkCloseFile && <StatusRow title="Park Close log loaded" detail={parkCloseFile.name} />}
+                    </div> : <div className="py-5 text-center text-xs leading-5 text-slate-500">Add an Operations downtime log to see source readiness.</div>
                   ) : (
-                    <div className="divide-y divide-slate-100">
-                      <StatusRow tone={orderedSelectedReports.length ? "complete" : "pending"} title={orderedSelectedReports.length ? `${orderedSelectedReports.length} saved log${orderedSelectedReports.length === 1 ? "" : "s"} selected` : "Saved log selection required"} detail={orderedSelectedReports.length ? `${formatDateRange(orderedDates)}· ${orderedSelectedReports.length} log${orderedSelectedReports.length === 1 ? "" : "s"}` : "Choose at least one marked date."} />
-                      <StatusRow tone={orderedSelectedReports.length ? "complete" : "pending"} title="Date order confirmed" detail={orderedSelectedReports.length ? "In chronological order" : "Order appears after selection"} />
-                      <StatusRow title="Technical 11-1 scope confirmed" detail="Weather and ride closure scope follows each saved source." />
-                      <StatusRow title="AVL excluded" detail="Not included in this mapping." />
-                      <StatusRow tone="optional" title="Optional context" detail="Park Close log and manual weather context are optional." />
-                    </div>
+                    orderedSelectedReports.length ? <div className="divide-y divide-slate-100">{orderedSelectedReports.map(report => <StatusRow key={report.id} title="Downtime log loaded" detail={`${formatDate(report.reportDate)} · ${report.sourceFileName}`} />)}</div> : <div className="py-5 text-center text-xs leading-5 text-slate-500">Choose a saved downtime log to see source readiness.</div>
                   )}
                 </CardContent>
               </Card>
@@ -830,13 +809,13 @@ export default function Home() {
               <div className="flex min-w-0 items-center gap-3">
                 <span className="hidden size-10 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/10 sm:flex"><FileCheck2 className="h-5 w-5" /></span>
                 <div className="min-w-0">
-                  <p className="font-extrabold">{mappingReadyTitle}</p>
-                  <p className="mt-0.5 text-xs text-emerald-50/85">{mappingReadyDetail}</p>
+                  <p className="font-extrabold">Ready to build mapping Excel.</p>
+                  <p className="mt-0.5 text-xs text-emerald-50/85">New source logs are saved automatically; existing logs are not duplicated.</p>
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                <Button type="button" variant="outline" disabled={!validSource} onClick={openSourceFiles} className="h-10 rounded-xl border-white/50 bg-transparent font-bold text-white hover:bg-white/10 hover:text-white">View source {sourceMode === "saved" && orderedSelectedReports.length > 1 ? "logs" : "file"}</Button>
-                <Button type="button" disabled={!validSource} onClick={buildMappingExcel} className="h-10 rounded-xl bg-white px-5 font-extrabold text-emerald-800 hover:bg-emerald-50 active:scale-[0.97]">{primaryLabel}<ArrowRight className="ml-2 h-4 w-4" /></Button>
+                <Button type="button" variant="outline" disabled={!validSource} onClick={openSourceFiles} className="h-10 rounded-xl border-white/50 bg-transparent font-bold text-white hover:bg-white/10 hover:text-white"><FileText className="mr-2 h-4 w-4" />View source files</Button>
+                <Button type="button" disabled={!validSource} onClick={buildMappingExcel} className="h-10 rounded-xl bg-white px-5 font-extrabold text-emerald-800 hover:bg-emerald-50 active:scale-[0.97]">Build mapping Excel<ArrowRight className="ml-2 h-4 w-4" /></Button>
               </div>
             </div>
           </>
@@ -861,7 +840,7 @@ export default function Home() {
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
+                    <div className="max-h-[380px] overflow-auto border-b border-slate-200">
                       <table className="w-full min-w-[760px] text-left text-xs">
                         <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                           <tr><th className="px-5 py-3">Ride</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Technical downtime</th><th className="px-4 py-3">Downtime %</th><th className="px-4 py-3">Event remarks</th></tr>
@@ -882,35 +861,23 @@ export default function Home() {
                       </table>
                     </div>
 
-                    <div className="border-t border-slate-200 bg-slate-50/65 px-4 pt-2">
-                      <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Mapping Excel preview tabs">
-                        {([
-                          ["sheet", "WK_template_v4", FileSpreadsheet],
-                          ["summary", "Summary", Sparkles],
-                          ["chart", "Downtime chart", BarChart3],
-                        ] as const).map(([tab, label, Icon]) => <button key={tab} type="button" role="tab" aria-selected={workbookTab === tab} onClick={() => setWorkbookTab(tab)} className={`inline-flex h-10 shrink-0 items-center gap-2 border-b-2 px-3 text-xs font-bold transition-colors ${workbookTab === tab ? "border-emerald-700 text-emerald-800" : "border-transparent text-slate-500 hover:text-slate-800"}`}><Icon className="h-3.5 w-3.5" />{label}</button>)}
+                    <section className="p-5 sm:p-6">
+                      <h3 className="text-base font-extrabold text-[#172c5b]">Summary</h3>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {[
+                          ["Rides affected", `${response?.summaryByRide.filter(ride => ride.minutes > 0).length ?? 0}`],
+                          ["Total downtime", `${response?.totalTechnicalMinutes ?? 0} min`],
+                          ["Incidents", `${response?.matchedCount ?? 0}`],
+                          ["Dates", `${resultDates.length}`],
+                        ].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1.5 text-xl font-extrabold text-[#172c5b]">{value}</p></div>)}
                       </div>
-                    </div>
-
-                    <div className="min-h-64 p-5 sm:p-6">
-                      {workbookTab === "chart" ? (
-                        <div>
-                          <div className="flex items-center gap-3"><BarChart3 className="h-5 w-5 text-sky-700" /><div><h3 className="text-sm font-extrabold text-slate-900">Downtime trend</h3><p className="text-xs text-slate-500">{mappingStatus === "processing" ? "Preparing daily downtime chart" : "Daily Technical 11-1 downtime in chronological order"}</p></div></div>
-                          <div className="mt-4 h-56" role="img" aria-label={dailySummary.map(day => `${formatDate(day.dateKey)}: ${day.technicalMinutes} minutes, ${severityForMinutes(day.technicalMinutes).label}`).join("; ") || "Daily downtime chart is being prepared"}>
-                            {mappingStatus === "processing" ? <div className="flex h-full items-end gap-5 rounded-xl border border-slate-100 bg-slate-50 px-8 pb-5">{[38, 68, 49, 78, 55].map((height, index) => <div key={index} className="flex-1 animate-pulse rounded-t-lg bg-slate-200" style={{ height: `${height}%` }} />)}</div> : dailySummary.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={dailySummary} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}><CartesianGrid vertical={false} stroke="rgb(112 145 230 / 0.22)" /><XAxis dataKey="dateKey" tickFormatter={(value: string) => formatDate(value, false)} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} /><YAxis width={64} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} tickFormatter={(value: number) => `${value}m`} /><Tooltip cursor={{ fill: "rgb(112 145 230 / 0.10)" }} content={<MappingTooltip />} /><Bar dataKey="technicalMinutes" radius={[7, 7, 0, 0]}>{dailySummary.map(day => <Cell key={day.dateKey} fill={severityForMinutes(day.technicalMinutes).color} />)}</Bar></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-500">No daily downtime values available.</div>}
-                          </div>
-                          {dailySummary.length === 1 && mappingStatus === "success" && <p className="mt-2 text-center text-[11px] text-slate-500">This chart represents the single selected day.</p>}
-                        </div>
-                      ) : workbookTab === "summary" && response ? (
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          {[['Rides affected', `${response.summaryByRide.filter(ride => ride.minutes > 0).length}`], ['Technical downtime', `${response.totalTechnicalMinutes} min`], ['Recorded incidents', `${response.matchedCount}`], ['Dates mapped', `${resultDates.length}`]].map(([label, value]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4"><p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{label}</p><p className="mt-2 text-2xl font-extrabold text-slate-950">{value}</p></div>)}
-                        </div>
-                      ) : (
-                        <div className="flex min-h-52 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/65 p-6 text-center">
-                          <div><FileSpreadsheet className="mx-auto h-8 w-8 text-emerald-700" /><p className="mt-3 text-sm font-extrabold text-slate-900">WK_template_v4 mapping sheet</p><p className="mt-1 text-xs leading-5 text-slate-500">{mappingStatus === "processing" ? "The workbook timeline, percentages, closure highlights, and weather mappings are being prepared." : `${resultDates.length} selected date${resultDates.length === 1 ? "" : "s"} mapped in chronological worksheet order.`}</p></div>
-                        </div>
-                      )}
-                    </div>
+                    </section>
+                    <section className="border-t border-slate-100 p-5 sm:p-6">
+                      <div className="flex items-center gap-3"><BarChart3 className="h-5 w-5 text-sky-700" /><div><h3 className="text-base font-extrabold text-[#172c5b]">Daily downtime</h3><p className="text-xs text-slate-500">Downtime in minutes</p></div></div>
+                      <div className="mt-4 h-56" role="img" aria-label={dailySummary.map(day => `${formatDate(day.dateKey)}: ${day.technicalMinutes} minutes, ${severityForMinutes(day.technicalMinutes).label}`).join("; ") || "Daily downtime chart is being prepared"}>
+                        {mappingStatus === "processing" ? <div className="flex h-full items-end gap-5 rounded-xl border border-slate-100 bg-slate-50 px-8 pb-5">{[38, 68, 49, 78, 55].map((height, index) => <div key={index} className="flex-1 animate-pulse rounded-t-lg bg-slate-200" style={{ height: `${height}%` }} />)}</div> : dailySummary.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={dailySummary} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}><CartesianGrid vertical={false} stroke="rgb(112 145 230 / 0.22)" /><XAxis dataKey="dateKey" tickFormatter={(value: string) => formatDate(value, false)} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} /><YAxis width={64} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#596783" }} tickFormatter={(value: number) => `${value}m`} /><Tooltip cursor={{ fill: "rgb(112 145 230 / 0.10)" }} content={<MappingTooltip />} /><Bar dataKey="technicalMinutes" radius={[7, 7, 0, 0]}>{dailySummary.map(day => <Cell key={day.dateKey} fill={severityForMinutes(day.technicalMinutes).color} />)}</Bar></BarChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-500">No daily downtime values available.</div>}
+                      </div>
+                    </section>
                   </>
                 )}
               </CardContent>
@@ -919,32 +886,15 @@ export default function Home() {
             <Card className="border-[#adbBda]/70 bg-white/90 shadow-[0_12px_32px_rgba(61,82,160,0.09)] xl:sticky xl:top-4">
               <CardContent className="p-5">
                 <h2 className="text-lg font-extrabold text-slate-950">Mapping applied</h2>
-                <div className="mt-3 divide-y divide-slate-100" aria-live="polite">
-                  {MAPPING_STEPS.map(([title, detail], index) => {
-                    const complete = index < completedSteps;
-                    const active = mappingStatus === "processing" && index === completedSteps;
-                    return <div key={title} className="flex gap-3 py-3">{complete ? <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-700 text-white"><Check className="h-3.5 w-3.5" /></span> : active ? <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-emerald-700"><Loader2 className="h-5 w-5 animate-spin" /></span> : <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-slate-300"><Circle className="h-3 w-3 text-slate-300" /></span>}<div><p className={`text-sm font-bold ${complete || active ? "text-slate-900" : "text-slate-500"}`}>{title}</p><p className="mt-0.5 text-[11px] leading-4 text-slate-500">{complete ? `Completed — ${detail}` : detail}</p></div></div>;
-                  })}
-                </div>
-                <div className="mt-3 rounded-xl bg-slate-50 p-3">
+                <div className="mt-4 rounded-xl bg-emerald-50/70 p-3" aria-live="polite">
                   <div className="flex items-center justify-between text-xs font-extrabold text-slate-800"><span>{completedSteps} of {MAPPING_STEPS.length} mapping steps completed</span><span>{progressPercent}%</span></div>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700 transition-[width] duration-300" style={{ width: `${progressPercent}%` }} /></div>
                 </div>
-                <div className="mt-3 flex gap-2 rounded-xl bg-sky-50 p-3 text-[11px] leading-5 text-sky-800"><CalendarDays className="mt-0.5 h-4 w-4 shrink-0" /><span>{mappingStatus === "processing" ? "Processing" : "Processed"} {resultDates.length || (sourceMode === "saved" ? orderedDates.length : 1)} selected day{(resultDates.length || orderedDates.length) === 1 ? "" : "s"} in date order{(resultDates.length ? resultDates : orderedDates).length ? `: ${(resultDates.length ? resultDates : orderedDates).map(value => formatDate(value, false)).join(" → ")}` : "."}</span></div>
-                {mappingStatus === "success" && response && (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Rides affected</p><p className="mt-1 text-lg font-extrabold">{response.summaryByRide.filter(ride => ride.minutes > 0).length}</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Downtime</p><p className="mt-1 text-lg font-extrabold">{response.totalTechnicalMinutes} min</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Incidents</p><p className="mt-1 text-lg font-extrabold">{response.matchedCount}</p></div>
-                    <div className="rounded-xl border border-slate-200 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Dates</p><p className="mt-1 text-lg font-extrabold">{resultDates.length}</p></div>
-                  </div>
-                )}
                 <div className="mt-4 space-y-2">
                   {mappingStatus === "success" && response ? <Button asChild className="h-11 w-full rounded-xl bg-emerald-800 font-extrabold text-white hover:bg-emerald-700"><a href={response.downloadUrl} download={response.outputFileName}><Download className="mr-2 h-4 w-4" />Download mapping Excel</a></Button> : <Button disabled className="h-11 w-full rounded-xl"><Download className="mr-2 h-4 w-4" />Download mapping Excel</Button>}
                   <Button type="button" variant="outline" disabled={mappingStatus !== "success"} onClick={openSourceFiles} className="h-10 w-full rounded-xl bg-white font-bold"><ExternalLink className="mr-2 h-4 w-4" />Open source {sourceFilesForDialog.length === 1 ? "log" : "logs"}</Button>
-                  {mappingStatus === "success" && <Button type="button" variant="ghost" onClick={resetResult} className="h-10 w-full font-bold text-sky-700"><RotateCcw className="mr-2 h-4 w-4" />Build another mapping</Button>}
+                  {mappingStatus === "success" && <Button type="button" variant="outline" onClick={resetResult} className="h-10 w-full rounded-xl bg-white font-bold text-sky-700"><RotateCcw className="mr-2 h-4 w-4" />Build another mapping</Button>}
                 </div>
-                {mappingStatus === "success" && <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-500">{resultDates.length === 1 ? "Source" : "Sources"}: {sourceFilesForDialog.map(source => source.fileName).join(" · ")}{response?.savedToLibrary ? " · Saved to website" : ""}</p>}
               </CardContent>
             </Card>
           </div>

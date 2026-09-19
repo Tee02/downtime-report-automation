@@ -13,11 +13,27 @@ import {
 
 interface VersionHistorySectionProps {
   isCollapsed?: boolean;
+  canViewHistory?: boolean;
 }
 
-export function VersionHistorySection({ isCollapsed = false }: VersionHistorySectionProps) {
+export function VersionHistorySection({ isCollapsed = false, canViewHistory = false }: VersionHistorySectionProps) {
   const [isExpandedInline, setIsExpandedInline] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  if (!canViewHistory) {
+    return isCollapsed ? (
+      <div className="flex flex-col items-center border-t border-[#adbBda]/50 py-2" title={`${CURRENT_VERSION} Live`}>
+        <span className="rounded-md bg-white/70 px-1.5 py-1 font-mono text-[9px] font-extrabold text-[#3D52A0]">{CURRENT_VERSION}</span>
+      </div>
+    ) : (
+      <div className="border-t border-[#adbBda]/50 pt-2 text-slate-800">
+        <div className="rounded-lg border border-[#8697c4]/40 bg-white/60 px-2.5 py-2 shadow-xs">
+          <div className="flex items-center gap-1.5"><span className="font-mono text-xs font-extrabold text-[#293252]">{CURRENT_VERSION}</span><span className="rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-bold text-emerald-800">Live</span></div>
+          <p className="mt-1 text-[10px] text-slate-500">Sign in to view update history</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isCollapsed) {
     return (

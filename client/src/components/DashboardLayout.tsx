@@ -263,7 +263,7 @@ function DashboardLayoutContent({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <VersionHistorySection isCollapsed={isCollapsed} />
+              <VersionHistorySection isCollapsed={isCollapsed} canViewHistory={Boolean(user)} />
           </SidebarFooter>
         </Sidebar>
 

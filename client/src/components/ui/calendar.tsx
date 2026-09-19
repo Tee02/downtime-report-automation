@@ -195,6 +195,8 @@ function CalendarDayButton({
   const mappingOrderKey = Object.keys(modifiers).find(key => key.startsWith("mappingOrder") && modifiers[key]);
   const mappingOrder = mappingOrderKey?.replace("mappingOrder", "");
   const isSavedLog = Boolean(modifiers.savedLog);
+  const severity = modifiers.critical ? "critical" : modifiers.high ? "high" : modifiers.elevated ? "elevated" : modifiers.monitor ? "monitor" : undefined;
+  const severityClass = severity === "critical" ? "!bg-rose-400 !text-white hover:!bg-rose-500" : severity === "high" ? "!bg-amber-400 !text-slate-900 hover:!bg-amber-500" : severity === "elevated" ? "!bg-yellow-300 !text-slate-900 hover:!bg-yellow-400" : severity === "monitor" ? "!bg-blue-400 !text-white hover:!bg-blue-500" : "";
 
   const buttonElement = (
     <Button
@@ -212,12 +214,13 @@ function CalendarDayButton({
       data-saved-log={isSavedLog}
       className={cn(
         "relative flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] transition-all [&>span]:text-xs",
-        isSingle && !isMappingSelected && "!bg-[#3D52A0] !text-white font-bold !rounded-lg shadow-sm hover:!bg-[#293252]",
+        isSingle && !isMappingSelected && !severity && "!bg-[#3D52A0] !text-white font-bold !rounded-lg shadow-sm hover:!bg-[#293252]",
         isMappingSelected && "!bg-emerald-700 !text-white font-extrabold !rounded-lg shadow-sm hover:!bg-emerald-800",
         isRangeStart && "!bg-[#3D52A0] !text-white font-extrabold !rounded-l-lg !rounded-r-none shadow-sm z-10 hover:!bg-[#293252]",
         isRangeEnd && "!bg-[#3D52A0] !text-white font-extrabold !rounded-r-lg !rounded-l-none shadow-sm z-10 hover:!bg-[#293252]",
         isRangeMiddle && "!bg-indigo-100/90 !text-[#293252] font-semibold !rounded-none hover:!bg-indigo-200",
         isRangePending && "!bg-amber-500 !text-white font-extrabold ring-2 ring-amber-400 ring-offset-1 !rounded-lg shadow-md animate-pulse",
+        severity && !isDarkDay && `!ring-2 !ring-blue-100 !ring-offset-1 font-extrabold shadow-sm ${severityClass}`,
         isDarkDay && "!bg-slate-400 !text-slate-900 hover:!bg-slate-400 hover:!text-slate-950 font-extrabold border border-slate-500 shadow-inner",
         defaultClassNames.day,
         className

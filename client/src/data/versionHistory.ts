@@ -9,9 +9,29 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.28";
+export const CURRENT_VERSION = "v1.29";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.29",
+    commit: "pending",
+    date: "2026-09-20",
+    time: "01:04 GMT+8",
+    timestamp: "2026-09-20 01:04:15",
+    title: "Analysis Studio, Report Studio & Sidebar UI Amendments",
+    tasks: [
+      "Report Studio: Removed hero card/workflow stepper; replaced with clean title, subtitle, and side-by-side Upload new file / Saved downtime logs tabs",
+      "Report Studio: Added auto-save notice, simplified mapping readiness panel, single collapsed Additional context accordion, and fixed full-width emerald bottom bar",
+      "Report Studio result: Restored direct Mapping Excel table preview, Summary metrics, Daily downtime chart, and streamlined completion panel",
+      "Analysis Studio: Rebuilt Overview layout with 6 metric cards (Total downtime, Availability, Incidents per day, Avg tech interruption, Peak/Worst affected ride, Quietest day/Evacuations)",
+      "Analysis Studio: Implemented bar-first Technical downtime trend with severity spectrum, ReferenceLine indicator, and toggleable Line chart for short ranges",
+      "Analysis Studio: Enhanced Downtime calendar with monitor/elevated/high/critical and dark-day date styling",
+      "Analysis Studio: Integrated right-side Saved source reports drawer featuring single-date calendar, report details, delete action, and Dark day management toggle",
+      "Analysis Studio: Collapsed Ride Incident Logs under clean chevron header while preserving rich Excel-compatible clipboard copy",
+      "Navigation: Added Guest Visitor state in sidebar with direct sign-in and compact 'Sign in to view update history' version footer",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.28",
     commit: "pending",
@@ -26,7 +46,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Rebuilt Compare around two editable scenario cards, optional third scenario, explicit Start comparison calculation, Scenario A/B and overlap trends, performance difference summary, in-cell metric deltas, and calculated improvement/follow-up ride panels",
       "Removed Comparison Studio from sidebar navigation and redirected the legacy /comparison route to Analysis Studio Compare",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.27",
