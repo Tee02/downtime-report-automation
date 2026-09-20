@@ -1,6 +1,7 @@
 import { type SavedDowntimeReport } from "../drizzle/schema";
 import {
   compileDowntimeLogExport,
+  durationMinutes,
   formatTime,
   formatWeatherIntervalsToText,
   parseWeatherIntervals,
@@ -44,7 +45,7 @@ export type RideAnalysis = {
 
 export type IncidentLog = {
   id: string;
-  kind: "technical" | "weather" | "darkDay";
+  kind: "technical" | "weather" | "fireAlarm" | "darkDay";
   dateKey: string;
   dateLabel: string;
   rideCode?: string;
@@ -140,6 +141,7 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
   const selectedDates = Array.from(new Set(reports.map(report => report.reportDate))).sort();
   const sourceRecords = reports.flatMap(report => report.records.map(record => ({ ...record, dateKey: record.dateKey || report.reportDate, dateLabel: record.dateKey ? record.dateLabel : labelDate(report.reportDate) })));
   const records = sourceRecords.filter(record => record.rideCode && !record.isClosed && !record.isFireAlarm && (selectedCodes.size === 0 || selectedCodes.has(record.rideCode)));
+  const fireAlarmRecords = sourceRecords.filter(record => record.rideCode && record.isFireAlarm && (selectedCodes.size === 0 || selectedCodes.has(record.rideCode)));
   const operatingRideCount = selectedCodes.size || FLEET_RIDE_COUNT;
   const dailyTrend = selectedDates.map(dateKey => {
     const dailyRecords = records.filter(record => record.dateKey === dateKey);
@@ -207,15 +209,26 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
       durationLabel: formatDuration(interval.minutes),
       timeRange: `${formatTime(interval.startedAt)}-${formatTime(interval.resumedAt)}`,
     })));
+  const fireAlarmIncidents: IncidentLog[] = fireAlarmRecords.map(record => ({
+    id: `fire-alarm-${record.dateKey}-${record.sourceRow}-${record.rideCode}`,
+    kind: "fireAlarm",
+    dateKey: record.dateKey,
+    dateLabel: labelDate(record.dateKey),
+    rideCode: record.rideCode,
+    attraction: record.attraction,
+    description: "Signal 29 (Fire Alarm Triggered)",
+    durationLabel: formatDuration(durationMinutes(record.technicalStart, record.technicalEnd)),
+    timeRange: `${formatTime(record.technicalStart)}-${formatTime(record.technicalEnd)}`,
+  }));
   const selectedDarkDays = new Set(darkDayKeys.filter(key => selectedDates.includes(key)));
   const darkDayIncidents: IncidentLog[] = Array.from(selectedDarkDays).map(dateKey => ({
     id: `dark-day-${dateKey}`,
     kind: "darkDay",
     dateKey,
     dateLabel: labelDate(dateKey),
-    description: "Dark Day",
+    description: "Dark day",
   }));
-  const incidentLogs = [...technicalIncidents, ...weatherIncidents, ...darkDayIncidents].sort((left, right) => left.dateKey.localeCompare(right.dateKey) || left.id.localeCompare(right.id));
+  const incidentLogs = [...technicalIncidents, ...weatherIncidents, ...fireAlarmIncidents, ...darkDayIncidents].sort((left, right) => left.dateKey.localeCompare(right.dateKey) || left.id.localeCompare(right.id));
 
   // Group incident logs by ride with Dark Days chronologically inserted under each ride
   const ridesInScope = rankingCodes.map(code => ({
@@ -228,7 +241,10 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
     const techForRide = technicalIncidents.filter(inc => inc.rideCode === ride.code);
     // 2. Weather incidents for this ride
     const weatherForRide = weatherIncidents.filter(inc => inc.rideCode === ride.code);
-    // 3. Dark Days for all selected dates (included under each ride in chronological sequence)
+    // 3. Fire alarm incidents for this ride are reported visually but remain excluded from downtime metrics.
+    const fireAlarmsForRide = fireAlarmIncidents.filter(inc => inc.rideCode === ride.code);
+    const qualifyingIncidents = [...techForRide, ...weatherForRide, ...fireAlarmsForRide];
+    // 4. Dark Days are only useful in an existing ride log, never as the sole entry for an otherwise unaffected ride.
     const darkDaysForRide: IncidentLog[] = Array.from(selectedDarkDays).map(dateKey => ({
       id: `darkday-${dateKey}-${ride.code}`,
       kind: "darkDay" as const,
@@ -236,10 +252,10 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
       dateLabel: labelDate(dateKey),
       rideCode: ride.code,
       attraction: ride.name,
-      description: "Dark Day",
+      description: "Dark day",
     }));
 
-    const combinedLogs = [...techForRide, ...weatherForRide, ...darkDaysForRide].sort((a, b) =>
+    const combinedLogs = [...qualifyingIncidents, ...(qualifyingIncidents.length ? darkDaysForRide : [])].sort((a, b) =>
       a.dateKey.localeCompare(b.dateKey) || a.id.localeCompare(b.id)
     );
 

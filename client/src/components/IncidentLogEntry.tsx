@@ -1,7 +1,7 @@
 import React from "react";
 
 export type IncidentLogEntryProps = {
-  kind: "technical" | "weather" | "darkDay";
+  kind: "technical" | "weather" | "fireAlarm" | "darkDay";
   dateLabel: string;
   description: string;
   durationLabel?: string;
@@ -23,7 +23,7 @@ export function IncidentLogEntry({
     return (
       <div className="font-mono-report text-xs leading-relaxed py-1 border-b border-slate-100 last:border-b-0 text-slate-800 select-text">
         <span className="font-bold text-slate-900">*{dateLabel}, </span>
-        <span className="font-bold text-red-600" style={{ color: "#FF0000", fontWeight: "bold" }}>Dark Day</span>
+        <span className="font-bold text-red-600" style={{ color: "#FF0000", fontWeight: "bold" }}>Dark day</span>
         <span>.</span>
       </div>
     );

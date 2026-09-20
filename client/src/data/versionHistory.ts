@@ -9,9 +9,25 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.29";
+export const CURRENT_VERSION = "v1.30";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.30",
+    commit: "pending",
+    date: "2026-09-20",
+    time: "12:29 GMT+8",
+    timestamp: "2026-09-20 12:29:53",
+    title: "Evacuation, Fire Alarm, Dark Day & Handover Mapping Corrections",
+    tasks: [
+      "Added 11-27 evacuation support: a populated evacuation end time in column N with a blank M now inherits downtime start time from column G, so evacuation duration, counts, timeline styling, summaries, and incident cards are accurate",
+      "Updated Ride Incident Logs so dark-day remarks appear only under rides that already have a technical, weather, or verified fire-alarm incident; unaffected rides are no longer populated with dark-day-only entries",
+      "Added verified 11-10 Signal 29 fire alarms to Ride Incident Logs with black date/time and a red 'Signal 29 (Fire Alarm Triggered)' description, while keeping them excluded from downtime metrics",
+      "Updated mapping rich text so the entire Late/No Technical Handover description is red against the black timeline background, rather than coloring only a trailing parenthetical cause",
+      "Added parser, analysis, mapping-style, fire-alarm, and dark-day regression coverage for the corrected behavior",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.29",
     commit: "pending",
@@ -30,7 +46,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Analysis Studio: Collapsed Ride Incident Logs under clean chevron header while preserving rich Excel-compatible clipboard copy",
       "Navigation: Added Guest Visitor state in sidebar with direct sign-in and compact 'Sign in to view update history' version footer",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.28",

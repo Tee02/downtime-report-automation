@@ -516,7 +516,9 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
     const operationsEnd = parseTimeToMinutes(row.cells.get("J")?.value ?? "");
     const providedEvacuationStart = parseTimeToMinutes(row.cells.get("M")?.value ?? "");
     const evacuationEnd = parseTimeToMinutes(row.cells.get("N")?.value ?? "");
-    const evacuationStart = providedEvacuationStart;
+    // When column N is supplied without column M, Operations has recorded an
+    // 11-27 vehicle evacuation. It begins when the downtime began in column G.
+    const evacuationStart = evacuationEnd === undefined ? undefined : providedEvacuationStart ?? technicalStart;
     const record: DowntimeRecord = {
       sourceRow: row.number,
       dateKey: recordDateKey ?? "",
@@ -536,7 +538,7 @@ function parseOperations(recordsSheet: SheetInfo, sharedStrings: string[]): Down
       downtimePercentage: isClosed || isFireAlarm ? 0 : (durationMinutes(technicalStart, technicalEnd) / DAILY_OPERATING_MINUTES) * 100,
       isClosed,
       isFireAlarm,
-      isLateHandover: !isFireAlarm && /\blate\s+(?:technical\s+)?handover\b/i.test(description),
+      isLateHandover: !isFireAlarm && /\b(?:late|no)\s+(?:technical\s+)?handover(?:\s+received)?\b/i.test(description),
       status: "unmatched",
       matchNote: "Awaiting template match",
     };
@@ -1004,8 +1006,7 @@ function prepareTimelineUpdates(
         setRange(record.evacuationStart, record.evacuationEnd, "evacuation", 4);
         const labelColumn = Math.max(maps.timeStartColumn, maps.timeStartColumn + (record.technicalStart! % 1440) - 605);
         if (record.isLateHandover) {
-          const faultMatch = /\s*(\([^)]*\))\s*$/.exec(record.description);
-          descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description.slice(0, faultMatch?.index).trimEnd() + (faultMatch ? " " : ""), redSuffix: faultMatch?.[1] ?? record.description });
+          descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: "", redSuffix: record.description });
         } else descriptions.push({ reference: `${numberToColumn(labelColumn)}${rowNumber}`, value: record.description });
       }
       const rideCode = rowToRide.get(rowNumber);

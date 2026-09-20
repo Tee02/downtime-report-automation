@@ -14,7 +14,7 @@ export type IncidentLogItem = {
   timeRange?: string;
   evacuationLabel?: string;
   evacuationRange?: string;
-  kind: "technical" | "weather" | "darkDay";
+  kind: "technical" | "weather" | "fireAlarm" | "darkDay";
 };
 
 export type RideIncidentGroup = {
@@ -53,7 +53,7 @@ export function ExcelIncidentTable({ groups }: ExcelIncidentTableProps) {
       .map(row => {
         let descHtml = "";
         if (row.kind === "darkDay") {
-          descHtml = `<span style="color: #FF0000; font-weight: bold;">Dark Day.</span>`;
+          descHtml = `<span style="color: #FF0000; font-weight: bold;">Dark day.</span>`;
         } else if (row.kind === "weather") {
           descHtml = `<span style="color: #FF0000; font-weight: bold;">${row.description} (Moderated)</span>`;
         } else {
@@ -99,7 +99,7 @@ export function ExcelIncidentTable({ groups }: ExcelIncidentTableProps) {
 
     const plainText = allRows
       .map(row => {
-        const desc = row.kind === "darkDay" ? "Dark Day." : row.description;
+        const desc = row.kind === "darkDay" ? "Dark day." : row.description;
         const evac = row.evacuationLabel
           ? row.evacuationRange
             ? `${row.evacuationLabel} (${row.evacuationRange})`
@@ -191,7 +191,7 @@ export function ExcelIncidentTable({ groups }: ExcelIncidentTableProps) {
                   <td className="border-r border-slate-200 px-3 py-1.5 text-left leading-relaxed">
                     {isDarkDay ? (
                       <span className="font-bold text-rose-600" style={{ color: "#DC2626" }}>
-                        Dark Day.
+                        Dark day.
                       </span>
                     ) : (
                       <>

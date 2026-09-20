@@ -97,4 +97,32 @@ describe("downtime analysis aggregation", () => {
     expect(vtmGroup?.logs.some(l => l.kind === "technical")).toBe(true);
     expect(vtmGroup?.logs.some(l => l.kind === "weather")).toBe(true);
   });
+
+  it("adds dark-day remarks only to ride groups that already have an incident", () => {
+    const result = buildAnalysis([
+      { reportDate: "2026-09-08", records: [record("2026-09-08", "VTM", "Epic Voyage to Moonhaven", 10)] },
+    ], [], ["2026-09-08"]);
+
+    const vtmGroup = result.rideIncidentGroups.find(group => group.rideCode === "VTM");
+    expect(vtmGroup?.logs.map(log => log.kind)).toEqual(["darkDay", "technical"]);
+    expect(result.rideIncidentGroups.find(group => group.rideCode === "BCT (EV)")).toBeUndefined();
+  });
+
+  it("includes verified Signal 29 fire alarms in ride incident logs while excluding them from downtime totals", () => {
+    const fireAlarm = {
+      ...record("2026-09-08", "VTM", "Epic Voyage to Moonhaven", 8),
+      sourceRow: 3,
+      description: "Fire alarm",
+      isFireAlarm: true,
+    };
+    const result = buildAnalysis([
+      { reportDate: "2026-09-08", records: [record("2026-09-08", "VTM", "Epic Voyage to Moonhaven", 10), fireAlarm] },
+    ], [], []);
+
+    expect(result).toMatchObject({ totalTechnicalMinutes: 10, totalEvents: 1, totalEvacuationMinutes: 0 });
+    const alarm = result.incidentLogs.find(log => log.kind === "fireAlarm");
+    expect(alarm).toMatchObject({ description: "Signal 29 (Fire Alarm Triggered)", timeRange: "10:00-10:08" });
+    const vtmGroup = result.rideIncidentGroups.find(group => group.rideCode === "VTM");
+    expect(vtmGroup?.logs.some(log => log.kind === "fireAlarm")).toBe(true);
+  });
 });
