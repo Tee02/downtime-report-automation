@@ -54,6 +54,8 @@ describe("downtime analysis aggregation", () => {
       affectedRideCount: 1,
       averageEventsPerDay: 1,
       averageIncidentMinutes: 20,
+      minIncidentMinutes: 10,
+      maxIncidentMinutes: 30,
     });
     expect(result.averageDowntimePercentage).toBeCloseTo(4.166666, 5);
     expect(result.topRides).toEqual([

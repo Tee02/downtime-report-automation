@@ -79,6 +79,9 @@ export type AnalysisResult = {
   weekdayPattern: Array<{ weekday: string; minutes: number; events: number; days: number; averageMinutes: number; dates: string[] }>;
   peakDay?: { dateKey: string; label: string; minutes: number; events: number; percentage: number; evacuationMinutes: number; evacuationEvents: number };
   longestIncident?: DowntimeRecord;
+  shortestIncident?: DowntimeRecord;
+  minIncidentMinutes?: number;
+  maxIncidentMinutes?: number;
   incidentLogs: IncidentLog[];
   rideIncidentGroups: RideIncidentGroup[];
 };
@@ -270,7 +273,12 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
   const totalEvacuationMinutes = records.reduce((total, record) => total + record.evacuationMinutes, 0);
   const totalEvacuationEvents = records.filter(record => record.evacuationEnd !== undefined).length;
   const peak = [...dailyTrend].sort((left, right) => right.minutes - left.minutes)[0];
-  const longest = [...records].sort((left, right) => right.technicalMinutes - left.technicalMinutes)[0];
+  const nonZeroRecords = records.filter(record => record.technicalMinutes > 0);
+  const sortedByDuration = [...(nonZeroRecords.length ? nonZeroRecords : records)].sort((left, right) => right.technicalMinutes - left.technicalMinutes);
+  const longest = sortedByDuration[0];
+  const shortest = sortedByDuration[sortedByDuration.length - 1];
+  const maxIncidentMinutes = longest ? longest.technicalMinutes : undefined;
+  const minIncidentMinutes = shortest ? shortest.technicalMinutes : undefined;
   return {
     totalTechnicalMinutes,
     totalEvents: records.length,
@@ -287,6 +295,9 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
     weekdayPattern,
     peakDay: peak,
     longestIncident: longest,
+    shortestIncident: shortest,
+    minIncidentMinutes,
+    maxIncidentMinutes,
     incidentLogs,
     rideIncidentGroups,
   };

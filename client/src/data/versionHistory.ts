@@ -9,9 +9,26 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.30";
+export const CURRENT_VERSION = "v1.31";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.31",
+    commit: "pending",
+    date: "2026-09-21",
+    time: "18:16 GMT+8",
+    timestamp: "2026-09-21 18:16:09",
+    title: "Calendar Dark Day Sync, Incident Duration Bounds, Month-Wide Severity Highlights, Line Chart Flexibility & Auto-Save",
+    tasks: [
+      "Report Studio & Analysis Studio Calendars: Synchronized dark-day gray highlight across saved downtime log calendar and date range picker, enabling instant dark-day recognition before selecting dates",
+      "Avg tech interruption Card: Corrected secondary metrics to display single incident bounds formatted as '(Max 76 mins) (Min 6 mins)' with clean uncolored spacing, replacing the previous daily aggregate label",
+      "Downtime Calendar Card: Upgraded to calculate and display severity color highlights across the entire active month (for all rides or a selected single ride), rather than only highlighting dates inside the selected range",
+      "Technical Downtime Trend: Enabled Line Chart toggle universally regardless of date range size, allowing users to view multi-week or full-month line trends on demand",
+      "Mapping Applied Progress: Replaced static 6-step count with dynamic mapping progress tracking exact operational steps (10+ steps) and smooth progress bar animation",
+      "Report Studio Storage Persistence: Ensured uploaded daily downtime logs are automatically saved to the website system for all operators, skipping duplicate dates safely without failing mapping generation",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.30",
     commit: "pending",
@@ -26,7 +43,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Updated mapping rich text so the entire Late/No Technical Handover description is red against the black timeline background, rather than coloring only a trailing parenthetical cause",
       "Added parser, analysis, mapping-style, fire-alarm, and dark-day regression coverage for the corrected behavior",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.29",

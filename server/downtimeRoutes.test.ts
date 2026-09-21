@@ -81,10 +81,27 @@ describe("downtime analyze upload route", () => {
     expect(Object.keys(downloadedZip.files)).toContain("xl/workbook.xml");
   });
 
-  it("blocks a repeated report date before creating new retained files", async () => {
+  it("generates mapping and preserves existing saved log without duplicate insert when date already exists", async () => {
     mocks.storageGetSignedUrl.mockResolvedValue("data:application/octet-stream;base64,UEsDBBQAAAAIAAA=");
     mocks.findSavedDowntimeReport.mockResolvedValue({ id: 9 });
-    mocks.processDowntimeWorkbooks.mockResolvedValue({ outputFileName: "Technical_Downtime_2026-08-03.xlsx" });
+    mocks.processDowntimeWorkbooks.mockResolvedValue({
+      records: [],
+      matchedCount: 0,
+      unmatchedCount: 0,
+      totalTechnicalMinutes: 0,
+      totalOperationsMinutes: 0,
+      totalEvacuationMinutes: 0,
+      totalEvacuationEvents: 0,
+      totalNetworkPercentage: 0,
+      closedRideCount: 0,
+      weatherIntervalCount: 0,
+      fireAlarmCount: 0,
+      summaryByRide: [],
+      outputBuffer: Buffer.from("mapped"),
+      outputFileName: "Technical_Downtime_2026-08-03.xlsx",
+      outputDate: "2026-08-03",
+    });
+    mocks.storagePut.mockResolvedValue({ key: "k", url: "/manus-storage/output.xlsx" });
     const app = express();
     registerDowntimeRoutes(app);
     const server = app.listen(0, "127.0.0.1");
@@ -93,11 +110,10 @@ describe("downtime analyze upload route", () => {
     const port = (server.address() as AddressInfo).port;
     const form = new FormData();
     form.append("operationsFile", new Blob(["sample workbook"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "renamed-downtime.xlsx");
-    form.append("saveToStorage", "true");
     const response = await fetch(`http://127.0.0.1:${port}/api/downtime/analyze`, { method: "POST", body: form });
-    await expect(response.json()).resolves.toEqual(expect.objectContaining({ error: expect.stringContaining("already exists") }));
-    expect(response.status).toBe(409);
-    expect(mocks.storagePut).not.toHaveBeenCalled();
+    const body = await response.json() as { downloadUrl: string; alreadyExisted: boolean };
+    expect(response.status).toBe(200);
+    expect(body.alreadyExisted).toBe(true);
     expect(mocks.createSavedDowntimeReport).not.toHaveBeenCalled();
   });
 });

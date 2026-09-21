@@ -128,7 +128,10 @@ export function registerDowntimeRoutes(app: Express) {
       try {
         const manualClosedRideCodes = parseManualClosures(request.body.closedRideCodes);
         const weatherText = parseWeatherText(request.body.weatherText);
-        const saveToStorage = parseSavePreference(request.body.saveToStorage);
+        // User requirement: Every uploaded daily log is automatically saved to the website library
+        // Existing logs for the same date are skipped/not duplicated rather than dropping the whole save.
+        const savePreferenceParam = request.body.saveToStorage;
+        const saveToStorage = savePreferenceParam === undefined || savePreferenceParam === "" || savePreferenceParam === "true";
         let parkCloseTimes: Record<string, string> | undefined;
         if (parkCloseFile) {
           try {
@@ -140,16 +143,15 @@ export function registerDowntimeRoutes(app: Express) {
         const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText, parkCloseTimes });
         const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
         if (!reportDate) throw new Error("The generated report date could not be saved.");
-        if (saveToStorage && await findSavedDowntimeReport(reportDate)) {
-          return failure(response, 409, `A saved report already exists for ${reportDate}. This workbook was not saved again to prevent a repeated report in the system.`);
-        }
+        const existingReport = await findSavedDowntimeReport(reportDate);
+        const shouldSaveReport = saveToStorage && !existingReport;
         const reportId = crypto.randomUUID();
         const stored = await storagePut(
           `downtime-reports/${reportId}/${result.outputFileName}`,
           result.outputBuffer,
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
-        if (saveToStorage) {
+        if (shouldSaveReport) {
           const source = await storagePut(
             `downtime-logs/${reportId}/${safeFileName(operationsFile.originalname)}`,
             operationsFile.buffer,
@@ -173,7 +175,8 @@ export function registerDowntimeRoutes(app: Express) {
           parkCloseTimes,
           outputBuffer: undefined,
           downloadUrl: stored.url,
-          savedToLibrary: saveToStorage,
+          savedToLibrary: shouldSaveReport,
+          alreadyExisted: Boolean(existingReport),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "The workbook could not be processed.";

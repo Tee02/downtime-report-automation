@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -134,13 +133,17 @@ const HANDOVER_RIDES = [
   ["RCC", "Rio Carnaval Chaos"], ["RTR", "Rivet Town Roller"], ["SAG", "Samba Gliders"], ["SRS", "Sid's Rock 'N' Slide"], ["TTC", "Terraform Tower Challenge"],
 ] as const;
 
-const MAPPING_STEPS = [
-  ["Source logs read", "Source files were received and validated."],
-  ["Technical 11-1 rows selected", "Filtering and validating relevant rows."],
-  ["AVL downtime excluded", "AVL-related downtime is excluded from the mapping."],
-  ["Weather messages mapped", "Applying available 11-3 weather intervals."],
-  ["Handover closures applied", "Applying confirmed handover closure logic."],
-  ["Downtime percentage written", "Writing calculated downtime percentages to the template."],
+const BASE_MAPPING_STEPS = [
+  ["Source log validated", "Operations log uploaded and validated."],
+  ["Technical 11-1 rows selected", "Extracted and validated relevant Technical downtime rows."],
+  ["Non-fire 11-10 alarms excluded", "Verified Signal 29 fire alarms separated from non-fire records."],
+  ["AVL downtime excluded", "AVL downtime excluded from timeline calculations."],
+  ["Weather 11-3 mapped", "Applying automated and manual weather intervals in yellow fill."],
+  ["11-27 vehicle evacuation resolved", "Inheriting downtime start timing for vehicle evacuations."],
+  ["10-7 Park Close mapped", "Mapping ride-by-ride park closure times in red."],
+  ["Handover closures applied", "Applying confirmed late and no technical handover formatting."],
+  ["Downtime percentages centered", "Writing centered downtime percentages across Columns D & E."],
+  ["Mapping Excel generated", "Mapping workbook successfully finalized and ready for download."],
 ] as const;
 
 function dateKey(date: Date) {
@@ -366,8 +369,9 @@ function MappingTooltip({ active, payload }: { active?: boolean; payload?: Array
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const utils = trpc.useUtils();
   const { data: savedReportsData = [], isLoading: savedReportsLoading, error: savedReportsError } = trpc.savedReports.list.useQuery();
+  const { data: darkDays = [] } = trpc.darkDays.list.useQuery();
   const savedReports = savedReportsData as SavedReport[];
   const [sourceMode, setSourceMode] = useState<SourceMode>("upload");
   const [operationsFile, setOperationsFile] = useState<File>();
@@ -375,7 +379,6 @@ export default function Home() {
   const [selectedSavedIds, setSelectedSavedIds] = useState<Set<number>>(new Set());
   const [calendarMonth, setCalendarMonth] = useState<Date>();
   const [duplicateDate, setDuplicateDate] = useState<string>();
-  const [saveToStorage, setSaveToStorage] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [handoverOpen, setHandoverOpen] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
@@ -384,6 +387,8 @@ export default function Home() {
   const [closureToAdd, setClosureToAdd] = useState<string>();
   const [weatherText, setWeatherText] = useState("");
   const [mappingStatus, setMappingStatus] = useState<MappingStatus>("idle");
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [response, setResponse] = useState<ProcessingResponse>();
   const [error, setError] = useState<string>();
   const [workbookTab, setWorkbookTab] = useState<WorkbookTab>("sheet");
@@ -406,21 +411,13 @@ export default function Home() {
   );
   const orderedDates = useMemo(() => orderedSelectedReports.map(report => report.reportDate), [orderedSelectedReports]);
   const validSource = sourceMode === "upload" ? Boolean(operationsFile) : orderedSelectedReports.length > 0;
-  const canSaveUpload = Boolean(user);
-  const primaryLabel = sourceMode === "upload" && saveToStorage ? "Save & build mapping Excel" : "Build mapping Excel";
-  const mappingReadyTitle = !validSource
-    ? sourceMode === "upload" ? "Add a downtime log to continue" : "Select at least one saved log"
-    : sourceMode === "saved" && orderedSelectedReports.length > 1 ? "Ready to build multi-date mapping Excel" : sourceMode === "upload" && saveToStorage ? "Ready to save and build mapping Excel" : "Ready to build mapping Excel";
-  const mappingReadyDetail = !validSource
-    ? sourceMode === "upload" ? "An Operations downtime XLSX file is required." : "Use the calendar to select saved-log dates."
-    : sourceMode === "saved" ? `${orderedSelectedReports.length} saved source log${orderedSelectedReports.length === 1 ? "" : "s"} selected · ${formatDateRange(orderedDates)}`
-      : saveToStorage ? "The uploaded source log will be saved to the website." : "The uploaded source log will be used for this mapping only.";
 
   const selectedDateObjects = useMemo(() => orderedDates.map(dateFromKey), [orderedDates]);
   const calendarModifiers = useMemo(() => {
     const modifiers: Record<string, Date[]> = {
       savedLog: availableDateKeys.map(dateFromKey),
       mappingSelected: selectedDateObjects,
+      darkDay: darkDays.map(dateFromKey),
     };
     orderedDates.forEach((value, index) => {
       modifiers[`mappingOrder${index + 1}`] = [dateFromKey(value)];
@@ -451,6 +448,8 @@ export default function Home() {
 
   const resetResult = () => {
     setMappingStatus("idle");
+    setProgressPercent(0);
+    setCurrentStepIndex(0);
     setResponse(undefined);
     setError(undefined);
     setWorkbookTab("sheet");
@@ -494,19 +493,43 @@ export default function Home() {
     setResponse(undefined);
   };
 
+  // Dynamic steps calculation
+  const totalMappingSteps = useMemo<number>(() => {
+    let count: number = BASE_MAPPING_STEPS.length;
+    if (sourceMode === "saved") {
+      count = Math.max(10, orderedSelectedReports.length * 6 + 4);
+    } else if (parkCloseFile) {
+      count += 2;
+    }
+    return count;
+  }, [sourceMode, orderedSelectedReports.length, parkCloseFile]);
+
   const buildMappingExcel = async () => {
     if (!validSource || mappingStatus === "processing") return;
     setMappingStatus("processing");
+    setProgressPercent(8);
+    setCurrentStepIndex(1);
     setResponse(undefined);
     setError(undefined);
     setWorkbookTab("sheet");
+
+    // Smooth progress simulation while request is in-flight
+    let progressValue = 8;
+    const progressInterval = window.setInterval(() => {
+      progressValue += Math.max(1, Math.floor((92 - progressValue) * 0.15));
+      if (progressValue > 90) progressValue = 90;
+      setProgressPercent(progressValue);
+      setCurrentStepIndex(Math.min(totalMappingSteps - 1, Math.floor((progressValue / 100) * totalMappingSteps)));
+    }, 180);
+
     try {
       let result: Response;
       if (sourceMode === "upload") {
         const formData = new FormData();
         formData.append("operationsFile", operationsFile!);
         formData.append("closedRideCodes", JSON.stringify(handoverEnabled ? handoverClosedRides : []));
-        formData.append("saveToStorage", String(saveToStorage && canSaveUpload));
+        // Requirement: Always save uploaded downtime logs automatically to website system
+        formData.append("saveToStorage", "true");
         if (weatherText.trim()) formData.append("weatherText", weatherText.trim());
         if (parkCloseFile) formData.append("parkCloseFile", parkCloseFile);
         result = await fetch("/api/downtime/analyze", { method: "POST", body: formData });
@@ -521,12 +544,32 @@ export default function Home() {
           }),
         });
       }
-      const payload = await result.json() as ProcessingResponse & { error?: string };
+      const payload = await result.json() as ProcessingResponse & { error?: string; savedToLibrary?: boolean; alreadyExisted?: boolean };
       if (!result.ok) throw new Error(payload.error ?? "The Mapping Excel could not be generated.");
+
+      // Complete smoothly to 100%
+      window.clearInterval(progressInterval);
+      setProgressPercent(100);
+      setCurrentStepIndex(totalMappingSteps);
       setResponse(payload);
       setMappingStatus("success");
-      toast.success("Mapping Excel generated successfully.");
+
+      // Invalidate saved reports so calendar immediately shows the newly saved log
+      await utils.savedReports.list.invalidate();
+
+      if (sourceMode === "upload") {
+        if (payload.savedToLibrary) {
+          toast.success("Mapping Excel generated and source log saved to website.");
+        } else if (payload.alreadyExisted) {
+          toast.success("Mapping Excel generated. Existing saved log was kept.");
+        } else {
+          toast.success("Mapping Excel generated successfully.");
+        }
+      } else {
+        toast.success("Mapping Excel generated successfully.");
+      }
     } catch (caught) {
+      window.clearInterval(progressInterval);
       const message = caught instanceof Error ? caught.message : "The Mapping Excel could not be generated.";
       setError(message);
       setMappingStatus("error");
@@ -558,8 +601,6 @@ export default function Home() {
   };
 
   const mappingStarted = mappingStatus !== "idle";
-  const completedSteps = mappingStatus === "success" ? MAPPING_STEPS.length : mappingStatus === "processing" ? 1 : 0;
-  const progressPercent = Math.round(completedSteps / MAPPING_STEPS.length * 100);
 
   return (
     <DashboardLayout>
@@ -677,9 +718,10 @@ export default function Home() {
                                   className="mx-auto w-full max-w-[360px] bg-transparent [--cell-size:--spacing(9)]"
                                   classNames={{ caption_label: "text-sm font-extrabold text-slate-900", weekday: "text-slate-500 text-[11px] font-bold flex-1" }}
                                 />
-                                <div className="mt-2 flex items-center justify-center gap-5 border-t border-slate-200 pt-3 text-[11px] text-slate-600">
+                                <div className="mt-2 flex flex-wrap items-center justify-center gap-4 border-t border-slate-200 pt-3 text-[11px] text-slate-600">
                                   <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-sky-500" /> Saved log</span>
                                   <span className="inline-flex items-center gap-1.5"><span className="size-3 rounded-full bg-emerald-700" /> Selected</span>
+                                  <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-slate-400 border border-slate-500" /> Dark day</span>
                                 </div>
                               </div>
                               <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -887,8 +929,15 @@ export default function Home() {
               <CardContent className="p-5">
                 <h2 className="text-lg font-extrabold text-slate-950">Mapping applied</h2>
                 <div className="mt-4 rounded-xl bg-emerald-50/70 p-3" aria-live="polite">
-                  <div className="flex items-center justify-between text-xs font-extrabold text-slate-800"><span>{completedSteps} of {MAPPING_STEPS.length} mapping steps completed</span><span>{progressPercent}%</span></div>
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-700 transition-[width] duration-300" style={{ width: `${progressPercent}%` }} /></div>
+                  <div className="flex items-center justify-between text-xs font-extrabold text-slate-800">
+                    <span>
+                      {mappingStatus === "success" ? `${totalMappingSteps} of ${totalMappingSteps}` : `${currentStepIndex} of ${totalMappingSteps}`} mapping steps completed
+                    </span>
+                    <span>{progressPercent}%</span>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-emerald-700 transition-[width] duration-200 ease-out" style={{ width: `${progressPercent}%` }} />
+                  </div>
                 </div>
                 <div className="mt-4 space-y-2">
                   {mappingStatus === "success" && response ? <Button asChild className="h-11 w-full rounded-xl bg-emerald-800 font-extrabold text-white hover:bg-emerald-700"><a href={response.downloadUrl} download={response.outputFileName}><Download className="mr-2 h-4 w-4" />Download mapping Excel</a></Button> : <Button disabled className="h-11 w-full rounded-xl"><Download className="mr-2 h-4 w-4" />Download mapping Excel</Button>}
