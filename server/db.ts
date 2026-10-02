@@ -1,6 +1,19 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertSavedDowntimeReport, InsertUser, darkDays, savedDowntimeReports, siteContent, users } from "../drizzle/schema";
+import {
+  InsertDowntimeSummary,
+  InsertDowntimeSummaryEntry,
+  InsertDowntimeSummaryImport,
+  InsertSavedDowntimeReport,
+  InsertUser,
+  darkDays,
+  downtimeSummaries,
+  downtimeSummaryEntries,
+  downtimeSummaryImports,
+  savedDowntimeReports,
+  siteContent,
+  users,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -165,4 +178,83 @@ export async function setSiteContent(contentKey: string, contentValue: string): 
   await db.insert(siteContent).values({ contentKey, contentValue }).onDuplicateKeyUpdate({
     set: { contentValue },
   });
+}
+
+export async function getDowntimeSummaryByDate(reportDate: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const summaries = await db.select().from(downtimeSummaries).where(eq(downtimeSummaries.reportDate, reportDate)).limit(1);
+  if (!summaries.length) return null;
+  const summary = summaries[0];
+  const entries = await db.select().from(downtimeSummaryEntries).where(eq(downtimeSummaryEntries.summaryId, summary.id)).orderBy(downtimeSummaryEntries.incidentOrder, downtimeSummaryEntries.id);
+  const imports = await db.select().from(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, reportDate)).orderBy(desc(downtimeSummaryImports.createdAt));
+  return {
+    summary,
+    entries,
+    imports,
+  };
+}
+
+export async function listAllDowntimeSummaryDates(): Promise<string[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const [summaryRows, importRows] = await Promise.all([
+    db.select({ reportDate: downtimeSummaries.reportDate }).from(downtimeSummaries),
+    db.select({ reportDate: downtimeSummaryImports.reportDate }).from(downtimeSummaryImports),
+  ]);
+  return Array.from(new Set([...summaryRows.map(r => r.reportDate), ...importRows.map(r => r.reportDate)])).sort();
+}
+
+export async function saveDowntimeSummaryState(params: {
+  reportDate: string;
+  sourceReportId: number;
+  amExecutive: string;
+  pmExecutive: string;
+  generatedFileName?: string | null;
+  generatedFileUrl?: string | null;
+  entries: Array<Omit<InsertDowntimeSummaryEntry, "summaryId">>;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const existing = await db.select().from(downtimeSummaries).where(eq(downtimeSummaries.reportDate, params.reportDate)).limit(1);
+  let summaryId: number;
+  if (existing.length) {
+    summaryId = existing[0].id;
+    await db.update(downtimeSummaries).set({
+      sourceReportId: params.sourceReportId,
+      amExecutive: params.amExecutive,
+      pmExecutive: params.pmExecutive,
+      ...(params.generatedFileName !== undefined ? { generatedFileName: params.generatedFileName } : {}),
+      ...(params.generatedFileUrl !== undefined ? { generatedFileUrl: params.generatedFileUrl } : {}),
+    }).where(eq(downtimeSummaries.id, summaryId));
+  } else {
+    const insertResult = await db.insert(downtimeSummaries).values({
+      reportDate: params.reportDate,
+      sourceReportId: params.sourceReportId,
+      amExecutive: params.amExecutive,
+      pmExecutive: params.pmExecutive,
+      generatedFileName: params.generatedFileName ?? null,
+      generatedFileUrl: params.generatedFileUrl ?? null,
+    });
+    summaryId = Number((insertResult as any)[0]?.insertId || (insertResult as any).insertId);
+  }
+
+  await db.delete(downtimeSummaryEntries).where(eq(downtimeSummaryEntries.summaryId, summaryId));
+  if (params.entries.length) {
+    await db.insert(downtimeSummaryEntries).values(params.entries.map((entry, index) => ({
+      ...entry,
+      summaryId,
+      incidentOrder: index,
+      status: entry.status || "Monitoring",
+    })));
+  }
+
+  return getDowntimeSummaryByDate(params.reportDate);
+}
+
+export async function recordDowntimeSummaryImport(params: InsertDowntimeSummaryImport) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.insert(downtimeSummaryImports).values(params);
+  return db.select().from(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, params.reportDate)).orderBy(desc(downtimeSummaryImports.createdAt));
 }

@@ -60,3 +60,60 @@ export const siteContent = mysqlTable("siteContent", {
 
 export type SiteContent = typeof siteContent.$inferSelect;
 export type InsertSiteContent = typeof siteContent.$inferInsert;
+
+export const downtimeSummaries = mysqlTable("downtimeSummaries", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: varchar("reportDate", { length: 10 }).notNull(),
+  sourceReportId: int("sourceReportId").notNull(),
+  amExecutive: varchar("amExecutive", { length: 255 }).notNull().default(""),
+  pmExecutive: varchar("pmExecutive", { length: 255 }).notNull().default(""),
+  generatedFileName: varchar("generatedFileName", { length: 512 }),
+  generatedFileUrl: text("generatedFileUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DowntimeSummary = typeof downtimeSummaries.$inferSelect;
+export type InsertDowntimeSummary = typeof downtimeSummaries.$inferInsert;
+
+export const downtimeSummaryEntries = mysqlTable("downtimeSummaryEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  summaryId: int("summaryId").notNull(),
+  incidentKey: varchar("incidentKey", { length: 128 }).notNull(),
+  incidentOrder: int("incidentOrder").notNull().default(0),
+  zone: varchar("zone", { length: 32 }).notNull().default("Zone 1"),
+  rideCode: varchar("rideCode", { length: 32 }).notNull(),
+  attraction: varchar("attraction", { length: 512 }).notNull(),
+  description: text("description").notNull(),
+  downtimeStart: varchar("downtimeStart", { length: 16 }).notNull(),
+  downtimeEnd: varchar("downtimeEnd", { length: 16 }).notNull(),
+  durationMinutes: int("durationMinutes").notNull(),
+  shift: varchar("shift", { length: 8 }).notNull(),
+  rootCause: text("rootCause"),
+  correctiveAction: text("correctiveAction"),
+  preventiveAction: text("preventiveAction"),
+  partsReplaced: text("partsReplaced"),
+  followUpAction: text("followUpAction"),
+  anrNo: text("anrNo"),
+  supportInfo: text("supportInfo"),
+  supportPhotoUrl: text("supportPhotoUrl"),
+  supportPhotoName: varchar("supportPhotoName", { length: 512 }),
+  status: varchar("status", { length: 32 }).notNull().default("Monitoring"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DowntimeSummaryEntry = typeof downtimeSummaryEntries.$inferSelect;
+export type InsertDowntimeSummaryEntry = typeof downtimeSummaryEntries.$inferInsert;
+
+export const downtimeSummaryImports = mysqlTable("downtimeSummaryImports", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: varchar("reportDate", { length: 10 }).notNull(),
+  fileName: varchar("fileName", { length: 512 }).notNull(),
+  fileUrl: text("fileUrl").notNull(),
+  fileType: varchar("fileType", { length: 32 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DowntimeSummaryImport = typeof downtimeSummaryImports.$inferSelect;
+export type InsertDowntimeSummaryImport = typeof downtimeSummaryImports.$inferInsert;

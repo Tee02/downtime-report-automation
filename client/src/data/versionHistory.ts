@@ -9,9 +9,27 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.31";
+export const CURRENT_VERSION = "v1.32";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.32",
+    commit: "pending",
+    date: "2026-10-02",
+    time: "19:22 GMT+8",
+    timestamp: "2026-10-02 19:22:21",
+    title: "Daily Downtime Summary Workspace, DOCX Export & Summary Memory",
+    tasks: [
+      "Added a hidden Daily Downtime Summary Workspace that is reachable only from the expanded Ride Incident Logs when exactly one reporting date and All rides are selected",
+      "Added a two-zone daily incident sidebar and a spreadsheet-like summary form with prefilled date, ride, downtime description, start/end times, duration, and AM/PM executive assignment based on a 14:00H shift boundary",
+      "Added editable Root Cause, Corrective Action, Preventive Action, Parts Replaced, Follow-Up Action, ANR, and supporting-information fields while keeping the operational source details read-only and Status fixed to Monitoring",
+      "Added image attachment support that persists securely in project storage and embeds the supporting image in the generated Word summary report",
+      "Added DOCX export using the approved report structure, preserving the repeatable incident-form layout and validating the reference export at two pages per incident",
+      "Added Summary Memory with calendar date markers, stored executive/form entries, generated DOCX retrieval, and persistent PDF/Word import archive for completed historic reports",
+      "Added database schema, storage upload path, summary export/router regression tests, and direct browser verification for the new workflow",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.31",
     commit: "pending",
@@ -27,7 +45,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Mapping Applied Progress: Replaced static 6-step count with dynamic mapping progress tracking exact operational steps (10+ steps) and smooth progress bar animation",
       "Report Studio Storage Persistence: Ensured uploaded daily downtime logs are automatically saved to the website system for all operators, skipping duplicate dates safely without failing mapping generation",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.30",

@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { TextEditProvider } from "./contexts/TextEditContext";
 import Home from "./pages/Home";
 import AnalysisStudio from "./pages/AnalysisStudio";
+import DowntimeSummary from "./pages/DowntimeSummary";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -14,6 +15,7 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/analysis"} component={AnalysisStudio} />
+      <Route path={"/summary"} component={DowntimeSummary} />
       <Route path={"/comparison"}>
         <Redirect to="/analysis?tab=compare" />
       </Route>

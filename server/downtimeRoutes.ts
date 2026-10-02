@@ -18,6 +18,16 @@ const upload = multer({
   },
 });
 
+const summaryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 1, fileSize: 12 * 1024 * 1024 },
+  fileFilter: (_request, file, callback) => {
+    const name = file.originalname.toLowerCase();
+    const allowed = name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp") || name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".doc");
+    callback(null, allowed);
+  },
+});
+
 const FIXED_TEMPLATE_KEY = "WK_template_v4_74dd9c19.xlsx";
 
 async function getFixedTemplate(): Promise<Buffer> {
@@ -114,6 +124,27 @@ function combineProcessingResults(results: ProcessingResult[], reportDates: stri
 }
 
 export function registerDowntimeRoutes(app: Express) {
+  app.post("/api/downtime/summary-upload", summaryUpload.single("file"), async (request, response) => {
+    const file = request.file;
+    if (!file) return failure(response, 400, "Choose an image, PDF, or Word file to upload.");
+    try {
+      const safeName = safeFileName(file.originalname);
+      const stored = await storagePut(
+        `downtime-summary-attachments/${crypto.randomUUID()}/${safeName}`,
+        file.buffer,
+        file.mimetype || "application/octet-stream"
+      );
+      return response.json({
+        fileName: file.originalname,
+        fileUrl: stored.url,
+        fileType: file.mimetype || "application/octet-stream",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "The attachment could not be uploaded.";
+      return failure(response, 422, message);
+    }
+  });
+
   app.post(
     "/api/downtime/analyze",
     upload.fields([

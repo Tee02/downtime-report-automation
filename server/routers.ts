@@ -5,8 +5,24 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { deleteSavedDowntimeReport, getSavedDowntimeReportsByIds, getSiteContent, listAllSiteContent, listDarkDays, listSavedDowntimeReports, setDarkDay, setSiteContent, upsertUser } from "./db";
+import {
+  deleteSavedDowntimeReport,
+  getDowntimeSummaryByDate,
+  getSavedDowntimeReportsByIds,
+  getSiteContent,
+  listAllDowntimeSummaryDates,
+  listAllSiteContent,
+  listDarkDays,
+  listSavedDowntimeReports,
+  recordDowntimeSummaryImport,
+  saveDowntimeSummaryState,
+  setDarkDay,
+  setSiteContent,
+  upsertUser,
+} from "./db";
 import { buildAnalysis, exportCompiledDowntimeLog, loadSavedDowntimeReports } from "./downtimeAnalysis";
+import { buildDowntimeSummaryDocx, type SummaryEntryData } from "./downtimeSummaryDocx";
+import { storagePut } from "./storage";
 
 const analysisInput = z.object({
   reportIds: z.array(z.number().int().positive()).max(60).default([]),
@@ -117,6 +133,116 @@ export const appRouter = router({
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
       return exportCompiledDowntimeLog(reports, input.rideCodes);
     }),
+  }),
+  downtimeSummary: router({
+    getByDate: publicProcedure
+      .input(z.object({ dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+      .query(async ({ input }) => {
+        return getDowntimeSummaryByDate(input.dateKey);
+      }),
+    listDatesWithData: publicProcedure.query(async () => {
+      return listAllDowntimeSummaryDates();
+    }),
+    save: publicProcedure
+      .input(
+        z.object({
+          reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          sourceReportId: z.number().int().positive(),
+          amExecutive: z.string().default(""),
+          pmExecutive: z.string().default(""),
+          entries: z.array(
+            z.object({
+              incidentKey: z.string(),
+              zone: z.string().default("Zone 1"),
+              rideCode: z.string(),
+              attraction: z.string(),
+              description: z.string(),
+              downtimeStart: z.string(),
+              downtimeEnd: z.string(),
+              durationMinutes: z.number().int(),
+              shift: z.string(),
+              rootCause: z.string().nullable().optional(),
+              correctiveAction: z.string().nullable().optional(),
+              preventiveAction: z.string().nullable().optional(),
+              partsReplaced: z.string().nullable().optional(),
+              followUpAction: z.string().nullable().optional(),
+              anrNo: z.string().nullable().optional(),
+              supportInfo: z.string().nullable().optional(),
+              supportPhotoUrl: z.string().nullable().optional(),
+              supportPhotoName: z.string().nullable().optional(),
+              status: z.string().default("Monitoring"),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return saveDowntimeSummaryState(input as any);
+      }),
+    generateDocx: publicProcedure
+      .input(
+        z.object({
+          reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          sourceReportId: z.number().int().positive(),
+          amExecutive: z.string().default(""),
+          pmExecutive: z.string().default(""),
+          entries: z.array(
+            z.object({
+              incidentKey: z.string(),
+              zone: z.string().default("Zone 1"),
+              rideCode: z.string(),
+              attraction: z.string(),
+              description: z.string(),
+              downtimeStart: z.string(),
+              downtimeEnd: z.string(),
+              durationMinutes: z.number().int(),
+              shift: z.string(),
+              rootCause: z.string().nullable().optional(),
+              correctiveAction: z.string().nullable().optional(),
+              preventiveAction: z.string().nullable().optional(),
+              partsReplaced: z.string().nullable().optional(),
+              followUpAction: z.string().nullable().optional(),
+              anrNo: z.string().nullable().optional(),
+              supportInfo: z.string().nullable().optional(),
+              supportPhotoUrl: z.string().nullable().optional(),
+              supportPhotoName: z.string().nullable().optional(),
+              status: z.string().default("Monitoring"),
+            })
+          ),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const docxBuffer = await buildDowntimeSummaryDocx(input as any);
+        const datePart = input.reportDate.replace(/-/g, "");
+        const fileName = `DailyDowntimeSummaryReport-${datePart}.docx`;
+        const stored = await storagePut(
+          `downtime-summaries/${crypto.randomUUID()}/${fileName}`,
+          docxBuffer,
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+
+        await saveDowntimeSummaryState({
+          ...input,
+          generatedFileName: fileName,
+          generatedFileUrl: stored.url,
+        } as any);
+
+        return {
+          fileName,
+          downloadUrl: stored.url,
+        };
+      }),
+    recordImport: publicProcedure
+      .input(
+        z.object({
+          reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          fileName: z.string(),
+          fileUrl: z.string(),
+          fileType: z.string(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return recordDowntimeSummaryImport(input);
+      }),
   }),
 });
 
