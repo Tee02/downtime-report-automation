@@ -9,9 +9,27 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.33";
+export const CURRENT_VERSION = "v1.34";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.34",
+    commit: "pending",
+    date: "2026-10-04",
+    time: "17:59 GMT+8",
+    timestamp: "2026-10-04 17:59:05",
+    title: "Downtime Selection Hit Areas, Auto-Numbering, Shift Handover Drafts & PDF-to-DOCX Matching",
+    tasks: [
+      "Enlarged selection hit target detection area on downtime sidebar cards for effortless single-click selection without increasing the visible checkbox size",
+      "Added automatic list numbering (1. -> 2.) on Enter keypress for Corrective Action and Preventive Action in both summary form and shift drafts",
+      "Formatted archive summary action fields to cleanly display numbered items with line breaks",
+      "Created an independent Shift Handover Drafts section in Memory & Archive to log downtime cards throughout the day before operations uploads the 7:00 PM log, keeping drafts completely unmixed from uploaded logs",
+      "Added automatic PDF-to-DOCX conversion upon report upload with matching by ride code and downtime start time to populate Root Cause, Corrective Action, and Preventive Action",
+      "Configured uploaded summary reports to override and delete previous reports for the same date automatically",
+      "Tuned DOCX generator table box heights and margins to faithfully follow the official downtime summary template geometry, expanding only if overflow text requires extra space",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.33",
     commit: "pending",
@@ -29,7 +47,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Enabled summary details viewing for any chosen calendar date even before manual saving by falling back to live technical log previews",
       "Added automated text extraction for newly imported DOCX/PDF reports so uploaded document copy is immediately visible and searchable in summary details",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.32",

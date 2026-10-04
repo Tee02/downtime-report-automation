@@ -16,6 +16,9 @@ import {
   listSavedDowntimeReports,
   recordDowntimeSummaryImport,
   saveDowntimeSummaryState,
+  createDowntimeSummaryDraft,
+  updateDowntimeSummaryDraft,
+  deleteDowntimeSummaryDraft,
   setDarkDay,
   setSiteContent,
   upsertUser,
@@ -243,10 +246,59 @@ export const appRouter = router({
           fileUrl: z.string(),
           fileType: z.string(),
           extractedText: z.string().nullable().optional(),
+          convertedDocxFileName: z.string().nullable().optional(),
+          convertedDocxUrl: z.string().nullable().optional(),
+          matchedEntries: z.string().nullable().optional(),
         })
       )
       .mutation(async ({ input }) => {
         return recordDowntimeSummaryImport(input);
+      }),
+    createDraft: publicProcedure
+      .input(
+        z.object({
+          reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          zone: z.string().default("Zone A"),
+          rideCode: z.string(),
+          attraction: z.string().default(""),
+          description: z.string().default(""),
+          downtimeStart: z.string().default(""),
+          downtimeEnd: z.string().default(""),
+          durationMinutes: z.number().int().default(0),
+          rootCause: z.string().nullable().optional(),
+          correctiveAction: z.string().nullable().optional(),
+          preventiveAction: z.string().nullable().optional(),
+          notes: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return createDowntimeSummaryDraft(input);
+      }),
+    updateDraft: publicProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          zone: z.string().optional(),
+          rideCode: z.string().optional(),
+          attraction: z.string().optional(),
+          description: z.string().optional(),
+          downtimeStart: z.string().optional(),
+          downtimeEnd: z.string().optional(),
+          durationMinutes: z.number().int().optional(),
+          rootCause: z.string().nullable().optional(),
+          correctiveAction: z.string().nullable().optional(),
+          preventiveAction: z.string().nullable().optional(),
+          notes: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateDowntimeSummaryDraft(id, data);
+      }),
+    deleteDraft: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        return deleteDowntimeSummaryDraft(input.id);
       }),
   }),
 });

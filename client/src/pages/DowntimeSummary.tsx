@@ -20,14 +20,16 @@ import {
   Image as ImageIcon,
   Layers,
   Loader2,
+  Plus,
   Save,
   ShieldAlert,
   Sparkles,
   Square,
+  Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -56,8 +58,8 @@ type SummaryIncident = {
 };
 
 // Official Zone definitions per Availability matrix and user guidance:
-// Zone A (formerly Zone 1): BWZ, RTR, ESD, IDD, NTM, PTA, POTA, BCT (EV/RC/UZ/ZC), AFP, TTC
-// Zone B (formerly Zone 2): MFZ, ACR, SRS, ETI, EHF, VTM, BSC, RCC, SAG
+// Zone A: BWZ, RTR, ESD, IDD, NTM, PTA, POTA, BCT (EV/RC/UZ/ZC), AFP, TTC
+// Zone B: MFZ, ACR, SRS, ETI, EHF, VTM, BSC, RCC, SAG
 const ZONE_ASSIGNMENTS: Record<string, "Zone A" | "Zone B"> = {
   BWZ: "Zone A",
   RTR: "Zone A",
@@ -129,6 +131,46 @@ function normalizeZone(raw?: string | null): "Zone A" | "Zone B" {
   return "Zone A";
 }
 
+// Requirement: Automatically gives new line break for new numbering when numbered list is typed (e.g. 1. -> 2.)
+function handleNumberedListKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, currentValue: string, onChange: (val: string) => void) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    const textarea = e.currentTarget;
+    const start = textarea.selectionStart;
+    const textBefore = currentValue.substring(0, start);
+    const textAfter = currentValue.substring(textarea.selectionEnd);
+
+    // Find the current line before the cursor
+    const lines = textBefore.split("\n");
+    const currentLine = lines[lines.length - 1];
+
+    // Check if the current line starts with a number like "1." or "1. "
+    const match = /^(\s*)(\d+)\.\s*(.*)$/.exec(currentLine);
+    if (match) {
+      e.preventDefault();
+      const indent = match[1];
+      const num = parseInt(match[2], 10);
+      const content = match[3];
+
+      // If the line is empty numbered item (e.g. "2. " with nothing else), remove the number on second Enter
+      if (!content.trim()) {
+        const withoutEmptyNum = textBefore.substring(0, textBefore.length - currentLine.length) + "\n" + textAfter;
+        onChange(withoutEmptyNum);
+        return;
+      }
+
+      const nextNum = num + 1;
+      const insert = `\n${indent}${nextNum}. `;
+      const newValue = textBefore + insert + textAfter;
+      onChange(newValue);
+
+      // Restore cursor position after the newly inserted number
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + insert.length;
+      }, 0);
+    }
+  }
+}
+
 export default function DowntimeSummary() {
   const [, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
@@ -143,11 +185,22 @@ export default function DowntimeSummary() {
   const [zoneBPmExecutive, setZoneBPmExecutive] = useState("");
   const [incidents, setIncidents] = useState<SummaryIncident[]>([]);
   const [selectedKeysForExport, setSelectedKeysForExport] = useState<Set<string>>(new Set());
-  const [archiveSelectedDate, setArchiveSelectedDate] = useState<string>(dateKey);
+  const [archiveSelectedDate, setArchiveSelectedDate] = useState<string>(dateKey || new Date().toISOString().slice(0, 10));
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isPhotoDragging, setIsPhotoDragging] = useState(false);
   const [isImportingFile, setIsImportingFile] = useState(false);
   const [isArchiveDragging, setIsArchiveDragging] = useState(false);
+
+  // New Draft State
+  const [draftRideCode, setDraftRideCode] = useState("");
+  const [draftZone, setDraftZone] = useState<"Zone A" | "Zone B">("Zone A");
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const [draftRootCause, setDraftRootCause] = useState("");
+  const [draftCorrective, setDraftCorrective] = useState("");
+  const [draftPreventive, setDraftPreventive] = useState("");
+  const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
@@ -174,7 +227,7 @@ export default function DowntimeSummary() {
     { enabled: Boolean(dateKey) }
   );
 
-  // Read target report for archive tab date (even if not saved yet, we preview raw technical logs!)
+  // Read target report for archive tab date
   const archiveTargetReport = useMemo(() => {
     return savedReports.find(report => report.reportDate === archiveSelectedDate);
   }, [savedReports, archiveSelectedDate]);
@@ -214,16 +267,33 @@ export default function DowntimeSummary() {
 
     const savedMap = new Map((savedState?.entries || []).map(e => [e.incidentKey, e]));
 
+    // Check if an imported report exists for this date and has matched entries to autofill
+    let importedMatches: any[] = [];
+    const latestImport = savedState?.imports?.[0];
+    if (latestImport?.matchedEntries) {
+      try {
+        importedMatches = JSON.parse(latestImport.matchedEntries);
+      } catch {
+        // ignore
+      }
+    }
+
     const merged: SummaryIncident[] = technicalIncidents.map((item, index) => {
       const key = item.id || `inc-${item.dateKey}-${item.rideCode}-${index}`;
       const saved = savedMap.get(key);
       const times = (item.timeRange || "").split("-");
       const startTime = times[0] || "";
       const endTime = times[1] || "";
-      // Requirement: timing must be accurate. Hours must be converted to minutes, or taken from Analysis Studio duration
       const duration = parseDurationMinutes(item.durationLabel, startTime, endTime);
       const shift = parseShift(startTime);
       const defaultZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
+
+      // Match with imported report by rideCode and startTime
+      const match = importedMatches.find(m => {
+        const rideMatch = m.rideCode === item.rideCode || m.rideCode === (item.rideCode === "PTA" ? "POTA" : "");
+        const timeMatch = !m.downtimeStart || !startTime || m.downtimeStart === startTime;
+        return rideMatch && timeMatch;
+      });
 
       return {
         incidentKey: key,
@@ -235,9 +305,9 @@ export default function DowntimeSummary() {
         downtimeEnd: endTime,
         durationMinutes: duration,
         shift,
-        rootCause: saved?.rootCause ?? "",
-        correctiveAction: saved?.correctiveAction ?? "",
-        preventiveAction: saved?.preventiveAction ?? "",
+        rootCause: saved?.rootCause ?? match?.rootCause ?? "",
+        correctiveAction: saved?.correctiveAction ?? match?.correctiveAction ?? "",
+        preventiveAction: saved?.preventiveAction ?? match?.preventiveAction ?? "",
         partsReplaced: saved?.partsReplaced ?? "N/A",
         followUpAction: saved?.followUpAction ?? "N/A",
         anrNo: saved?.anrNo ?? "N/A",
@@ -331,13 +401,42 @@ export default function DowntimeSummary() {
 
   const importMutation = trpc.downtimeSummary.recordImport.useMutation({
     onSuccess: () => {
-      toast.success("File imported and text extracted into summary details.");
+      toast.success("New report uploaded! Previous report overridden and matched to downtime incidents.");
       utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
       utils.downtimeSummary.listDatesWithData.invalidate();
+      if (dateKey === archiveSelectedDate) {
+        utils.downtimeSummary.getByDate.invalidate({ dateKey });
+      }
     },
     onError: err => {
       toast.error(err.message || "Failed to record import.");
     },
+  });
+
+  // Draft Mutations
+  const createDraftMutation = trpc.downtimeSummary.createDraft.useMutation({
+    onSuccess: () => {
+      toast.success("Shift handover draft added.");
+      setDraftRideCode("");
+      setDraftStart("");
+      setDraftEnd("");
+      setDraftDescription("");
+      setDraftRootCause("");
+      setDraftCorrective("");
+      setDraftPreventive("");
+      utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
+      utils.downtimeSummary.listDatesWithData.invalidate();
+    },
+    onError: err => toast.error(err.message || "Failed to save draft."),
+  });
+
+  const deleteDraftMutation = trpc.downtimeSummary.deleteDraft.useMutation({
+    onSuccess: () => {
+      toast.success("Draft removed.");
+      setSelectedDraftId(null);
+      utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
+    },
+    onError: err => toast.error(err.message || "Failed to delete draft."),
   });
 
   const handleSave = () => {
@@ -377,6 +476,28 @@ export default function DowntimeSummary() {
     });
   };
 
+  const handleAddDraft = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draftRideCode.trim()) {
+      toast.error("Please enter a ride code.");
+      return;
+    }
+    const dur = parseDurationMinutes(undefined, draftStart, draftEnd);
+    createDraftMutation.mutate({
+      reportDate: archiveSelectedDate,
+      zone: draftZone,
+      rideCode: draftRideCode.trim().toUpperCase(),
+      attraction: draftRideCode.trim().toUpperCase(),
+      description: draftDescription.trim(),
+      downtimeStart: draftStart.trim(),
+      downtimeEnd: draftEnd.trim(),
+      durationMinutes: dur,
+      rootCause: draftRootCause.trim() || null,
+      correctiveAction: draftCorrective.trim() || null,
+      preventiveAction: draftPreventive.trim() || null,
+    });
+  };
+
   const processPhotoFile = async (file: File) => {
     if (!activeIncident) return;
     setIsUploadingPhoto(true);
@@ -407,12 +528,21 @@ export default function DowntimeSummary() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Archive upload failed.");
       const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+
+      // If PDF was converted to docx, mention it
+      if (result.convertedDocxFileName) {
+        toast.info(`PDF converted to DOCX (${result.convertedDocxFileName}) for matching.`);
+      }
+
       importMutation.mutate({
         reportDate: archiveSelectedDate,
         fileName: result.fileName,
         fileUrl: result.fileUrl,
         fileType: ext,
         extractedText: result.extractedText || null,
+        convertedDocxFileName: result.convertedDocxFileName || null,
+        convertedDocxUrl: result.convertedDocxUrl || null,
+        matchedEntries: result.matchedEntries || null,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to upload archive file.");
@@ -432,7 +562,6 @@ export default function DowntimeSummary() {
       }
       return zoneBAmExecutive ? `AM – ${zoneBAmExecutive}` : (amExecutive ? `AM – ${amExecutive}` : "AM – (Unassigned)");
     }
-    // Zone A (default)
     if (activeShift === "PM") {
       return pmExecutive ? `PM – ${pmExecutive}` : "PM – (Unassigned)";
     }
@@ -456,7 +585,6 @@ export default function DowntimeSummary() {
         isSaved: true,
       }));
     }
-    // Fallback: preview raw technical incidents for this date even before manual save!
     const techLogs = archiveAnalysisQuery.data?.incidentLogs.filter(l => l.kind === "technical" && l.rideCode) || [];
     return techLogs.map((l, idx) => {
       const times = (l.timeRange || "").split("-");
@@ -476,6 +604,23 @@ export default function DowntimeSummary() {
       };
     });
   }, [archiveSummaryQuery.data?.entries, archiveAnalysisQuery.data?.incidentLogs]);
+
+  // Helper to render text with clean line breaks for numbered lists in archive table
+  const renderFormattedActionText = (text: string) => {
+    if (!text || text === "—") return <span className="text-slate-400">—</span>;
+    // Split on newline or numbering patterns like " 2. " or "\n2. "
+    const lines = text.split(/\r?\n/).flatMap(l => l.split(/(?=\b\d+\.\s+)/)).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return <span>{text}</span>;
+    return (
+      <div className="space-y-1">
+        {lines.map((line, idx) => (
+          <div key={idx} className="leading-snug">{line}</div>
+        ))}
+      </div>
+    );
+  };
+
+  const archiveDrafts = archiveSummaryQuery.data?.drafts || [];
 
   return (
     <DashboardLayout>
@@ -570,7 +715,6 @@ export default function DowntimeSummary() {
                   </div>
                 </div>
 
-                {/* Two rows of Executive In Charge: Row 1 = Zone A, Row 2 = Zone B */}
                 <div className="mt-4 space-y-4">
                   <div>
                     <div className="flex items-center gap-2 mb-1.5">
@@ -697,27 +841,25 @@ export default function DowntimeSummary() {
                         <div
                           key={inc.incidentKey}
                           onClick={() => setSelectedIncidentKey(inc.incidentKey)}
-                          className={`group relative flex items-start gap-2.5 rounded-xl border p-3 transition-all cursor-pointer ${
+                          className={`group relative flex items-start rounded-xl border transition-all cursor-pointer ${
                             isSelected
                               ? "border-[#1e4ca1] bg-blue-50/70 ring-1 ring-[#1e4ca1]/40"
                               : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
                           }`}
                         >
-                          <div
-                            className="pt-0.5 shrink-0"
-                            onClick={e => {
-                              e.stopPropagation();
-                              toggleIncidentExport(inc.incidentKey);
-                            }}
+                          {/* Requirement: The tick box at the side panel for downtime selection is small and hard to tick, make it larger section (detection area) */}
+                          <label
+                            className="p-3 pr-1.5 flex items-center justify-center cursor-pointer shrink-0 select-none"
+                            onClick={e => e.stopPropagation()}
                           >
                             <Checkbox
                               checked={isTicked}
                               onCheckedChange={() => toggleIncidentExport(inc.incidentKey)}
                               className="data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
                             />
-                          </div>
+                          </label>
 
-                          <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 py-3 pr-3">
                             <div className="flex items-center justify-between gap-1">
                               <span className="font-mono text-xs font-extrabold text-[#1e4ca1]">
                                 {inc.rideCode}
@@ -830,7 +972,8 @@ export default function DowntimeSummary() {
                                 placeholder="Describe the verified root cause..."
                                 value={activeIncident.rootCause || ""}
                                 onChange={e => updateActiveField("rootCause", e.target.value)}
-                                className="min-h-[70px] text-xs"
+                                onKeyDown={e => handleNumberedListKeyDown(e, activeIncident.rootCause || "", val => updateActiveField("rootCause", val))}
+                                className="min-h-[70px] text-xs font-sans"
                               />
                             </td>
                           </tr>
@@ -840,10 +983,11 @@ export default function DowntimeSummary() {
                             </td>
                             <td colSpan={3} className="p-2.5 bg-white">
                               <Textarea
-                                placeholder="Enter corrective actions taken..."
+                                placeholder="Enter corrective actions taken (e.g. 1. Verified fault... Press Enter for 2.)..."
                                 value={activeIncident.correctiveAction || ""}
                                 onChange={e => updateActiveField("correctiveAction", e.target.value)}
-                                className="min-h-[70px] text-xs"
+                                onKeyDown={e => handleNumberedListKeyDown(e, activeIncident.correctiveAction || "", val => updateActiveField("correctiveAction", val))}
+                                className="min-h-[70px] text-xs font-sans"
                               />
                             </td>
                           </tr>
@@ -853,10 +997,11 @@ export default function DowntimeSummary() {
                             </td>
                             <td colSpan={3} className="p-2.5 bg-white">
                               <Textarea
-                                placeholder="Enter preventive maintenance or inspection follow-up..."
+                                placeholder="Enter preventive maintenance or inspection follow-up (e.g. 1. Inspect switch... Press Enter for 2.)..."
                                 value={activeIncident.preventiveAction || ""}
                                 onChange={e => updateActiveField("preventiveAction", e.target.value)}
-                                className="min-h-[60px] text-xs"
+                                onKeyDown={e => handleNumberedListKeyDown(e, activeIncident.preventiveAction || "", val => updateActiveField("preventiveAction", val))}
+                                className="min-h-[60px] text-xs font-sans"
                               />
                             </td>
                           </tr>
@@ -911,7 +1056,6 @@ export default function DowntimeSummary() {
                                 className="min-h-[50px] text-xs"
                               />
 
-                              {/* Requirement: Drag and drop support info photo dropzone */}
                               <div
                                 onDragOver={e => {
                                   e.preventDefault();
@@ -1000,250 +1144,446 @@ export default function DowntimeSummary() {
         )}
 
         {activeTab === "archive" && (
-          <div className="mt-6 grid gap-6 lg:grid-cols-[340px_1fr]">
-            <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
-              <CardContent className="p-4 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div>
-                    <h3 className="text-sm font-extrabold text-[#162b5b]">Summary Calendar Memory</h3>
-                    <p className="text-[11px] text-slate-500">Dates with saved summaries have blue indicators</p>
+          <div className="mt-6 space-y-6">
+            <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
+              <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm h-fit">
+                <CardContent className="p-4 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-[#162b5b]">Summary Calendar Memory</h3>
+                      <p className="text-[11px] text-slate-500">Dates with saved summaries or drafts have blue dots</p>
+                    </div>
+                    <CalendarDays className="h-4 w-4 text-[#1e4ca1]" />
                   </div>
-                  <CalendarDays className="h-4 w-4 text-[#1e4ca1]" />
-                </div>
 
-                <div className="flex justify-center">
-                  <Calendar
-                    mode="single"
-                    selected={archiveSelectedDate ? new Date(`${archiveSelectedDate}T12:00:00`) : undefined}
-                    onDayClick={day => {
-                      const y = day.getFullYear();
-                      const m = String(day.getMonth() + 1).padStart(2, "0");
-                      const d = String(day.getDate()).padStart(2, "0");
-                      setArchiveSelectedDate(`${y}-${m}-${d}`);
-                    }}
-                    weekStartsOn={1}
-                    modifiers={{
-                      savedLog: datesWithData.map(d => new Date(`${d}T12:00:00`)),
-                    }}
-                    className="rounded-xl bg-[#f8faff] p-2"
-                  />
-                </div>
+                  <div className="flex justify-center">
+                    <Calendar
+                      mode="single"
+                      selected={archiveSelectedDate ? new Date(`${archiveSelectedDate}T12:00:00`) : undefined}
+                      onDayClick={day => {
+                        const y = day.getFullYear();
+                        const m = String(day.getMonth() + 1).padStart(2, "0");
+                        const d = String(day.getDate()).padStart(2, "0");
+                        setArchiveSelectedDate(`${y}-${m}-${d}`);
+                      }}
+                      weekStartsOn={1}
+                      modifiers={{
+                        savedLog: datesWithData.map(d => new Date(`${d}T12:00:00`)),
+                      }}
+                      className="rounded-xl bg-[#f8faff] p-2"
+                    />
+                  </div>
 
-                {/* Requirement: Drag and drop feature for DOCX/PDF imports */}
-                <div className="border-t border-slate-100 pt-3 space-y-2">
-                  <span className="block text-xs font-bold text-slate-700">Import Past Report (PDF/Word)</span>
-                  <div
-                    onDragOver={e => {
-                      e.preventDefault();
-                      setIsArchiveDragging(true);
-                    }}
-                    onDragLeave={() => setIsArchiveDragging(false)}
-                    onDrop={e => {
-                      e.preventDefault();
-                      setIsArchiveDragging(false);
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) processArchiveFile(file);
-                    }}
-                    className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-all ${
-                      isArchiveDragging
-                        ? "border-[#1e4ca1] bg-indigo-50/90"
-                        : "border-indigo-300 bg-indigo-50/40 hover:bg-indigo-50/70"
-                    }`}
-                  >
-                    <input
-                      ref={archiveInputRef}
-                      type="file"
-                      accept=".docx,.doc,.pdf"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
+                  <div className="border-t border-slate-100 pt-3 space-y-2">
+                    <span className="block text-xs font-bold text-slate-700">Import Past Report (PDF/Word)</span>
+                    <p className="text-[10px] text-slate-500">
+                      Uploading overrides previous import, converts PDFs to DOCX, and matches downtime rootcause & actions.
+                    </p>
+                    <div
+                      onDragOver={e => {
+                        e.preventDefault();
+                        setIsArchiveDragging(true);
+                      }}
+                      onDragLeave={() => setIsArchiveDragging(false)}
+                      onDrop={e => {
+                        e.preventDefault();
+                        setIsArchiveDragging(false);
+                        const file = e.dataTransfer.files?.[0];
                         if (file) processArchiveFile(file);
                       }}
-                      className="hidden"
-                    />
-
-                    <FileUp className="h-5 w-5 text-[#1e4ca1] mb-1" />
-                    <span className="text-xs font-medium text-slate-700">
-                      Drag and drop DOCX / PDF report here
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => archiveInputRef.current?.click()}
-                      disabled={isImportingFile}
-                      className="mt-2 h-7 border-indigo-300 bg-white text-xs font-bold text-[#1e4ca1] hover:bg-indigo-50"
+                      className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-all ${
+                        isArchiveDragging
+                          ? "border-[#1e4ca1] bg-indigo-50/90"
+                          : "border-indigo-300 bg-indigo-50/40 hover:bg-indigo-50/70"
+                      }`}
                     >
-                      {isImportingFile ? "Importing & Extracting..." : "Choose File"}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                      <input
+                        ref={archiveInputRef}
+                        type="file"
+                        accept=".docx,.doc,.pdf"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) processArchiveFile(file);
+                        }}
+                        className="hidden"
+                      />
 
-            <div className="space-y-4">
-              <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
-                <CardContent className="p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                          Archive View
-                        </span>
-                        {archiveSummaryQuery.data?.summary ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Saved Web Summary</Badge>
-                        ) : archiveTableRows.length > 0 ? (
-                          <Badge variant="outline" className="border-blue-300 text-[#1e4ca1] text-[10px]">Technical Log Preview</Badge>
-                        ) : null}
-                      </div>
-                      <h2 className="text-xl font-extrabold text-[#162b5b]">
-                        Summary Details for {formatDisplayDate(archiveSelectedDate)}
-                      </h2>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Link href={`/summary?date=${archiveSelectedDate}`}>
-                        <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold border-indigo-200 text-[#1e4ca1]">
-                          Open In Editor
-                        </Button>
-                      </Link>
-                      {archiveSummaryQuery.data?.summary?.generatedFileUrl && (
-                        <a
-                          href={archiveSummaryQuery.data.summary.generatedFileUrl}
-                          download={archiveSummaryQuery.data.summary.generatedFileName || "Summary.docx"}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold h-8 gap-1.5">
-                            <Download className="h-3.5 w-3.5" />
-                            Download Generated DOCX
-                          </Button>
-                        </a>
-                      )}
+                      <FileUp className="h-5 w-5 text-[#1e4ca1] mb-1" />
+                      <span className="text-xs font-medium text-slate-700">
+                        Drag and drop DOCX / PDF report here
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => archiveInputRef.current?.click()}
+                        disabled={isImportingFile}
+                        className="mt-2 h-7 border-indigo-300 bg-white text-xs font-bold text-[#1e4ca1] hover:bg-indigo-50"
+                      >
+                        {isImportingFile ? "Converting & Matching..." : "Choose File"}
+                      </Button>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
 
-                  {archiveTableRows.length ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                        <span>Zone A AM: <strong>{archiveSummaryQuery.data?.summary?.amExecutive || "—"}</strong></span>
-                        <span>Zone A PM: <strong>{archiveSummaryQuery.data?.summary?.pmExecutive || "—"}</strong></span>
-                        <span>Zone B AM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBAmExecutive || "—"}</strong></span>
-                        <span>Zone B PM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBPmExecutive || "—"}</strong></span>
+              {/* Requirement: Shift Handover Drafts section that does not mix with uploaded downtime logs */}
+              <div className="space-y-6">
+                <Card className="border-[#adbBda]/70 bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/30 shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-amber-100 text-amber-900 text-[10px] font-extrabold">
+                            Shift Handover Drafts
+                          </Badge>
+                          <span className="text-[11px] text-slate-500">
+                            For {formatDisplayDate(archiveSelectedDate)} (Before 7:00 PM ops log upload)
+                          </span>
+                        </div>
+                        <h2 className="text-lg font-extrabold text-[#162b5b] mt-1">
+                          Pass Downtime Info to Next Shift Executive
+                        </h2>
                       </div>
-
-                      {/* Requirement: Display up to 3 lines, with scrollability inside rows for long text */}
-                      <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
-                        <table className="w-full text-xs">
-                          <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-extrabold text-[10px]">
-                            <tr>
-                              <th className="p-2.5 text-left w-20">Zone</th>
-                              <th className="p-2.5 text-left w-20">Ride</th>
-                              <th className="p-2.5 text-left min-w-[200px]">Description</th>
-                              <th className="p-2.5 text-left w-24">Time</th>
-                              <th className="p-2.5 text-left w-20">Duration</th>
-                              <th className="p-2.5 text-left min-w-[220px]">Root Cause</th>
-                              <th className="p-2.5 text-left min-w-[220px]">Corrective Action</th>
-                              <th className="p-2.5 text-left min-w-[200px]">Preventive</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 bg-white">
-                            {archiveTableRows.map(row => (
-                              <tr key={row.id} className="hover:bg-slate-50/80 align-top">
-                                <td className="p-2.5 font-bold text-[#1e4ca1]">{row.zone}</td>
-                                <td className="p-2.5 font-mono font-bold text-slate-800">{row.rideCode}</td>
-                                <td className="p-2.5">
-                                  <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                    {row.description}
-                                  </div>
-                                </td>
-                                <td className="p-2.5 whitespace-nowrap font-medium text-slate-600">{row.timeRange}</td>
-                                <td className="p-2.5 font-bold text-rose-700 whitespace-nowrap">{row.duration}</td>
-                                <td className="p-2.5">
-                                  <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                    {row.rootCause}
-                                  </div>
-                                </td>
-                                <td className="p-2.5">
-                                  <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                    {row.correctiveAction}
-                                  </div>
-                                </td>
-                                <td className="p-2.5">
-                                  <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                    {row.preventiveAction}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      <Badge variant="outline" className="border-amber-300 text-amber-800 text-xs">
+                        {archiveDrafts.length} draft incident card(s)
+                      </Badge>
                     </div>
-                  ) : (
-                    <div className="py-8 text-center text-xs text-slate-500">
-                      No technical downtime or summary records found for {formatDisplayDate(archiveSelectedDate)}.
-                    </div>
-                  )}
 
-                  {/* Requirement: When a new import is done, read and display the text written in the uploaded document */}
-                  {archiveSummaryQuery.data?.imports?.length ? (
-                    <div className="border-t border-slate-200 pt-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-extrabold text-[#162b5b]">
-                          Imported Report Documents &amp; Extracted Details
-                        </h4>
-                        <Badge variant="outline" className="text-[10px]">
-                          {archiveSummaryQuery.data.imports.length} document(s)
-                        </Badge>
-                      </div>
-
-                      <div className="space-y-3">
-                        {archiveSummaryQuery.data.imports.map(item => (
+                    {/* Draft Cards View */}
+                    {archiveDrafts.length > 0 ? (
+                      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+                        {archiveDrafts.map(d => (
                           <div
-                            key={item.id}
-                            className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3"
+                            key={d.id}
+                            onClick={() => setSelectedDraftId(d.id === selectedDraftId ? null : d.id)}
+                            className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
+                              selectedDraftId === d.id
+                                ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-300"
+                                : "border-slate-200 bg-white hover:border-amber-300 hover:shadow-xs"
+                            }`}
                           >
-                            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-                              <div className="flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-[#1e4ca1]" />
-                                <span className="font-bold text-xs text-slate-800">{item.fileName}</span>
-                                <Badge className="text-[9px] bg-indigo-50 text-[#1e4ca1] uppercase font-mono">
-                                  {item.fileType}
-                                </Badge>
-                              </div>
-                              <a
-                                href={item.fileUrl}
-                                download={item.fileName}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-xs font-bold text-[#1e4ca1] hover:underline"
-                              >
-                                <Download className="h-3 w-3" />
-                                <span>Download File</span>
-                              </a>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-extrabold text-[#1e4ca1]">{d.rideCode}</span>
+                              <Badge variant="outline" className="text-[9px] border-slate-300">{d.zone}</Badge>
                             </div>
-
-                            {item.extractedText ? (
-                              <div>
-                                <span className="block text-[11px] font-bold text-slate-600 mb-1">
-                                  Extracted Document Text:
-                                </span>
-                                <div className="max-h-[160px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap select-text">
-                                  {item.extractedText}
-                                </div>
-                              </div>
-                            ) : (
-                              <p className="text-[11px] text-slate-400 italic">
-                                Document file stored in archive. Text extraction was not available for this binary format.
+                            <div className="mt-1 text-xs font-semibold text-slate-800 line-clamp-1">{d.description || "Draft incident"}</div>
+                            <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
+                              <span>{d.downtimeStart || "—"} - {d.downtimeEnd || "—"}</span>
+                              <span className="font-bold text-rose-700">{d.durationMinutes ? `${d.durationMinutes}m` : ""}</span>
+                            </div>
+                            {d.rootCause && (
+                              <p className="mt-1.5 text-[10px] text-slate-600 line-clamp-2 italic">
+                                Cause: {d.rootCause}
                               </p>
                             )}
+                            <div className="mt-2 flex justify-end">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  deleteDraftMutation.mutate({ id: d.id });
+                                }}
+                                className="h-6 px-1.5 text-xs text-rose-600 hover:bg-rose-50"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span className="text-[10px] ml-1">Delete</span>
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/30 p-4 text-center text-xs text-amber-900">
+                        No handover drafts created for {formatDisplayDate(archiveSelectedDate)} yet. Use the form below to jot down daytime downtime before ops uploads the 7:00 PM log.
+                      </div>
+                    )}
+
+                    {/* Add New Draft Form */}
+                    <form onSubmit={handleAddDraft} className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-[#162b5b]">
+                        <Plus className="h-4 w-4 text-[#1e4ca1]" />
+                        <span>Add New Handover Draft Downtime</span>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Ride Code *</label>
+                          <Input
+                            placeholder="e.g. PTA or TTC"
+                            value={draftRideCode}
+                            onChange={e => setDraftRideCode(e.target.value)}
+                            className="mt-1 h-8 text-xs font-mono uppercase"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Zone</label>
+                          <select
+                            value={draftZone}
+                            onChange={e => setDraftZone(e.target.value as "Zone A" | "Zone B")}
+                            className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
+                          >
+                            <option value="Zone A">Zone A</option>
+                            <option value="Zone B">Zone B</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Time Down</label>
+                          <Input
+                            placeholder="e.g. 10:25"
+                            value={draftStart}
+                            onChange={e => setDraftStart(e.target.value)}
+                            className="mt-1 h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Time Up</label>
+                          <Input
+                            placeholder="e.g. 11:15"
+                            value={draftEnd}
+                            onChange={e => setDraftEnd(e.target.value)}
+                            className="mt-1 h-8 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Downtime Description</label>
+                        <Input
+                          placeholder="e.g. Technical inspection on RV06 (BGM Issue)"
+                          value={draftDescription}
+                          onChange={e => setDraftDescription(e.target.value)}
+                          className="mt-1 h-8 text-xs"
+                        />
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Root Cause</label>
+                          <Textarea
+                            placeholder="Suspect wiring loose..."
+                            value={draftRootCause}
+                            onChange={e => setDraftRootCause(e.target.value)}
+                            onKeyDown={e => handleNumberedListKeyDown(e, draftRootCause, setDraftRootCause)}
+                            className="mt-1 min-h-[60px] text-xs font-sans"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Corrective Action</label>
+                          <Textarea
+                            placeholder="1. Power cycle RV... (Enter for 2.)"
+                            value={draftCorrective}
+                            onChange={e => setDraftCorrective(e.target.value)}
+                            onKeyDown={e => handleNumberedListKeyDown(e, draftCorrective, setDraftCorrective)}
+                            className="mt-1 min-h-[60px] text-xs font-sans"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700">Preventive Action</label>
+                          <Textarea
+                            placeholder="1. Check connector... (Enter for 2.)"
+                            value={draftPreventive}
+                            onChange={e => setDraftPreventive(e.target.value)}
+                            onKeyDown={e => handleNumberedListKeyDown(e, draftPreventive, setDraftPreventive)}
+                            className="mt-1 min-h-[60px] text-xs font-sans"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <Button
+                          type="submit"
+                          size="sm"
+                          disabled={createDraftMutation.isPending}
+                          className="h-8 gap-1.5 bg-[#1e4ca1] hover:bg-[#162b5b] text-white text-xs font-bold"
+                        >
+                          {createDraftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                          <span>Save Shift Draft</span>
+                        </Button>
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Archive Table Preview for Selected Date */}
+                <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
+                  <CardContent className="p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                            Archive View
+                          </span>
+                          {archiveSummaryQuery.data?.summary ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Saved Web Summary</Badge>
+                          ) : archiveTableRows.length > 0 ? (
+                            <Badge variant="outline" className="border-blue-300 text-[#1e4ca1] text-[10px]">Technical Log Preview</Badge>
+                          ) : null}
+                        </div>
+                        <h2 className="text-xl font-extrabold text-[#162b5b]">
+                          Summary Details for {formatDisplayDate(archiveSelectedDate)}
+                        </h2>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Link href={`/summary?date=${archiveSelectedDate}`}>
+                          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold border-indigo-200 text-[#1e4ca1]">
+                            Open In Editor
+                          </Button>
+                        </Link>
+                        {archiveSummaryQuery.data?.summary?.generatedFileUrl && (
+                          <a
+                            href={archiveSummaryQuery.data.summary.generatedFileUrl}
+                            download={archiveSummaryQuery.data.summary.generatedFileName || "Summary.docx"}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold h-8 gap-1.5">
+                              <Download className="h-3.5 w-3.5" />
+                              Download Generated DOCX
+                            </Button>
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  ) : null}
-                </CardContent>
-              </Card>
+
+                    {archiveTableRows.length ? (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                          <span>Zone A AM: <strong>{archiveSummaryQuery.data?.summary?.amExecutive || "—"}</strong></span>
+                          <span>Zone A PM: <strong>{archiveSummaryQuery.data?.summary?.pmExecutive || "—"}</strong></span>
+                          <span>Zone B AM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBAmExecutive || "—"}</strong></span>
+                          <span>Zone B PM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBPmExecutive || "—"}</strong></span>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
+                          <table className="w-full text-xs">
+                            <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-extrabold text-[10px]">
+                              <tr>
+                                <th className="p-2.5 text-left w-20">Zone</th>
+                                <th className="p-2.5 text-left w-20">Ride</th>
+                                <th className="p-2.5 text-left min-w-[200px]">Description</th>
+                                <th className="p-2.5 text-left w-24">Time</th>
+                                <th className="p-2.5 text-left w-20">Duration</th>
+                                <th className="p-2.5 text-left min-w-[220px]">Root Cause</th>
+                                <th className="p-2.5 text-left min-w-[220px]">Corrective Action</th>
+                                <th className="p-2.5 text-left min-w-[200px]">Preventive</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 bg-white">
+                              {archiveTableRows.map(row => (
+                                <tr key={row.id} className="hover:bg-slate-50/80 align-top">
+                                  <td className="p-2.5 font-bold text-[#1e4ca1]">{row.zone}</td>
+                                  <td className="p-2.5 font-mono font-bold text-slate-800">{row.rideCode}</td>
+                                  <td className="p-2.5">
+                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                      {row.description}
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5 whitespace-nowrap font-medium text-slate-600">{row.timeRange}</td>
+                                  <td className="p-2.5 font-bold text-rose-700 whitespace-nowrap">{row.duration}</td>
+                                  <td className="p-2.5">
+                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                      {renderFormattedActionText(row.rootCause)}
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                      {renderFormattedActionText(row.correctiveAction)}
+                                    </div>
+                                  </td>
+                                  <td className="p-2.5">
+                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                      {renderFormattedActionText(row.preventiveAction)}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-xs text-slate-500">
+                        No technical downtime or summary records found for {formatDisplayDate(archiveSelectedDate)}.
+                      </div>
+                    )}
+
+                    {/* Imported Report Document Section (shows converted DOCX and text details) */}
+                    {archiveSummaryQuery.data?.imports?.length ? (
+                      <div className="border-t border-slate-200 pt-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-extrabold text-[#162b5b]">
+                            Imported Report Document (Replaces Old Import)
+                          </h4>
+                          <Badge variant="outline" className="text-[10px]">
+                            Active Import
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-3">
+                          {archiveSummaryQuery.data.imports.map(item => (
+                            <div
+                              key={item.id}
+                              className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-4 w-4 text-[#1e4ca1]" />
+                                  <span className="font-bold text-xs text-slate-800">{item.fileName}</span>
+                                  <Badge className="text-[9px] bg-indigo-50 text-[#1e4ca1] uppercase font-mono">
+                                    {item.fileType}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {item.convertedDocxUrl && (
+                                    <a
+                                      href={item.convertedDocxUrl}
+                                      download={item.convertedDocxFileName || "converted.docx"}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      <span>Download Converted DOCX</span>
+                                    </a>
+                                  )}
+                                  <a
+                                    href={item.fileUrl}
+                                    download={item.fileName}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-[#1e4ca1] hover:underline"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                    <span>Download Original</span>
+                                  </a>
+                                </div>
+                              </div>
+
+                              {item.extractedText ? (
+                                <div>
+                                  <span className="block text-[11px] font-bold text-slate-600 mb-1">
+                                    Extracted Document Text &amp; Matched Details:
+                                  </span>
+                                  <div className="max-h-[160px] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 font-mono text-[11px] leading-relaxed text-slate-700 whitespace-pre-wrap select-text">
+                                    {item.extractedText}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-slate-400 italic">
+                                  Document file stored in archive. Text extraction was not available for this binary format.
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         )}

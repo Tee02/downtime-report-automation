@@ -10,6 +10,7 @@ import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
 import { loadSavedDowntimeReports } from "./downtimeAnalysis";
 import JSZip from "jszip";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import { Document as DocxDocument, Packer as DocxPacker, Paragraph as DocxParagraph, TextRun as DocxTextRun } from "docx";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -170,6 +171,105 @@ async function extractDocumentText(fileName: string, buffer: Buffer): Promise<st
   return "";
 }
 
+export type MatchedSummaryField = {
+  reportDate?: string;
+  rideCode: string;
+  description?: string;
+  downtimeStart?: string;
+  downtimeEnd?: string;
+  durationMinutes?: number;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+};
+
+export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField[] {
+  const results: MatchedSummaryField[] = [];
+  // Split into chunks by Ride/Attraction or Date markers
+  const chunks = text.split(/(?:Ride\/Attraction|Attraction\s*:)/i);
+  for (let i = 1; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    // Look for ride code: first token or line
+    const rideMatch = /^\s*[:\s]*([A-Z0-9()\s-]+?)(?:\s+(?:Executive|Date|Recurring|Downtime|Incident|Time)|$|\n)/i.exec(chunk);
+    const rideRaw = (rideMatch?.[1] || "").trim().toUpperCase();
+    if (!rideRaw) continue;
+
+    // Normalize known ride codes
+    let rideCode = rideRaw;
+    if (rideCode.includes("POTA") || rideCode.includes("PLANET OF THE APES")) rideCode = "PTA";
+    else if (rideCode.includes("TRICK COASTER")) rideCode = "BCT (ZC)";
+    else if (rideCode.includes("TERRAFORM")) rideCode = "TTC";
+    else if (rideCode.includes("BIGWELD")) rideCode = "BWZ";
+    else if (rideCode.includes("ACORN")) rideCode = "ACR";
+    else if (rideCode.includes("MAMMOTH")) rideCode = "MFZ";
+    else if (rideCode.includes("ALPHA FIGHTER")) rideCode = "AFP";
+    else {
+      const firstWord = rideCode.split(/\s+/)[0];
+      if (firstWord && firstWord.length <= 8) rideCode = firstWord;
+    }
+
+    // Time Down / Time Up
+    const downMatch = /Time Down\s*[:\s]*(\d{2}:?\d{2})/i.exec(chunk);
+    const upMatch = /Time Up\s*[:\s]*(\d{2}:?\d{2})/i.exec(chunk);
+    let startTime: string | undefined;
+    let endTime: string | undefined;
+    if (downMatch) {
+      const raw = downMatch[1].replace(":", "");
+      startTime = raw.length === 4 ? `${raw.slice(0, 2)}:${raw.slice(2)}` : downMatch[1];
+    }
+    if (upMatch) {
+      const raw = upMatch[1].replace(":", "");
+      endTime = raw.length === 4 ? `${raw.slice(0, 2)}:${raw.slice(2)}` : upMatch[1];
+    }
+
+    // Duration
+    const durMatch = /Duration\s*(?:of Downtime)?\s*[:\s]*(\d+)\s*min/i.exec(chunk);
+    const durationMinutes = durMatch ? parseInt(durMatch[1], 10) : undefined;
+
+    // Root cause, corrective, preventive
+    const rootMatch = /Root Cause\(s\)\s*[:\s]*([\s\S]*?)(?=(?:Corrective Action|Preventive Action|Part\(s\)|ANR|Status|$))/i.exec(chunk);
+    const corrMatch = /Corrective Action\s*[:\s]*([\s\S]*?)(?=(?:Preventive Action|Part\(s\)|Follow-Up|ANR|Status|$))/i.exec(chunk);
+    const prevMatch = /Preventive Action\s*[:\s]*([\s\S]*?)(?=(?:Part\(s\)|Follow-Up|ANR|Other Supporting|Status|$))/i.exec(chunk);
+
+    results.push({
+      rideCode,
+      downtimeStart: startTime,
+      downtimeEnd: endTime,
+      durationMinutes,
+      rootCause: rootMatch ? rootMatch[1].trim() : undefined,
+      correctiveAction: corrMatch ? corrMatch[1].trim() : undefined,
+      preventiveAction: prevMatch ? prevMatch[1].trim() : undefined,
+    });
+  }
+  return results;
+}
+
+async function convertPdfToDocxBuffer(pdfText: string): Promise<Buffer> {
+  const paragraphs: DocxParagraph[] = [];
+  for (const line of pdfText.split("\n")) {
+    paragraphs.push(
+      new DocxParagraph({
+        spacing: { before: 20, after: 20 },
+        children: [
+          new DocxTextRun({
+            text: line,
+            font: "Calibri",
+            size: 20,
+          }),
+        ],
+      })
+    );
+  }
+  const doc = new DocxDocument({
+    sections: [
+      {
+        children: paragraphs.length > 0 ? paragraphs : [new DocxParagraph({ text: "Empty document" })],
+      },
+    ],
+  });
+  return await DocxPacker.toBuffer(doc);
+}
+
 export function registerDowntimeRoutes(app: Express) {
   app.post("/api/downtime/summary-upload", summaryUpload.single("file"), async (request, response) => {
     const file = request.file;
@@ -182,11 +282,30 @@ export function registerDowntimeRoutes(app: Express) {
         file.mimetype || "application/octet-stream"
       );
       const extractedText = await extractDocumentText(file.originalname, file.buffer);
+      let convertedDocxFileName: string | null = null;
+      let convertedDocxUrl: string | null = null;
+      if (file.originalname.toLowerCase().endsWith(".pdf")) {
+        const docxBuf = await convertPdfToDocxBuffer(extractedText || "PDF document imported without text.");
+        const convertedName = safeName.replace(/\.pdf$/i, ".docx");
+        const convertedStored = await storagePut(
+          `downtime-summary-attachments/${crypto.randomUUID()}/${convertedName}`,
+          docxBuf,
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        convertedDocxFileName = convertedName;
+        convertedDocxUrl = convertedStored.url;
+      }
+
+      const matched = extractedText ? parseSummaryIncidentsFromText(extractedText) : [];
+
       return response.json({
         fileName: file.originalname,
         fileUrl: stored.url,
         fileType: file.mimetype || "application/octet-stream",
         extractedText: extractedText || null,
+        convertedDocxFileName,
+        convertedDocxUrl,
+        matchedEntries: matched.length > 0 ? JSON.stringify(matched) : null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The attachment could not be uploaded.";

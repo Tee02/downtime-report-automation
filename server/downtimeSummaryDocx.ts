@@ -201,7 +201,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 750, rule: HeightRule.ATLEAST },
+          height: { value: 1574, rule: HeightRule.ATLEAST }, // 78.7pt
           children: [
             cell([labelPara("Downtime Description\n(RV / Train / Seat / Scene / System)")], 2050),
             cell([valuePara(entry.description)], 7310),
@@ -229,7 +229,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 950, rule: HeightRule.ATLEAST },
+          height: { value: 1664, rule: HeightRule.ATLEAST }, // 83.2pt
           children: [
             cell([labelPara("Root Cause(s)")], 2070),
             cell([valuePara(entry.rootCause || "N/A")], 7290),
@@ -243,7 +243,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 950, rule: HeightRule.ATLEAST },
+          height: { value: 1475, rule: HeightRule.ATLEAST }, // 73.8pt
           children: [
             cell([labelPara("Corrective Action")], 2070),
             cell([valuePara(entry.correctiveAction || "N/A")], 7290),
@@ -257,7 +257,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 650, rule: HeightRule.ATLEAST },
+          height: { value: 755, rule: HeightRule.ATLEAST }, // 37.8pt
           children: [
             cell([labelPara("Preventive Action")], 2050),
             cell([valuePara(entry.preventiveAction || "N/A")], 7310),
@@ -271,6 +271,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
+          height: { value: 422, rule: HeightRule.ATLEAST }, // 21.1pt
           children: [
             cell([labelPara("Part(s) Replaced (if any)")], 4680),
             cell([valuePara(entry.partsReplaced || "N/A")], 4680),
@@ -284,6 +285,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
+          height: { value: 683, rule: HeightRule.ATLEAST }, // 34.15pt
           children: [
             cell([labelPara("Follow-Up Action (if any)")], 4680),
             cell([valuePara(entry.followUpAction || "N/A")], 4680),
@@ -359,7 +361,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 1600, rule: HeightRule.ATLEAST },
+          height: { value: 1718, rule: HeightRule.ATLEAST }, // 85.9pt
           children: [
             cell([labelPara("Other Supporting Information:\n(Ex: Photo, Service sheet, Checklist &etc.)")], 2140),
             cell(photoChildren, 7220),
@@ -377,6 +379,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
+          height: { value: 422, rule: HeightRule.ATLEAST }, // 21.1pt
           children: [
             cell([labelPara("Status:")], 1650),
             cell([

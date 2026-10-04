@@ -115,8 +115,32 @@ export const downtimeSummaryImports = mysqlTable("downtimeSummaryImports", {
   fileUrl: text("fileUrl").notNull(),
   fileType: varchar("fileType", { length: 32 }).notNull(),
   extractedText: text("extractedText"),
+  convertedDocxFileName: varchar("convertedDocxFileName", { length: 512 }),
+  convertedDocxUrl: text("convertedDocxUrl"),
+  matchedEntries: text("matchedEntries"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type DowntimeSummaryImport = typeof downtimeSummaryImports.$inferSelect;
 export type InsertDowntimeSummaryImport = typeof downtimeSummaryImports.$inferInsert;
+
+export const downtimeSummaryDrafts = mysqlTable("downtimeSummaryDrafts", {
+  id: int("id").autoincrement().primaryKey(),
+  reportDate: varchar("reportDate", { length: 10 }).notNull(),
+  zone: varchar("zone", { length: 32 }).notNull().default("Zone A"),
+  rideCode: varchar("rideCode", { length: 32 }).notNull(),
+  attraction: varchar("attraction", { length: 512 }).notNull().default(""),
+  description: text("description"),
+  downtimeStart: varchar("downtimeStart", { length: 16 }).notNull().default(""),
+  downtimeEnd: varchar("downtimeEnd", { length: 16 }).notNull().default(""),
+  durationMinutes: int("durationMinutes").notNull().default(0),
+  rootCause: text("rootCause"),
+  correctiveAction: text("correctiveAction"),
+  preventiveAction: text("preventiveAction"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DowntimeSummaryDraft = typeof downtimeSummaryDrafts.$inferSelect;
+export type InsertDowntimeSummaryDraft = typeof downtimeSummaryDrafts.$inferInsert;

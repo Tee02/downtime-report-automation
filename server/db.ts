@@ -4,10 +4,12 @@ import {
   InsertDowntimeSummary,
   InsertDowntimeSummaryEntry,
   InsertDowntimeSummaryImport,
+  InsertDowntimeSummaryDraft,
   InsertSavedDowntimeReport,
   InsertUser,
   darkDays,
   downtimeSummaries,
+  downtimeSummaryDrafts,
   downtimeSummaryEntries,
   downtimeSummaryImports,
   savedDowntimeReports,
@@ -184,25 +186,29 @@ export async function getDowntimeSummaryByDate(reportDate: string) {
   const db = await getDb();
   if (!db) return null;
   const summaries = await db.select().from(downtimeSummaries).where(eq(downtimeSummaries.reportDate, reportDate)).limit(1);
-  if (!summaries.length) return null;
-  const summary = summaries[0];
-  const entries = await db.select().from(downtimeSummaryEntries).where(eq(downtimeSummaryEntries.summaryId, summary.id)).orderBy(downtimeSummaryEntries.incidentOrder, downtimeSummaryEntries.id);
-  const imports = await db.select().from(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, reportDate)).orderBy(desc(downtimeSummaryImports.createdAt));
+  const summary = summaries[0] ?? null;
+  const entries = summary
+    ? await db.select().from(downtimeSummaryEntries).where(eq(downtimeSummaryEntries.summaryId, summary.id)).orderBy(downtimeSummaryEntries.incidentOrder, downtimeSummaryEntries.id)
+    : [];
+  const imports = await db.select().from(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, reportDate)).orderBy(desc(downtimeSummaryImports.createdAt)).limit(1);
+  const drafts = await db.select().from(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.reportDate, reportDate)).orderBy(downtimeSummaryDrafts.downtimeStart, downtimeSummaryDrafts.id);
   return {
     summary,
     entries,
     imports,
+    drafts,
   };
 }
 
 export async function listAllDowntimeSummaryDates(): Promise<string[]> {
   const db = await getDb();
   if (!db) return [];
-  const [summaryRows, importRows] = await Promise.all([
+  const [summaryRows, importRows, draftRows] = await Promise.all([
     db.select({ reportDate: downtimeSummaries.reportDate }).from(downtimeSummaries),
     db.select({ reportDate: downtimeSummaryImports.reportDate }).from(downtimeSummaryImports),
+    db.select({ reportDate: downtimeSummaryDrafts.reportDate }).from(downtimeSummaryDrafts),
   ]);
-  return Array.from(new Set([...summaryRows.map(r => r.reportDate), ...importRows.map(r => r.reportDate)])).sort();
+  return Array.from(new Set([...summaryRows.map(r => r.reportDate), ...importRows.map(r => r.reportDate), ...draftRows.map(r => r.reportDate)])).sort();
 }
 
 export async function saveDowntimeSummaryState(params: {
@@ -261,6 +267,35 @@ export async function saveDowntimeSummaryState(params: {
 export async function recordDowntimeSummaryImport(params: InsertDowntimeSummaryImport) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
+  // Requirement: whenever a new report is uploaded, override and delete the old import for this date
+  await db.delete(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, params.reportDate));
   await db.insert(downtimeSummaryImports).values(params);
   return db.select().from(downtimeSummaryImports).where(eq(downtimeSummaryImports.reportDate, params.reportDate)).orderBy(desc(downtimeSummaryImports.createdAt));
+}
+
+export async function listDowntimeSummaryDrafts(reportDate: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.reportDate, reportDate)).orderBy(downtimeSummaryDrafts.downtimeStart, downtimeSummaryDrafts.id);
+}
+
+export async function createDowntimeSummaryDraft(draft: InsertDowntimeSummaryDraft) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(downtimeSummaryDrafts).values(draft);
+  return result;
+}
+
+export async function updateDowntimeSummaryDraft(id: number, draft: Partial<InsertDowntimeSummaryDraft>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(downtimeSummaryDrafts).set(draft).where(eq(downtimeSummaryDrafts.id, id));
+  return db.select().from(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.id, id)).limit(1);
+}
+
+export async function deleteDowntimeSummaryDraft(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.id, id));
+  return { success: true };
 }
