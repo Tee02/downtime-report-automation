@@ -8,6 +8,8 @@ import { storageGetSignedUrl, storagePut } from "./storage";
 import { combineMappedWorkbooks, processDowntimeWorkbooks, type ProcessingResult } from "./downtimeProcessor";
 import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
 import { loadSavedDowntimeReports } from "./downtimeAnalysis";
+import JSZip from "jszip";
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -123,6 +125,51 @@ function combineProcessingResults(results: ProcessingResult[], reportDates: stri
   };
 }
 
+async function extractDocumentText(fileName: string, buffer: Buffer): Promise<string> {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".docx")) {
+    try {
+      const zip = await JSZip.loadAsync(buffer);
+      const xml = await zip.file("word/document.xml")?.async("string");
+      if (!xml) return "";
+      return xml
+        .replace(/<w:p[^>]*>/gi, "\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n\s+/g, "\n")
+        .replace(/\n{2,}/g, "\n")
+        .trim();
+    } catch (e) {
+      console.warn("Failed to extract docx text:", e);
+      return "";
+    }
+  }
+  if (lower.endsWith(".pdf")) {
+    try {
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+      const pagesText: string[] = [];
+      for (let p = 1; p <= doc.numPages; p++) {
+        const page = await doc.getPage(p);
+        const content = await page.getTextContent();
+        const strings = content.items
+          .map((item: any) => (item.str || "").trim())
+          .filter(Boolean);
+        if (strings.length) pagesText.push(strings.join(" "));
+      }
+      return pagesText.join("\n\n").trim();
+    } catch (e) {
+      console.warn("Failed to extract pdf text:", e);
+      return "";
+    }
+  }
+  return "";
+}
+
 export function registerDowntimeRoutes(app: Express) {
   app.post("/api/downtime/summary-upload", summaryUpload.single("file"), async (request, response) => {
     const file = request.file;
@@ -134,10 +181,12 @@ export function registerDowntimeRoutes(app: Express) {
         file.buffer,
         file.mimetype || "application/octet-stream"
       );
+      const extractedText = await extractDocumentText(file.originalname, file.buffer);
       return response.json({
         fileName: file.originalname,
         fileUrl: stored.url,
         fileType: file.mimetype || "application/octet-stream",
+        extractedText: extractedText || null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "The attachment could not be uploaded.";

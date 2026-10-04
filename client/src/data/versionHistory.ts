@@ -9,9 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.32";
+export const CURRENT_VERSION = "v1.33";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.33",
+    commit: "pending",
+    date: "2026-10-04",
+    time: "12:26 GMT+8",
+    timestamp: "2026-10-04 12:26:21",
+    title: "Downtime Summary Checkbox Export, Zone A/B Executives, Timing Correction & Import Text Extraction",
+    tasks: [
+      "Added individual checkboxes on today's downtime incident cards with Tick All / Untick All quick actions, ensuring only user-selected incidents are exported to the Word report",
+      "Filtered out inclement weather (11-3) and fire alarm (11-10) entries so the Downtime Summary workspace focuses strictly on technical downtime",
+      "Fixed incident duration parsing to correctly convert hours and minutes into total minutes (e.g. 7hour 38mins correctly calculates as 458 mins instead of 738 mins)",
+      "Renamed operational zones to Zone A and Zone B across the interface and added a second row of textboxes for Zone B AM/PM executives",
+      "Added interactive drag-and-drop file dropzones for supporting photo uploads and archive DOCX/PDF imports with standard file-picker fallback on button click",
+      "Upgraded Memory & Archive table cells to support up to 3 visible text lines with internal vertical scrollability for long root cause and action descriptions",
+      "Enabled summary details viewing for any chosen calendar date even before manual saving by falling back to live technical log previews",
+      "Added automated text extraction for newly imported DOCX/PDF reports so uploaded document copy is immediately visible and searchable in summary details",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.32",
     commit: "pending",
@@ -28,7 +47,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added Summary Memory with calendar date markers, stored executive/form entries, generated DOCX retrieval, and persistent PDF/Word import archive for completed historic reports",
       "Added database schema, storage upload path, summary export/router regression tests, and direct browser verification for the new workflow",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.31",

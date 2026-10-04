@@ -43,6 +43,8 @@ export type SummaryReportPayload = {
   reportDate: string;
   amExecutive: string;
   pmExecutive: string;
+  zoneBAmExecutive?: string;
+  zoneBPmExecutive?: string;
   entries: SummaryEntryData[];
 };
 
@@ -125,9 +127,12 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
   for (let i = 0; i < payload.entries.length; i++) {
     const entry = payload.entries[i];
     const isPm = entry.shift === "PM" || parseInt((entry.downtimeStart || "").replace(":", ""), 10) >= 1400;
+    const isZoneB = entry.zone === "Zone B" || entry.zone === "Zone 2";
+    const activeAm = isZoneB ? (payload.zoneBAmExecutive || payload.amExecutive) : payload.amExecutive;
+    const activePm = isZoneB ? (payload.zoneBPmExecutive || payload.pmExecutive) : payload.pmExecutive;
     const execName = isPm
-      ? (payload.pmExecutive ? `PM – ${payload.pmExecutive}` : "PM – ")
-      : (payload.amExecutive ? `AM – ${payload.amExecutive}` : "AM – ");
+      ? (activePm ? `PM – ${activePm}` : "PM – ")
+      : (activeAm ? `AM – ${activeAm}` : "AM – ");
 
     if (i > 0) {
       sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));

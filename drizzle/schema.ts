@@ -67,6 +67,8 @@ export const downtimeSummaries = mysqlTable("downtimeSummaries", {
   sourceReportId: int("sourceReportId").notNull(),
   amExecutive: varchar("amExecutive", { length: 255 }).notNull().default(""),
   pmExecutive: varchar("pmExecutive", { length: 255 }).notNull().default(""),
+  zoneBAmExecutive: varchar("zoneBAmExecutive", { length: 255 }).notNull().default(""),
+  zoneBPmExecutive: varchar("zoneBPmExecutive", { length: 255 }).notNull().default(""),
   generatedFileName: varchar("generatedFileName", { length: 512 }),
   generatedFileUrl: text("generatedFileUrl"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -112,6 +114,7 @@ export const downtimeSummaryImports = mysqlTable("downtimeSummaryImports", {
   fileName: varchar("fileName", { length: 512 }).notNull(),
   fileUrl: text("fileUrl").notNull(),
   fileType: varchar("fileType", { length: 32 }).notNull(),
+  extractedText: text("extractedText"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

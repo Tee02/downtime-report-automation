@@ -150,10 +150,12 @@ export const appRouter = router({
           sourceReportId: z.number().int().positive(),
           amExecutive: z.string().default(""),
           pmExecutive: z.string().default(""),
+          zoneBAmExecutive: z.string().default(""),
+          zoneBPmExecutive: z.string().default(""),
           entries: z.array(
             z.object({
               incidentKey: z.string(),
-              zone: z.string().default("Zone 1"),
+              zone: z.string().default("Zone A"),
               rideCode: z.string(),
               attraction: z.string(),
               description: z.string(),
@@ -185,10 +187,12 @@ export const appRouter = router({
           sourceReportId: z.number().int().positive(),
           amExecutive: z.string().default(""),
           pmExecutive: z.string().default(""),
+          zoneBAmExecutive: z.string().default(""),
+          zoneBPmExecutive: z.string().default(""),
           entries: z.array(
             z.object({
               incidentKey: z.string(),
-              zone: z.string().default("Zone 1"),
+              zone: z.string().default("Zone A"),
               rideCode: z.string(),
               attraction: z.string(),
               description: z.string(),
@@ -238,6 +242,7 @@ export const appRouter = router({
           fileName: z.string(),
           fileUrl: z.string(),
           fileType: z.string(),
+          extractedText: z.string().nullable().optional(),
         })
       )
       .mutation(async ({ input }) => {

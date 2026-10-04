@@ -42,7 +42,7 @@ import { appRouter } from "./routers";
 
 const entry = {
   incidentKey: "technical-2026-10-01-12-ACR",
-  zone: "Zone 1",
+  zone: "Zone A",
   rideCode: "ACR",
   attraction: "Acorn Adventure",
   description: "No Fault Registered on HMI Panel",
@@ -72,6 +72,8 @@ describe("downtimeSummary router", () => {
         sourceReportId: 88,
         amExecutive: "Firdaus, Adam",
         pmExecutive: "Yik Seng",
+        zoneBAmExecutive: "Kamal",
+        zoneBPmExecutive: "Rajesh",
         entries: [entry],
       })
     ).resolves.toEqual({ summary: { id: 5 }, entries: [entry] });
@@ -81,6 +83,8 @@ describe("downtimeSummary router", () => {
       sourceReportId: 88,
       amExecutive: "Firdaus, Adam",
       pmExecutive: "Yik Seng",
+      zoneBAmExecutive: "Kamal",
+      zoneBPmExecutive: "Rajesh",
       entries: [expect.objectContaining({
         rideCode: "ACR",
         downtimeStart: "10:37",

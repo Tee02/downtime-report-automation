@@ -210,6 +210,8 @@ export async function saveDowntimeSummaryState(params: {
   sourceReportId: number;
   amExecutive: string;
   pmExecutive: string;
+  zoneBAmExecutive?: string;
+  zoneBPmExecutive?: string;
   generatedFileName?: string | null;
   generatedFileUrl?: string | null;
   entries: Array<Omit<InsertDowntimeSummaryEntry, "summaryId">>;
@@ -224,6 +226,8 @@ export async function saveDowntimeSummaryState(params: {
       sourceReportId: params.sourceReportId,
       amExecutive: params.amExecutive,
       pmExecutive: params.pmExecutive,
+      ...(params.zoneBAmExecutive !== undefined ? { zoneBAmExecutive: params.zoneBAmExecutive } : {}),
+      ...(params.zoneBPmExecutive !== undefined ? { zoneBPmExecutive: params.zoneBPmExecutive } : {}),
       ...(params.generatedFileName !== undefined ? { generatedFileName: params.generatedFileName } : {}),
       ...(params.generatedFileUrl !== undefined ? { generatedFileUrl: params.generatedFileUrl } : {}),
     }).where(eq(downtimeSummaries.id, summaryId));
@@ -233,6 +237,8 @@ export async function saveDowntimeSummaryState(params: {
       sourceReportId: params.sourceReportId,
       amExecutive: params.amExecutive,
       pmExecutive: params.pmExecutive,
+      zoneBAmExecutive: params.zoneBAmExecutive || "",
+      zoneBPmExecutive: params.zoneBPmExecutive || "",
       generatedFileName: params.generatedFileName ?? null,
       generatedFileUrl: params.generatedFileUrl ?? null,
     });

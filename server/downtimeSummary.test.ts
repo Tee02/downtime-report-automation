@@ -8,10 +8,12 @@ describe("downtimeSummaryDocx", () => {
       reportDate: "2026-09-21",
       amExecutive: "Firdaus, Adam",
       pmExecutive: "Yik Seng",
+      zoneBAmExecutive: "Kamal",
+      zoneBPmExecutive: "Rajesh",
       entries: [
         {
           incidentKey: "test-inc-1",
-          zone: "Zone 1",
+          zone: "Zone A",
           rideCode: "PTA",
           attraction: "Invasion of the Planet of the Apes",
           description: "Technical inspection on RV06 (BGM ISSUE)",
@@ -30,7 +32,7 @@ describe("downtimeSummaryDocx", () => {
         },
         {
           incidentKey: "test-inc-2",
-          zone: "Zone 2",
+          zone: "Zone B",
           rideCode: "BWZ",
           attraction: "Big Weld's Zeppelin",
           description: "Technical Inspection On RV3 (Joystick Broken)",
@@ -57,7 +59,7 @@ describe("downtimeSummaryDocx", () => {
     const docXml = await zip.file("word/document.xml")?.async("string");
     expect(docXml).toBeDefined();
     expect(docXml).toContain("AM – Firdaus, Adam");
-    expect(docXml).toContain("PM – Yik Seng");
+    expect(docXml).toContain("PM – Rajesh");
     expect(docXml).toContain("Technical inspection on RV06 (BGM ISSUE)");
     expect(docXml).toContain("Duration of Downtime: 23min");
     expect(docXml).toContain("☑ Monitoring");
