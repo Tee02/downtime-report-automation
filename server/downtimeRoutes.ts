@@ -178,6 +178,9 @@ export type MatchedSummaryField = {
   downtimeStart?: string;
   downtimeEnd?: string;
   durationMinutes?: number;
+  recurringDowntime?: "Yes" | "No";
+  recurringDowntimeDays?: string;
+  incident?: "Yes" | "No";
   rootCause?: string;
   correctiveAction?: string;
   preventiveAction?: string;
@@ -226,6 +229,27 @@ export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField
     const durMatch = /Duration\s*(?:of Downtime)?\s*[:\s]*(\d+)\s*min/i.exec(chunk);
     const durationMinutes = durMatch ? parseInt(durMatch[1], 10) : undefined;
 
+    // Downtime description is required for safe matching with the web archive.
+    const descriptionMatch = /Downtime Description(?:\s*\([^)]*\))?\s*[:\s]*([\s\S]*?)(?=(?:Time Down|Time Up|Duration|Root Cause|Corrective Action|Preventive Action|$))/i.exec(chunk);
+    const description = descriptionMatch ? descriptionMatch[1].trim() : undefined;
+
+    // Recurring Downtime & Incident
+    const recurringMatch = /Recurring Downtime[\s\S]*?(?:(☑|✓|\[x\]|Yes)\s*Yes|(☑|✓|\[x\]|No)\s*No)/i.exec(chunk);
+    let recurringDowntime: "Yes" | "No" = "No";
+    if (recurringMatch) {
+      if (recurringMatch[1]) recurringDowntime = "Yes";
+      else if (recurringMatch[2]) recurringDowntime = "No";
+    }
+    const recDaysMatch = /Downtime No\. of Day[^\n:]*[:\s]*([^\n]+)/i.exec(chunk);
+    const recurringDowntimeDays = recDaysMatch ? recDaysMatch[1].trim() : undefined;
+
+    const incidentMatch = /\bIncident[\s\S]*?(?:(☑|✓|\[x\])\s*Yes|(☑|✓|\[x\])\s*No)/i.exec(chunk);
+    let incident: "Yes" | "No" = "No";
+    if (incidentMatch) {
+      if (incidentMatch[1]) incident = "Yes";
+      else if (incidentMatch[2]) incident = "No";
+    }
+
     // Root cause, corrective, preventive
     const rootMatch = /Root Cause\(s\)\s*[:\s]*([\s\S]*?)(?=(?:Corrective Action|Preventive Action|Part\(s\)|ANR|Status|$))/i.exec(chunk);
     const corrMatch = /Corrective Action\s*[:\s]*([\s\S]*?)(?=(?:Preventive Action|Part\(s\)|Follow-Up|ANR|Status|$))/i.exec(chunk);
@@ -233,9 +257,13 @@ export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField
 
     results.push({
       rideCode,
+      description,
       downtimeStart: startTime,
       downtimeEnd: endTime,
       durationMinutes,
+      recurringDowntime,
+      recurringDowntimeDays,
+      incident,
       rootCause: rootMatch ? rootMatch[1].trim() : undefined,
       correctiveAction: corrMatch ? corrMatch[1].trim() : undefined,
       preventiveAction: prevMatch ? prevMatch[1].trim() : undefined,

@@ -32,6 +32,31 @@ const analysisInput = z.object({
   rideCodes: z.array(z.string().min(1).max(16)).max(24).default([]),
 });
 
+const summaryEntryInput = z.object({
+  incidentKey: z.string(),
+  zone: z.string().default("Zone A"),
+  rideCode: z.string(),
+  attraction: z.string(),
+  description: z.string(),
+  downtimeStart: z.string(),
+  downtimeEnd: z.string(),
+  durationMinutes: z.number().int(),
+  shift: z.string(),
+  recurringDowntime: z.enum(["Yes", "No"]).default("No"),
+  recurringDowntimeDays: z.string().default("N/A"),
+  incident: z.enum(["Yes", "No"]).default("No"),
+  rootCause: z.string().nullable().optional(),
+  correctiveAction: z.string().nullable().optional(),
+  preventiveAction: z.string().nullable().optional(),
+  partsReplaced: z.string().nullable().optional(),
+  followUpAction: z.string().nullable().optional(),
+  anrNo: z.string().nullable().optional(),
+  supportInfo: z.string().nullable().optional(),
+  supportPhotoUrl: z.string().nullable().optional(),
+  supportPhotoName: z.string().nullable().optional(),
+  status: z.string().default("Monitoring"),
+});
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -155,29 +180,7 @@ export const appRouter = router({
           pmExecutive: z.string().default(""),
           zoneBAmExecutive: z.string().default(""),
           zoneBPmExecutive: z.string().default(""),
-          entries: z.array(
-            z.object({
-              incidentKey: z.string(),
-              zone: z.string().default("Zone A"),
-              rideCode: z.string(),
-              attraction: z.string(),
-              description: z.string(),
-              downtimeStart: z.string(),
-              downtimeEnd: z.string(),
-              durationMinutes: z.number().int(),
-              shift: z.string(),
-              rootCause: z.string().nullable().optional(),
-              correctiveAction: z.string().nullable().optional(),
-              preventiveAction: z.string().nullable().optional(),
-              partsReplaced: z.string().nullable().optional(),
-              followUpAction: z.string().nullable().optional(),
-              anrNo: z.string().nullable().optional(),
-              supportInfo: z.string().nullable().optional(),
-              supportPhotoUrl: z.string().nullable().optional(),
-              supportPhotoName: z.string().nullable().optional(),
-              status: z.string().default("Monitoring"),
-            })
-          ),
+          entries: z.array(summaryEntryInput),
         })
       )
       .mutation(async ({ input }) => {
@@ -192,29 +195,7 @@ export const appRouter = router({
           pmExecutive: z.string().default(""),
           zoneBAmExecutive: z.string().default(""),
           zoneBPmExecutive: z.string().default(""),
-          entries: z.array(
-            z.object({
-              incidentKey: z.string(),
-              zone: z.string().default("Zone A"),
-              rideCode: z.string(),
-              attraction: z.string(),
-              description: z.string(),
-              downtimeStart: z.string(),
-              downtimeEnd: z.string(),
-              durationMinutes: z.number().int(),
-              shift: z.string(),
-              rootCause: z.string().nullable().optional(),
-              correctiveAction: z.string().nullable().optional(),
-              preventiveAction: z.string().nullable().optional(),
-              partsReplaced: z.string().nullable().optional(),
-              followUpAction: z.string().nullable().optional(),
-              anrNo: z.string().nullable().optional(),
-              supportInfo: z.string().nullable().optional(),
-              supportPhotoUrl: z.string().nullable().optional(),
-              supportPhotoName: z.string().nullable().optional(),
-              status: z.string().default("Monitoring"),
-            })
-          ),
+          entries: z.array(summaryEntryInput),
         })
       )
       .mutation(async ({ input }) => {

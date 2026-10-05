@@ -9,12 +9,31 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.34";
+export const CURRENT_VERSION = "v1.35";
 
 export const VERSION_HISTORY: VersionRecord[] = [
   {
-    version: "v1.34",
+    version: "v1.35",
     commit: "pending",
+    date: "2026-10-05",
+    time: "14:37 GMT+8",
+    timestamp: "2026-10-05 14:37:04",
+    title: "Retained Form Memory, Archive Import Autofill, Compact Controls, Shift Draft Cards & Checkbox Fields",
+    tasks: [
+      "Retained uncommitted Summary Form progress across tab switches and page navigation within the active browser session, resetting only when the browser tab is closed",
+      "Shortened Executive in Charge controls into an on-demand collapsible panel to keep the active incident form front and center",
+      "Relocated the Summary Form and Memory & Archive tab switch directly beneath the main page title",
+      "Automated import report integration: uploaded DOCX/PDF reports now match root causes and actions directly into the date's summary records without displaying raw document text panels",
+      "Strengthened import matching to strictly verify ride code, downtime description, and downtime start time before populating incident fields",
+      "Added editable Recurring Downtime (Yes/No), number-of-days, and Incident (Yes/No) checkbox fields to both the web form and the generated Word report",
+      "Enhanced ride code visual hierarchy in the downtime list with bolder, clearer typography",
+      "Made Shift Handover Draft creation collapsible with an Add New Handover Draft button, displaying full details of clicked draft cards directly below the draft list",
+    ],
+    isCurrent: true,
+  },
+  {
+    version: "v1.34",
+    commit: "c324fc8b",
     date: "2026-10-04",
     time: "17:59 GMT+8",
     timestamp: "2026-10-04 17:59:05",
@@ -28,7 +47,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Configured uploaded summary reports to override and delete previous reports for the same date automatically",
       "Tuned DOCX generator table box heights and margins to faithfully follow the official downtime summary template geometry, expanding only if overflow text requires extra space",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.33",

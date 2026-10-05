@@ -39,6 +39,7 @@ N/A
     expect(pota.downtimeStart).toBe("10:26");
     expect(pota.downtimeEnd).toBe("10:49");
     expect(pota.durationMinutes).toBe(23);
+    expect(pota.description).toContain("Technical inspection on RV06");
     expect(pota.rootCause).toContain("wiring loose");
     expect(pota.correctiveAction).toContain("Verified the issue");
     expect(pota.preventiveAction).toContain("weekly PM");

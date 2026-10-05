@@ -27,6 +27,9 @@ export type SummaryEntryData = {
   downtimeEnd: string;
   durationMinutes: number;
   shift: string;
+  recurringDowntime?: string | null;
+  recurringDowntimeDays?: string | null;
+  incident?: string | null;
   rootCause?: string | null;
   correctiveAction?: string | null;
   preventiveAction?: string | null;
@@ -169,8 +172,8 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: "Yes   ", font: "Calibri", size: 19 }),
-                new TextRun({ text: "No", font: "Calibri", size: 19, bold: true }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Calibri", size: 19, bold: entry.recurringDowntime === "Yes" }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☐ No" : "☑ No", font: "Calibri", size: 19, bold: entry.recurringDowntime !== "Yes" }),
               ],
             })], 4760),
           ],
@@ -178,7 +181,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
         new TableRow({
           children: [
             cell([labelPara("Downtime No. of Day (if recurring)")], 4600),
-            cell([valuePara("")], 4760),
+            cell([valuePara(entry.recurringDowntime === "Yes" ? (entry.recurringDowntimeDays || "N/A") : "N/A")], 4760),
           ],
         }),
         new TableRow({
@@ -187,8 +190,8 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: "Yes   ", font: "Calibri", size: 19 }),
-                new TextRun({ text: "No", font: "Calibri", size: 19, bold: true }),
+                new TextRun({ text: entry.incident === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Calibri", size: 19, bold: entry.incident === "Yes" }),
+                new TextRun({ text: entry.incident === "Yes" ? "☐ No" : "☑ No", font: "Calibri", size: 19, bold: entry.incident !== "Yes" }),
               ],
             })], 4760),
           ],

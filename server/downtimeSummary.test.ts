@@ -21,6 +21,9 @@ describe("downtimeSummaryDocx", () => {
           downtimeEnd: "10:49",
           durationMinutes: 23,
           shift: "AM",
+          recurringDowntime: "Yes",
+          recurringDowntimeDays: "3",
+          incident: "No",
           rootCause: "Suspect wiring loose for audio system.",
           correctiveAction: "Verified the issue, no fault on HMI. Power cycle RV06. Reconnected connector.",
           preventiveAction: "To ensure the connector is tight during weekly PM.",
@@ -40,6 +43,9 @@ describe("downtimeSummaryDocx", () => {
           downtimeEnd: "16:48",
           durationMinutes: 4,
           shift: "PM",
+          recurringDowntime: "No",
+          recurringDowntimeDays: "N/A",
+          incident: "Yes",
           rootCause: "Broken joystick.",
           correctiveAction: "Disabled RV3. Handover to ops.",
           preventiveAction: "Confirm spec with supplier.",
@@ -63,6 +69,8 @@ describe("downtimeSummaryDocx", () => {
     expect(docXml).toContain("Technical inspection on RV06 (BGM ISSUE)");
     expect(docXml).toContain("Duration of Downtime: 23min");
     expect(docXml).toContain("☑ Monitoring");
+    expect(docXml).toContain("☑ Yes");
+    expect(docXml).toContain("☑ No");
     expect(docXml).toContain("w:br w:type=\"page\"");
   });
 });
