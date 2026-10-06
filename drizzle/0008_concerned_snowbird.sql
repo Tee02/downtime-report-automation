@@ -1,0 +1,1 @@
+ALTER TABLE `downtimeSummaryDrafts` ADD `followUpAction` text;

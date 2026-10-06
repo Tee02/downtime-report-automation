@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   processDowntimeWorkbooks: vi.fn(),
   storageGetSignedUrl: vi.fn(),
   storagePut: vi.fn(),
-  createSavedDowntimeReport: vi.fn(),
+  replaceSavedDowntimeReport: vi.fn(),
   findSavedDowntimeReport: vi.fn(),
   getSavedDowntimeReportsByIds: vi.fn(),
   loadSavedDowntimeReports: vi.fn(),
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./downtimeProcessor", () => ({ combineMappedWorkbooks: mocks.combineMappedWorkbooks, processDowntimeWorkbooks: mocks.processDowntimeWorkbooks }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: mocks.storageGetSignedUrl, storagePut: mocks.storagePut }));
-vi.mock("./db", () => ({ createSavedDowntimeReport: mocks.createSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds }));
+vi.mock("./db", () => ({ replaceSavedDowntimeReport: mocks.replaceSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds }));
 vi.mock("./downtimeAnalysis", () => ({ loadSavedDowntimeReports: mocks.loadSavedDowntimeReports }));
 
 import { registerDowntimeRoutes } from "./downtimeRoutes";
@@ -31,7 +31,7 @@ afterEach(async () => {
 describe("downtime analyze upload route", () => {
   it("forwards closures and weather text, then saves both files only when requested", async () => {
     mocks.storageGetSignedUrl.mockResolvedValue("data:application/octet-stream;base64,UEsDBBQAAAAIAAA=");
-    mocks.findSavedDowntimeReport.mockResolvedValue(undefined);
+    mocks.replaceSavedDowntimeReport.mockResolvedValue({ replacedExisting: false });
     const readableWorkbook = await new JSZip().file("xl/workbook.xml", "<workbook/>").generateAsync({ type: "nodebuffer" });
     let storedWorkbook = Buffer.alloc(0);
     mocks.storagePut.mockImplementation(async (key: string, data: Buffer) => {
@@ -69,7 +69,7 @@ describe("downtime analyze upload route", () => {
     expect(body.downloadUrl).toBe("/manus-storage/downtime-reports/sample.xlsx");
     expect(body.outputBuffer).toBeUndefined();
     expect(mocks.storagePut).toHaveBeenCalledTimes(2);
-    expect(mocks.createSavedDowntimeReport).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mocks.replaceSavedDowntimeReport).toHaveBeenCalledWith(expect.objectContaining({
       reportDate: "2026-08-03",
       sourceFileName: "downtime.xlsx",
       weatherIntervalCount: 2,
@@ -81,9 +81,9 @@ describe("downtime analyze upload route", () => {
     expect(Object.keys(downloadedZip.files)).toContain("xl/workbook.xml");
   });
 
-  it("generates mapping and preserves existing saved log without duplicate insert when date already exists", async () => {
+  it("generates mapping and replaces existing saved log when date already exists", async () => {
     mocks.storageGetSignedUrl.mockResolvedValue("data:application/octet-stream;base64,UEsDBBQAAAAIAAA=");
-    mocks.findSavedDowntimeReport.mockResolvedValue({ id: 9 });
+    mocks.replaceSavedDowntimeReport.mockResolvedValue({ replacedExisting: true });
     mocks.processDowntimeWorkbooks.mockResolvedValue({
       records: [],
       matchedCount: 0,
@@ -111,10 +111,10 @@ describe("downtime analyze upload route", () => {
     const form = new FormData();
     form.append("operationsFile", new Blob(["sample workbook"], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "renamed-downtime.xlsx");
     const response = await fetch(`http://127.0.0.1:${port}/api/downtime/analyze`, { method: "POST", body: form });
-    const body = await response.json() as { downloadUrl: string; alreadyExisted: boolean };
+    const body = await response.json() as { downloadUrl: string; replacedExisting: boolean };
     expect(response.status).toBe(200);
-    expect(body.alreadyExisted).toBe(true);
-    expect(mocks.createSavedDowntimeReport).not.toHaveBeenCalled();
+    expect(body.replacedExisting).toBe(true);
+    expect(mocks.replaceSavedDowntimeReport).toHaveBeenCalled();
   });
 });
 

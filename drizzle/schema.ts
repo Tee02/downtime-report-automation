@@ -140,6 +140,7 @@ export const downtimeSummaryDrafts = mysqlTable("downtimeSummaryDrafts", {
   rootCause: text("rootCause"),
   correctiveAction: text("correctiveAction"),
   preventiveAction: text("preventiveAction"),
+  followUpAction: text("followUpAction"),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

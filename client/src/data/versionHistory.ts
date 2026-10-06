@@ -9,9 +9,26 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.35";
+export const CURRENT_VERSION = "v1.36";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.36",
+    commit: "pending",
+    date: "2026-10-07",
+    time: "00:23 GMT+8",
+    timestamp: "2026-10-07 00:23:45",
+    title: "Saved-Log Replacement, Handover Draft Transfers & Official Summary Template v2",
+    tasks: [
+      "Changed daily source-log saving so a re-upload for the same reporting date replaces the previous saved log instead of retaining a stale or duplicate entry; Mapping Excel generation remains uninterrupted.",
+      "Reworked Memory & Archive so the large always-visible calendar is replaced by a clear Choose Summary Date button opening a dimmed pop-up calendar with a close control and marked saved dates.",
+      "Upgraded Shift Handover Drafts with All / Zone A / Zone B filters, a four-field action workflow (Root Cause, Corrective Action, Preventive Action, Follow-Up Action), edit-and-save support, side-by-side desktop cards/details, and a deletion confirmation dialog.",
+      "Added same-date handover draft cards above the active Summary Form. Applying a card transfers only Root Cause, Corrective Action, Preventive Action, and Follow-Up Action, preserving the selected incident's source ride, description, timing, zone, and other values.",
+      "Rebuilt DOCX export to the official DailyDowntimeSummaryReport-templatev2 geometry: header branding, exact field sequence, fixed minimum box dimensions that expand only for overflow, bold numbered corrective-action prefixes, and explicit two-page pacing per selected downtime event.",
+      "Extended import parsing and regression coverage for Follow-Up Action, saved-log replacement, draft persistence/editing, template content, full project tests, and production build validation.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.35",
     commit: "pending",
@@ -29,7 +46,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Enhanced ride code visual hierarchy in the downtime list with bolder, clearer typography",
       "Made Shift Handover Draft creation collapsible with an Add New Handover Draft button, displaying full details of clicked draft cards directly below the draft list",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.34",

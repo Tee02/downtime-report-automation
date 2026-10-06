@@ -2,6 +2,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Header,
   HeightRule,
   ImageRun,
   Packer,
@@ -14,6 +15,8 @@ import {
   VerticalAlign,
   WidthType,
 } from "docx";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { storageGetSignedUrl } from "./storage";
 
 export type SummaryEntryData = {
@@ -81,44 +84,171 @@ const TABLE_BORDERS = {
   insideVertical: BORDER_SINGLE,
 };
 
-const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
-
-function labelPara(text: string, bold = true): Paragraph {
-  return new Paragraph({
-    spacing: { before: 20, after: 20 },
-    children: [
+function labelPara(text: string, bold = false): Paragraph {
+  const lines = text.split("\n");
+  const runs: TextRun[] = [];
+  lines.forEach((line, idx) => {
+    if (idx > 0) runs.push(new TextRun({ text: "", break: 1 }));
+    runs.push(
       new TextRun({
-        text,
-        font: "Calibri",
-        size: 19,
+        text: line,
+        font: "Segoe UI Symbol",
+        size: 20,
         bold,
         color: "000000",
-      }),
-    ],
+      })
+    );
+  });
+  return new Paragraph({
+    spacing: { before: 20, after: 20 },
+    children: runs,
   });
 }
 
 function valuePara(text?: string | null, bold = false): Paragraph {
-  return new Paragraph({
-    spacing: { before: 20, after: 20 },
-    children: [
+  const trimmed = (text || "").trim() || "N/A";
+  const lines = trimmed.split(/\r?\n/);
+  const runs: TextRun[] = [];
+  lines.forEach((line, idx) => {
+    if (idx > 0) runs.push(new TextRun({ text: "", break: 1 }));
+    runs.push(
       new TextRun({
-        text: (text || "").trim() || "N/A",
-        font: "Calibri",
-        size: 19,
+        text: line,
+        font: "Segoe UI Symbol",
+        size: 20,
         bold,
         color: "000000",
-      }),
-    ],
+      })
+    );
   });
+  return new Paragraph({
+    spacing: { before: 20, after: 20 },
+    children: runs,
+  });
+}
+
+/**
+ * Requirement:
+ * In corrective action, when numbered lists are provided, each numbered item must
+ * have its own line break, and the numbering prefix (e.g. "1.", "2.") must be bold
+ * while the text following behind is regular weight.
+ */
+function formattedNumberedActionParas(raw?: string | null): Paragraph[] {
+  const text = (raw || "").trim();
+  if (!text) return [valuePara("N/A")];
+
+  const rawLines = text
+    .split(/\r?\n/)
+    .flatMap(line => line.split(/(?=\b\d+\.\s+)/))
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  if (!rawLines.length) return [valuePara("N/A")];
+
+  const paragraphs: Paragraph[] = [];
+  for (const line of rawLines) {
+    const match = /^(\d+\.)\s*(.*)$/.exec(line);
+    if (match) {
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 30, after: 30 },
+          children: [
+            new TextRun({
+              text: `${match[1]} `,
+              font: "Segoe UI Symbol",
+              size: 20,
+              bold: true,
+              color: "000000",
+            }),
+            new TextRun({
+              text: match[2] || "",
+              font: "Segoe UI Symbol",
+              size: 20,
+              bold: false,
+              color: "000000",
+            }),
+          ],
+        })
+      );
+    } else {
+      paragraphs.push(
+        new Paragraph({
+          spacing: { before: 20, after: 20 },
+          children: [
+            new TextRun({
+              text: line,
+              font: "Segoe UI Symbol",
+              size: 20,
+              bold: false,
+              color: "000000",
+            }),
+          ],
+        })
+      );
+    }
+  }
+  return paragraphs;
 }
 
 function cell(children: Paragraph[], widthDxa: number, colSpan = 1): TableCell {
   return new TableCell({
     width: { size: widthDxa, type: WidthType.DXA },
     columnSpan: colSpan > 1 ? colSpan : undefined,
-    margins: { top: 70, bottom: 70, left: 100, right: 100 },
+    margins: { top: 60, bottom: 60, left: 100, right: 100 },
     verticalAlign: VerticalAlign.CENTER,
+    children,
+  });
+}
+
+let cachedLogoBuffer: Buffer | null = null;
+function getHeaderLogoBuffer(): Buffer | null {
+  if (cachedLogoBuffer) return cachedLogoBuffer;
+  const paths = [
+    path.resolve(process.cwd(), "templates", "downtime-summary-template-v2-logo.jpeg"),
+    path.resolve(process.cwd(), "templates", "downtime-summary-template-logo.jpeg"),
+    "/home/ubuntu/downtime-report-automation/templates/downtime-summary-template-v2-logo.jpeg",
+  ];
+  for (const p of paths) {
+    if (existsSync(p)) {
+      try {
+        cachedLogoBuffer = readFileSync(p);
+        return cachedLogoBuffer;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return null;
+}
+
+function buildHeaderParagraph(): Paragraph {
+  const logo = getHeaderLogoBuffer();
+  const children: any[] = [];
+  if (logo) {
+    children.push(
+      new ImageRun({
+        data: logo,
+        transformation: {
+          width: 140,
+          height: 48,
+        },
+      } as any)
+    );
+    children.push(new TextRun({ text: "   " }));
+  }
+  children.push(
+    new TextRun({
+      text: "DAILY DOWNTIME SUMMARY REPORT FORM",
+      font: "Segoe UI Symbol",
+      size: 23,
+      bold: true,
+      color: "000000",
+    })
+  );
+
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 40, after: 80 },
     children,
   });
 }
@@ -141,181 +271,195 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));
     }
 
+    // Page 1 header title block matching template v2
+    sectionsChildren.push(buildHeaderParagraph());
+
+    // Table 1: Date & Ride, Executive
     const t0 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
           children: [
-            cell([labelPara("Date")], 1700),
-            cell([valuePara(displayDate)], 1660),
-            cell([labelPara("Ride/Attraction")], 1820),
-            cell([valuePara(entry.rideCode || entry.attraction, true)], 4180),
+            cell([labelPara("Date")], 1546),
+            cell([valuePara(displayDate)], 1476),
+            cell([labelPara("Ride/Attraction")], 1678),
+            cell([valuePara(entry.rideCode || entry.attraction, true)], 3930),
           ],
         }),
         new TableRow({
           children: [
-            cell([labelPara("Executive In Charge")], 1700),
-            cell([valuePara(execName, true)], 7660, 3),
+            cell([labelPara("Executive In Charge")], 1546),
+            cell([valuePara(execName, true)], 7084, 3),
           ],
         }),
       ],
     });
 
+    // Table 2: Recurring, Days, Incident
     const t1 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8635, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
           children: [
-            cell([labelPara("Recurring Downtime")], 4600),
+            cell([labelPara("Recurring Downtime")], 4234),
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Calibri", size: 19, bold: entry.recurringDowntime === "Yes" }),
-                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☐ No" : "☑ No", font: "Calibri", size: 19, bold: entry.recurringDowntime !== "Yes" }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Segoe UI Symbol", size: 20, bold: entry.recurringDowntime === "Yes" }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☐ No" : "☑ No", font: "Segoe UI Symbol", size: 20, bold: entry.recurringDowntime !== "Yes" }),
               ],
-            })], 4760),
+            })], 4401),
           ],
         }),
         new TableRow({
           children: [
-            cell([labelPara("Downtime No. of Day (if recurring)")], 4600),
-            cell([valuePara(entry.recurringDowntime === "Yes" ? (entry.recurringDowntimeDays || "N/A") : "N/A")], 4760),
+            cell([labelPara("Downtime No. of Day (if recurring)")], 4234),
+            cell([valuePara(entry.recurringDowntime === "Yes" ? (entry.recurringDowntimeDays || "N/A") : "N/A")], 4401),
           ],
         }),
         new TableRow({
           children: [
-            cell([labelPara("Incident")], 4600),
+            cell([labelPara("Incident")], 4234),
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: entry.incident === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Calibri", size: 19, bold: entry.incident === "Yes" }),
-                new TextRun({ text: entry.incident === "Yes" ? "☐ No" : "☑ No", font: "Calibri", size: 19, bold: entry.incident !== "Yes" }),
+                new TextRun({ text: entry.incident === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Segoe UI Symbol", size: 20, bold: entry.incident === "Yes" }),
+                new TextRun({ text: entry.incident === "Yes" ? "☐ No" : "☑ No", font: "Segoe UI Symbol", size: 20, bold: entry.incident !== "Yes" }),
               ],
-            })], 4760),
+            })], 4401),
           ],
         }),
       ],
     });
 
+    // Table 3: Description
     const t2 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 1574, rule: HeightRule.ATLEAST }, // 78.7pt
+          height: { value: 1574, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Downtime Description\n(RV / Train / Seat / Scene / System)")], 2050),
-            cell([valuePara(entry.description)], 7310),
+            cell([labelPara("Downtime Description\n(RV / Train / Seat / Scene / System)")], 1885),
+            cell([valuePara(entry.description)], 6745),
           ],
         }),
       ],
     });
 
+    // Table 4: Time Down / Up / Duration
     const t3 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
           children: [
-            cell([labelPara(`Time Down: ${normalizeTime(entry.downtimeStart)}`)], 2400),
-            cell([labelPara(`Time Up: ${normalizeTime(entry.downtimeEnd)}`)], 2190),
-            cell([labelPara(`Duration of Downtime: ${entry.durationMinutes}min`)], 4770),
+            cell([labelPara(`Time Down: ${normalizeTime(entry.downtimeStart)}`)], 2214),
+            cell([labelPara(`Time Up: ${normalizeTime(entry.downtimeEnd)}`)], 2020),
+            cell([labelPara(`Duration of Downtime: ${entry.durationMinutes}min`)], 4396),
           ],
         }),
       ],
     });
 
+    // Table 5: Root Cause
     const t4 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 1664, rule: HeightRule.ATLEAST }, // 83.2pt
+          height: { value: 1664, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Root Cause(s)")], 2070),
-            cell([valuePara(entry.rootCause || "N/A")], 7290),
+            cell([labelPara("Root Cause(s)")], 1883),
+            cell([valuePara(entry.rootCause || "N/A")], 6747),
           ],
         }),
       ],
     });
 
+    // Table 6: Corrective Action with bold numbers and line breaks
     const t5 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 1475, rule: HeightRule.ATLEAST }, // 73.8pt
+          height: { value: 1475, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Corrective Action")], 2070),
-            cell([valuePara(entry.correctiveAction || "N/A")], 7290),
+            cell([labelPara("Corrective Action")], 1885),
+            cell(formattedNumberedActionParas(entry.correctiveAction), 6745),
           ],
         }),
       ],
     });
 
+    // Table 7: Preventive Action
     const t6 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 755, rule: HeightRule.ATLEAST }, // 37.8pt
+          height: { value: 755, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Preventive Action")], 2050),
-            cell([valuePara(entry.preventiveAction || "N/A")], 7310),
+            cell([labelPara("Preventive Action")], 1887),
+            cell(formattedNumberedActionParas(entry.preventiveAction), 6743),
           ],
         }),
       ],
     });
 
+    // Table 8: Parts Replaced
     const t7 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 422, rule: HeightRule.ATLEAST }, // 21.1pt
+          height: { value: 422, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Part(s) Replaced (if any)")], 4680),
-            cell([valuePara(entry.partsReplaced || "N/A")], 4680),
+            cell([labelPara("Part(s) Replaced (if any)")], 4316),
+            cell([valuePara(entry.partsReplaced || "N/A")], 4314),
           ],
         }),
       ],
     });
 
+    // Table 9: Follow-Up Action
     const t8 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 683, rule: HeightRule.ATLEAST }, // 34.15pt
+          height: { value: 683, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Follow-Up Action (if any)")], 4680),
-            cell([valuePara(entry.followUpAction || "N/A")], 4680),
+            cell([labelPara("Follow-Up Action (if any)")], 4315),
+            cell([valuePara(entry.followUpAction || "N/A")], 4315),
           ],
         }),
       ],
     });
 
+    // Table 10: ANR No.
     const t9 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
           children: [
-            cell([labelPara("ANR No. (if applicable)")], 4680),
-            cell([valuePara(entry.anrNo || "N/A")], 4680),
+            cell([labelPara("ANR No. (if applicable)")], 4316),
+            cell([valuePara(entry.anrNo || "N/A")], 4314),
           ],
         }),
       ],
     });
 
+    // Supporting Info and Photo
     const photoChildren: Paragraph[] = [];
     if (entry.supportInfo && entry.supportInfo.trim()) {
       photoChildren.push(new Paragraph({
         spacing: { before: 20, after: 40 },
         children: [
-          new TextRun({ text: entry.supportInfo.trim(), font: "Calibri", size: 19 }),
+          new TextRun({ text: entry.supportInfo.trim(), font: "Segoe UI Symbol", size: 20 }),
         ],
       }));
     }
@@ -335,13 +479,13 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
         if (photoBuffer) {
           photoChildren.push(new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { before: 40, after: 40 },
+            spacing: { before: 30, after: 30 },
             children: [
               new ImageRun({
                 data: photoBuffer,
                 transformation: {
                   width: 380,
-                  height: 240,
+                  height: 220,
                 },
               } as any),
             ],
@@ -355,19 +499,20 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     if (!photoChildren.length) {
       photoChildren.push(new Paragraph({
         spacing: { before: 30, after: 30 },
-        children: [new TextRun({ text: "N/A", font: "Calibri", size: 19, color: "666666" })],
+        children: [new TextRun({ text: "N/A", font: "Segoe UI Symbol", size: 20, color: "666666" })],
       }));
     }
 
+    // Table 11: Other Supporting Information
     const t10 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 1718, rule: HeightRule.ATLEAST }, // 85.9pt
+          height: { value: 1718, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Other Supporting Information:\n(Ex: Photo, Service sheet, Checklist &etc.)")], 2140),
-            cell(photoChildren, 7220),
+            cell([labelPara("Other Supporting Information:\n(Ex: Photo, Service sheet, Checklist &etc.)")], 1975),
+            cell(photoChildren, 6655),
           ],
         }),
       ],
@@ -377,38 +522,48 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     const isClosedStatus = entry.status === "Closed";
     const isPendingParts = entry.status === "Pending Parts";
 
+    // Table 12: Status
     const t11 = new Table({
-      width: { size: 9360, type: WidthType.DXA },
+      width: { size: 8630, type: WidthType.DXA },
       borders: TABLE_BORDERS,
       rows: [
         new TableRow({
-          height: { value: 422, rule: HeightRule.ATLEAST }, // 21.1pt
+          height: { value: 422, rule: HeightRule.ATLEAST },
           children: [
-            cell([labelPara("Status:")], 1650),
+            cell([labelPara("Status:")], 1525),
             cell([
               new Paragraph({
                 spacing: { before: 20, after: 20 },
                 children: [
-                  new TextRun({ text: isClosedStatus ? "☑ Closed   " : "☐ Closed   ", font: "Calibri", size: 19, bold: isClosedStatus }),
-                  new TextRun({ text: isMonitoring ? "☑ Monitoring   " : "☐ Monitoring   ", font: "Calibri", size: 19, bold: isMonitoring }),
-                  new TextRun({ text: isPendingParts ? "☑ Pending Parts" : "☐ Pending Parts", font: "Calibri", size: 19, bold: isPendingParts }),
+                  new TextRun({ text: isClosedStatus ? "☑ Closed   " : "☐ Closed   ", font: "Segoe UI Symbol", size: 20, bold: isClosedStatus }),
+                  new TextRun({ text: isMonitoring ? "☑ Monitoring   " : "☐ Monitoring   ", font: "Segoe UI Symbol", size: 20, bold: isMonitoring }),
+                  new TextRun({ text: isPendingParts ? "☑ Pending Parts" : "☐ Pending Parts", font: "Segoe UI Symbol", size: 20, bold: isPendingParts }),
                 ],
               }),
-            ], 7710),
+            ], 7105),
           ],
         }),
       ],
     });
 
-    const spacer = () => new Paragraph({ spacing: { before: 40, after: 40 } });
+    const spacer = () => new Paragraph({ spacing: { before: 35, after: 35 } });
 
+    // Page 1: Tables t0, t1, t2, t3, t4, t5
+    // Page 2: Header title, then Tables t6, t7, t8, t9, t10, t11
     sectionsChildren.push(
       t0, spacer(),
       t1, spacer(),
       t2, spacer(),
       t3, spacer(),
       t4, spacer(),
-      t5, spacer(),
+      t5
+    );
+
+    // Explicit page boundary to ensure 2 pages per incident
+    sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));
+    sectionsChildren.push(buildHeaderParagraph());
+
+    sectionsChildren.push(
       t6, spacer(),
       t7, spacer(),
       t8, spacer(),
@@ -428,10 +583,10 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
               height: 15418,
             },
             margin: {
-              top: 1440,
-              bottom: 1440,
-              left: 1273,
-              right: 1273,
+              top: 1400,
+              bottom: 1400,
+              left: 1750,
+              right: 1750,
             },
           },
         },

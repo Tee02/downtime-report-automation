@@ -110,6 +110,31 @@ export async function createSavedDowntimeReport(report: InsertSavedDowntimeRepor
   await db.insert(savedDowntimeReports).values(report);
 }
 
+/**
+ * Stores the latest upload for a report date. A re-upload replaces the previous
+ * saved source so users always reopen the current operational log, not a stale
+ * duplicate. Storage objects are immutable; the old database reference is
+ * removed so it no longer appears anywhere in the website library.
+ */
+export async function replaceSavedDowntimeReport(report: InsertSavedDowntimeReport) {
+  const db = await getDb();
+  if (!db) throw new Error("The report library is temporarily unavailable. Your workbook was generated but could not be saved.");
+
+  const current = await db
+    .select({ id: savedDowntimeReports.id })
+    .from(savedDowntimeReports)
+    .where(eq(savedDowntimeReports.reportDate, report.reportDate));
+
+  await db.transaction(async tx => {
+    if (current.length) {
+      await tx.delete(savedDowntimeReports).where(eq(savedDowntimeReports.reportDate, report.reportDate));
+    }
+    await tx.insert(savedDowntimeReports).values(report);
+  });
+
+  return { replacedExisting: current.length > 0 };
+}
+
 export async function findSavedDowntimeReport(reportDate: string) {
   const db = await getDb();
   if (!db) throw new Error("The report library is temporarily unavailable.");

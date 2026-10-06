@@ -30,6 +30,10 @@ Preventive Action
 1. Ensure the connector is tight during weekly PM. 
 Part(s) Replaced (if any) 
 N/A 
+Follow-Up Action (if any)
+Inspect RV06 audio connector on the next dark day.
+ANR No. (if applicable)
+N/A
 `;
 
     const matched = parseSummaryIncidentsFromText(sampleText);
@@ -43,5 +47,6 @@ N/A
     expect(pota.rootCause).toContain("wiring loose");
     expect(pota.correctiveAction).toContain("Verified the issue");
     expect(pota.preventiveAction).toContain("weekly PM");
+    expect(pota.followUpAction).toContain("next dark day");
   });
 });

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { TrpcContext } from "./_core/context";
 
 const mocks = vi.hoisted(() => ({
+  createDowntimeSummaryDraft: vi.fn(),
   deleteSavedDowntimeReport: vi.fn(),
+  deleteDowntimeSummaryDraft: vi.fn(),
   getDowntimeSummaryByDate: vi.fn(),
   getSavedDowntimeReportsByIds: vi.fn(),
   getSiteContent: vi.fn(),
@@ -16,10 +18,13 @@ const mocks = vi.hoisted(() => ({
   setSiteContent: vi.fn(),
   upsertUser: vi.fn(),
   storagePut: vi.fn(),
+  updateDowntimeSummaryDraft: vi.fn(),
 }));
 
 vi.mock("./db", () => ({
+  createDowntimeSummaryDraft: mocks.createDowntimeSummaryDraft,
   deleteSavedDowntimeReport: mocks.deleteSavedDowntimeReport,
+  deleteDowntimeSummaryDraft: mocks.deleteDowntimeSummaryDraft,
   getDowntimeSummaryByDate: mocks.getDowntimeSummaryByDate,
   getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds,
   getSiteContent: mocks.getSiteContent,
@@ -31,6 +36,7 @@ vi.mock("./db", () => ({
   saveDowntimeSummaryState: mocks.saveDowntimeSummaryState,
   setDarkDay: mocks.setDarkDay,
   setSiteContent: mocks.setSiteContent,
+  updateDowntimeSummaryDraft: mocks.updateDowntimeSummaryDraft,
   upsertUser: mocks.upsertUser,
 }));
 
@@ -123,5 +129,40 @@ describe("downtimeSummary router", () => {
       generatedFileName: "DailyDowntimeSummaryReport-20261001.docx",
       generatedFileUrl: "/manus-storage/downtime-summaries/report.docx",
     }));
+  });
+
+  it("persists follow-up action when creating and editing shift handover drafts", async () => {
+    mocks.createDowntimeSummaryDraft.mockResolvedValue({ insertId: 3 });
+    mocks.updateDowntimeSummaryDraft.mockResolvedValue([{ id: 3, followUpAction: "Inspect on next dark day." }]);
+
+    await caller.downtimeSummary.createDraft({
+      reportDate: "2026-10-01",
+      zone: "Zone B",
+      rideCode: "BWZ",
+      attraction: "Big Weld's Zeppelin",
+      description: "Joystick concern",
+      downtimeStart: "16:44",
+      downtimeEnd: "16:48",
+      durationMinutes: 4,
+      rootCause: "Joystick broken.",
+      correctiveAction: "1. Disabled RV3.",
+      preventiveAction: "1. Verify joystick during PM.",
+      followUpAction: "Inspect on next dark day.",
+    });
+
+    expect(mocks.createDowntimeSummaryDraft).toHaveBeenCalledWith(expect.objectContaining({
+      zone: "Zone B",
+      rideCode: "BWZ",
+      followUpAction: "Inspect on next dark day.",
+    }));
+
+    await caller.downtimeSummary.updateDraft({
+      id: 3,
+      followUpAction: "Replace joystick at the next dark day.",
+    });
+
+    expect(mocks.updateDowntimeSummaryDraft).toHaveBeenCalledWith(3, {
+      followUpAction: "Replace joystick at the next dark day.",
+    });
   });
 });

@@ -1,35 +1,43 @@
-import DashboardLayout from "@/components/DashboardLayout";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { trpc } from "@/lib/trpc";
 import {
-  ArrowLeft,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronRight,
-  Clock,
+  ClipboardPaste,
   Download,
+  Edit2,
   FileSpreadsheet,
   FileText,
   FileUp,
+  History,
   Image as ImageIcon,
   Layers,
   Loader2,
   Plus,
   Save,
   ShieldAlert,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 type SummaryTab = "editor" | "archive";
@@ -43,52 +51,86 @@ type SummaryIncident = {
   downtimeStart: string;
   downtimeEnd: string;
   durationMinutes: number;
-  shift: string;
-  recurringDowntime: "Yes" | "No";
-  recurringDowntimeDays: string;
-  incident: "Yes" | "No";
-  rootCause?: string | null;
-  correctiveAction?: string | null;
-  preventiveAction?: string | null;
-  partsReplaced?: string | null;
-  followUpAction?: string | null;
-  anrNo?: string | null;
-  supportInfo?: string | null;
+  shift: "AM" | "PM";
+  recurringDowntime?: "Yes" | "No";
+  recurringDowntimeDays?: string;
+  incident?: "Yes" | "No";
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  partsReplaced?: string;
+  followUpAction?: string;
+  anrNo?: string;
+  supportInfo?: string;
   supportPhotoUrl?: string | null;
   supportPhotoName?: string | null;
-  status: string;
+  status: "Monitoring" | "Closed" | "Pending Parts";
 };
 
-// Official Zone definitions per Availability matrix and user guidance:
-// Zone A: BWZ, RTR, ESD, IDD, NTM, PTA, POTA, BCT (EV/RC/UZ/ZC), AFP, TTC
-// Zone B: MFZ, ACR, SRS, ETI, EHF, VTM, BSC, RCC, SAG
 const ZONE_ASSIGNMENTS: Record<string, "Zone A" | "Zone B"> = {
-  BWZ: "Zone A",
-  RTR: "Zone A",
-  ESD: "Zone A",
-  IDD: "Zone A",
-  NTM: "Zone A",
-  PTA: "Zone A",
-  POTA: "Zone A",
-  "BCT (EV)": "Zone A",
-  "BCT (RC)": "Zone A",
-  "BCT (UZ)": "Zone A",
-  "BCT (ZC)": "Zone A",
   AFP: "Zone A",
-  TTC: "Zone A",
-  MFZ: "Zone B",
+  BCT: "Zone A",
+  "BCT (ZC)": "Zone A",
+  ESD: "Zone A",
+  IA3: "Zone A",
+  IDD: "Zone A",
+  MFZ: "Zone A",
+  NATM: "Zone A",
+  PTA: "Zone A",
+  RCC: "Zone A",
+  RTR: "Zone A",
   ACR: "Zone B",
-  SRS: "Zone B",
-  ETI: "Zone B",
-  EHF: "Zone B",
-  VTM: "Zone B",
-  BSC: "Zone B",
-  RCC: "Zone B",
+  ALH: "Zone B",
+  BOG: "Zone B",
+  BWZ: "Zone B",
+  CDL: "Zone B",
+  MTR: "Zone B",
+  ROB: "Zone B",
   SAG: "Zone B",
+  SRS: "Zone B",
+  TTC: "Zone B",
+  VTM: "Zone B",
 };
 
-function formatDisplayDate(dateKey: string) {
-  if (!dateKey) return "";
+function normalizeZone(zone?: string | null): "Zone A" | "Zone B" {
+  if (!zone) return "Zone A";
+  const upper = zone.toUpperCase();
+  if (upper.includes("B") || upper.includes("2")) return "Zone B";
+  return "Zone A";
+}
+
+function parseShift(start?: string): "AM" | "PM" {
+  if (!start) return "AM";
+  const num = parseInt(start.replace(/[^0-9]/g, ""), 10);
+  if (isNaN(num)) return "AM";
+  return num >= 1400 ? "PM" : "AM";
+}
+
+function parseDurationMinutes(durationLabel?: string, start?: string, end?: string): number {
+  if (durationLabel) {
+    const hoursMatch = /(\d+)\s*(?:hour|hours|hr|hrs|h)\b/i.exec(durationLabel);
+    const minsMatch = /(\d+)\s*(?:min|mins|minute|minutes|m)\b/i.exec(durationLabel);
+    if (hoursMatch || minsMatch) {
+      const h = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+      const m = minsMatch ? parseInt(minsMatch[1], 10) : 0;
+      return h * 60 + m;
+    }
+  }
+  if (start && end) {
+    const s = parseInt(start.replace(/[^0-9]/g, ""), 10);
+    const e = parseInt(end.replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(s) && !isNaN(e) && e >= s) {
+      const sH = Math.floor(s / 100);
+      const sM = s % 100;
+      const eH = Math.floor(e / 100);
+      const eM = e % 100;
+      return (eH * 60 + eM) - (sH * 60 + sM);
+    }
+  }
+  return 0;
+}
+
+function formatDisplayDate(dateKey: string): string {
   const parts = dateKey.split("-");
   if (parts.length === 3) {
     const day = parseInt(parts[2], 10);
@@ -99,77 +141,51 @@ function formatDisplayDate(dateKey: string) {
   return dateKey;
 }
 
-function parseShift(downtimeStart: string): string {
-  const clean = (downtimeStart || "").replace(":", "");
-  const num = parseInt(clean, 10);
-  if (!isNaN(num) && num >= 1400) return "PM";
-  return "AM";
-}
-
-function parseDurationMinutes(durationLabel?: string, startTime?: string, endTime?: string): number {
-  if (durationLabel) {
-    const hourMatch = /(\d+)\s*(?:hour|hr|h)\b/i.exec(durationLabel);
-    const minMatch = /(\d+)\s*(?:minute|min|m)\b/i.exec(durationLabel);
-    let total = 0;
-    if (hourMatch) total += parseInt(hourMatch[1], 10) * 60;
-    if (minMatch) total += parseInt(minMatch[1], 10);
-    if (total > 0) return total;
-  }
-  if (startTime && endTime) {
-    const [sh, sm] = startTime.split(":").map(Number);
-    const [eh, em] = endTime.split(":").map(Number);
-    if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
-      const s = sh * 60 + sm;
-      const e = eh * 60 + em;
-      return e >= s ? e - s : 1440 - s + e;
-    }
-  }
-  return 0;
-}
-
-function normalizeZone(raw?: string | null): "Zone A" | "Zone B" {
-  if (!raw) return "Zone A";
-  if (raw === "Zone 2" || raw === "Zone B") return "Zone B";
-  return "Zone A";
-}
-
-function normaliseMatchText(value?: string | null) {
-  return (value || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanDescriptionForMatching(text?: string | null): string {
+  if (!text) return "";
+  return text.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function matchesImportedIncident(
-  imported: { rideCode?: string; description?: string; downtimeStart?: string },
-  incident: { rideCode: string; description: string; downtimeStart: string }
-) {
-  const importedRide = (imported.rideCode || "").toUpperCase();
-  const localRide = (incident.rideCode || "").toUpperCase();
-  const rideMatches = importedRide === localRide || (importedRide === "POTA" && localRide === "PTA");
-  const timeMatches = Boolean(imported.downtimeStart) && Boolean(incident.downtimeStart) && imported.downtimeStart === incident.downtimeStart;
-  const importedDescription = normaliseMatchText(imported.description);
-  const localDescription = normaliseMatchText(incident.description);
-  const descriptionMatches = Boolean(importedDescription && localDescription) && (
-    importedDescription.includes(localDescription) || localDescription.includes(importedDescription)
-  );
-  return rideMatches && timeMatches && descriptionMatches;
+  imported: { rideCode?: string; downtimeStart?: string; description?: string },
+  candidate: { rideCode: string; downtimeStart?: string; description?: string }
+): boolean {
+  if (!imported.rideCode || candidate.rideCode !== imported.rideCode) {
+    return false;
+  }
+  const cleanImportDesc = cleanDescriptionForMatching(imported.description);
+  const cleanCandidateDesc = cleanDescriptionForMatching(candidate.description);
+  const descMatches =
+    cleanImportDesc &&
+    cleanCandidateDesc &&
+    (cleanImportDesc.includes(cleanCandidateDesc) || cleanCandidateDesc.includes(cleanImportDesc));
+
+  if (imported.downtimeStart && candidate.downtimeStart) {
+    const normImport = imported.downtimeStart.replace(/[^0-9]/g, "");
+    const normCandidate = candidate.downtimeStart.replace(/[^0-9]/g, "");
+    if (normImport && normCandidate && normImport === normCandidate) {
+      return true;
+    }
+  }
+
+  return Boolean(descMatches);
 }
 
-// Requirement: Automatically gives new line break for new numbering when numbered list is typed (e.g. 1. -> 2.)
-function handleNumberedListKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, currentValue: string, onChange: (val: string) => void) {
+function handleNumberedListKeyDown(
+  e: React.KeyboardEvent<HTMLTextAreaElement>,
+  value: string,
+  onChange: (val: string) => void
+) {
   if (e.key === "Enter" && !e.shiftKey) {
     const textarea = e.currentTarget;
     const start = textarea.selectionStart;
-    const textBefore = currentValue.substring(0, start);
-    const textAfter = currentValue.substring(textarea.selectionEnd);
+    const end = textarea.selectionEnd;
+    const textBefore = value.substring(0, start);
+    const textAfter = value.substring(end);
 
-    // Find the current line before the cursor
-    const lines = textBefore.split("\n");
-    const currentLine = lines[lines.length - 1];
+    const lastNewline = textBefore.lastIndexOf("\n");
+    const currentLine = lastNewline === -1 ? textBefore : textBefore.substring(lastNewline + 1);
 
-    // Check if the current line starts with a number like "1." or "1. "
     const match = /^(\s*)(\d+)\.\s*(.*)$/.exec(currentLine);
     if (match) {
       e.preventDefault();
@@ -177,7 +193,6 @@ function handleNumberedListKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, 
       const num = parseInt(match[2], 10);
       const content = match[3];
 
-      // If the line is empty numbered item (e.g. "2. " with nothing else), remove the number on second Enter
       if (!content.trim()) {
         const withoutEmptyNum = textBefore.substring(0, textBefore.length - currentLine.length) + "\n" + textAfter;
         onChange(withoutEmptyNum);
@@ -189,12 +204,34 @@ function handleNumberedListKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, 
       const newValue = textBefore + insert + textAfter;
       onChange(newValue);
 
-      // Restore cursor position after the newly inserted number
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + insert.length;
       }, 0);
     }
   }
+}
+
+function renderFormattedActionText(raw?: string | null) {
+  if (!raw) return "—";
+  const lines = raw.split(/\r?\n/).flatMap(line => line.split(/(?=\b\d+\.\s+)/)).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return "—";
+
+  return (
+    <div className="space-y-1">
+      {lines.map((line, idx) => {
+        const match = /^(\d+\.)\s*(.*)$/.exec(line);
+        if (match) {
+          return (
+            <p key={idx} className="leading-snug">
+              <strong className="text-slate-900 font-bold">{match[1]}</strong>{" "}
+              <span>{match[2]}</span>
+            </p>
+          );
+        }
+        return <p key={idx} className="leading-snug">{line}</p>;
+      })}
+    </div>
+  );
 }
 
 export default function DowntimeSummary() {
@@ -218,8 +255,13 @@ export default function DowntimeSummary() {
   const [isImportingFile, setIsImportingFile] = useState(false);
   const [isArchiveDragging, setIsArchiveDragging] = useState(false);
 
-  // New Draft State
+  // Calendar Memory Pop-up Modal State
+  const [isCalendarDialogOpen, setIsCalendarDialogOpen] = useState(false);
+
+  // Drafts State: zone filter, editing draft, delete modal
+  const [draftZoneFilter, setDraftZoneFilter] = useState<"ALL" | "Zone A" | "Zone B">("ALL");
   const [isDraftFormOpen, setIsDraftFormOpen] = useState(false);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
   const [draftRideCode, setDraftRideCode] = useState("");
   const [draftZone, setDraftZone] = useState<"Zone A" | "Zone B">("Zone A");
   const [draftStart, setDraftStart] = useState("");
@@ -228,7 +270,9 @@ export default function DowntimeSummary() {
   const [draftRootCause, setDraftRootCause] = useState("");
   const [draftCorrective, setDraftCorrective] = useState("");
   const [draftPreventive, setDraftPreventive] = useState("");
+  const [draftFollowUp, setDraftFollowUp] = useState("");
   const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
+  const [draftToDelete, setDraftToDelete] = useState<{ id: number; rideCode: string } | null>(null);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
@@ -276,23 +320,17 @@ export default function DowntimeSummary() {
   const datesWithDataQuery = trpc.downtimeSummary.listDatesWithData.useQuery();
   const datesWithData = datesWithDataQuery.data || [];
 
-  // Session storage key for uncommitted form retention:
-  // Requirement: "whatever text they have typed should remain preserved during the current session,
-  // and only reset when the browser tab is closed."
-  const sessionDraftKey = useMemo(() => (dateKey ? `downtime-summary-draft-v35-${dateKey}` : ""), [dateKey]);
+  const sessionDraftKey = useMemo(() => (dateKey ? `downtime-summary-draft-v36-${dateKey}` : ""), [dateKey]);
 
-  // Initialize and merge incident state
   useEffect(() => {
     if (!analysisQuery.data) return;
 
-    // Filter strictly to technical downtime
     const technicalIncidents = analysisQuery.data.incidentLogs.filter(
       l => l.kind === "technical" && l.rideCode
     );
 
     const savedState = summaryQuery.data;
 
-    // Check sessionStorage first for uncommitted work
     let sessionDraft: any = null;
     if (sessionDraftKey && typeof window !== "undefined") {
       try {
@@ -330,7 +368,6 @@ export default function DowntimeSummary() {
     const savedMap = new Map((savedState?.entries || []).map(e => [e.incidentKey, e]));
     const sessionMap = new Map((sessionDraft?.entries || []).map((e: any) => [e.incidentKey, e]));
 
-    // Check if an imported report exists for this date and has matched entries to autofill
     let importedMatches: any[] = [];
     const latestImport = savedState?.imports?.[0];
     if (latestImport?.matchedEntries) {
@@ -352,7 +389,6 @@ export default function DowntimeSummary() {
       const shift = parseShift(startTime);
       const defaultZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
 
-      // Match imports strictly by ride, downtime description, and time down.
       const match = importedMatches.find(m => matchesImportedIncident(m, {
         rideCode: item.rideCode || "",
         description: item.description,
@@ -369,38 +405,31 @@ export default function DowntimeSummary() {
         downtimeEnd: endTime,
         durationMinutes: duration,
         shift,
-        recurringDowntime: (draft?.recurringDowntime ?? (saved as any)?.recurringDowntime ?? match?.recurringDowntime ?? "No") as "Yes" | "No",
-        recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved as any)?.recurringDowntimeDays ?? match?.recurringDowntimeDays ?? "N/A",
-        incident: (draft?.incident ?? (saved as any)?.incident ?? match?.incident ?? "No") as "Yes" | "No",
-        rootCause: draft?.rootCause ?? saved?.rootCause ?? match?.rootCause ?? "",
-        correctiveAction: draft?.correctiveAction ?? saved?.correctiveAction ?? match?.correctiveAction ?? "",
-        preventiveAction: draft?.preventiveAction ?? saved?.preventiveAction ?? match?.preventiveAction ?? "",
-        partsReplaced: draft?.partsReplaced ?? saved?.partsReplaced ?? "N/A",
-        followUpAction: draft?.followUpAction ?? saved?.followUpAction ?? "N/A",
-        anrNo: draft?.anrNo ?? saved?.anrNo ?? "N/A",
-        supportInfo: draft?.supportInfo ?? saved?.supportInfo ?? "",
-        supportPhotoUrl: draft?.supportPhotoUrl ?? saved?.supportPhotoUrl ?? null,
-        supportPhotoName: draft?.supportPhotoName ?? saved?.supportPhotoName ?? null,
+        recurringDowntime: draft?.recurringDowntime ?? (saved?.recurringDowntime ?? (match?.recurringDowntime || "No")),
+        recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved?.recurringDowntimeDays ?? (match?.recurringDowntimeDays || "N/A")),
+        incident: draft?.incident ?? (saved?.incident ?? (match?.incident || "No")),
+        rootCause: draft?.rootCause ?? (saved?.rootCause ?? (match?.rootCause || "")),
+        correctiveAction: draft?.correctiveAction ?? (saved?.correctiveAction ?? (match?.correctiveAction || "")),
+        preventiveAction: draft?.preventiveAction ?? (saved?.preventiveAction ?? (match?.preventiveAction || "")),
+        partsReplaced: draft?.partsReplaced ?? (saved?.partsReplaced ?? "N/A"),
+        followUpAction: draft?.followUpAction ?? (saved?.followUpAction ?? (match?.followUpAction || "N/A")),
+        anrNo: draft?.anrNo ?? (saved?.anrNo ?? "N/A"),
+        supportInfo: draft?.supportInfo ?? (saved?.supportInfo ?? ""),
+        supportPhotoUrl: draft?.supportPhotoUrl ?? (saved?.supportPhotoUrl ?? null),
+        supportPhotoName: draft?.supportPhotoName ?? (saved?.supportPhotoName ?? null),
         status: "Monitoring",
       };
-    }).sort((left, right) => left.downtimeStart.localeCompare(right.downtimeStart) || left.rideCode.localeCompare(right.rideCode));
-
-    setIncidents(merged);
-
-    // Default: all technical incidents checked for export
-    setSelectedKeysForExport(prev => {
-      if (prev.size === 0) {
-        return new Set(merged.map(m => m.incidentKey));
-      }
-      return prev;
     });
 
-    if (merged.length > 0 && !selectedIncidentKey) {
+    setIncidents(merged);
+    if (!selectedIncidentKey && merged.length > 0) {
       setSelectedIncidentKey(merged[0].incidentKey);
+    }
+    if (merged.length > 0 && selectedKeysForExport.size === 0) {
+      setSelectedKeysForExport(new Set(merged.map(i => i.incidentKey)));
     }
   }, [analysisQuery.data, summaryQuery.data, sessionDraftKey]);
 
-  // Synchronize uncommitted form edits to sessionStorage so work is preserved when switching tabs or pages
   useEffect(() => {
     if (!sessionDraftKey || incidents.length === 0 || typeof window === "undefined") return;
     const payload = {
@@ -501,28 +530,110 @@ export default function DowntimeSummary() {
   const createDraftMutation = trpc.downtimeSummary.createDraft.useMutation({
     onSuccess: () => {
       toast.success("Shift handover draft added.");
-      setDraftRideCode("");
-      setDraftStart("");
-      setDraftEnd("");
-      setDraftDescription("");
-      setDraftRootCause("");
-      setDraftCorrective("");
-      setDraftPreventive("");
-      setIsDraftFormOpen(false);
+      resetDraftForm();
       utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
+      if (dateKey === archiveSelectedDate) {
+        utils.downtimeSummary.getByDate.invalidate({ dateKey });
+      }
       utils.downtimeSummary.listDatesWithData.invalidate();
     },
     onError: err => toast.error(err.message || "Failed to save draft."),
+  });
+
+  const updateDraftMutation = trpc.downtimeSummary.updateDraft.useMutation({
+    onSuccess: () => {
+      toast.success("Shift handover draft updated.");
+      resetDraftForm();
+      utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
+      if (dateKey === archiveSelectedDate) {
+        utils.downtimeSummary.getByDate.invalidate({ dateKey });
+      }
+      utils.downtimeSummary.listDatesWithData.invalidate();
+    },
+    onError: err => toast.error(err.message || "Failed to update draft."),
   });
 
   const deleteDraftMutation = trpc.downtimeSummary.deleteDraft.useMutation({
     onSuccess: () => {
       toast.success("Draft removed.");
       setSelectedDraftId(null);
+      setDraftToDelete(null);
       utils.downtimeSummary.getByDate.invalidate({ dateKey: archiveSelectedDate });
+      if (dateKey === archiveSelectedDate) {
+        utils.downtimeSummary.getByDate.invalidate({ dateKey });
+      }
     },
     onError: err => toast.error(err.message || "Failed to delete draft."),
   });
+
+  const resetDraftForm = () => {
+    setEditingDraftId(null);
+    setDraftRideCode("");
+    setDraftStart("");
+    setDraftEnd("");
+    setDraftDescription("");
+    setDraftRootCause("");
+    setDraftCorrective("");
+    setDraftPreventive("");
+    setDraftFollowUp("");
+    setIsDraftFormOpen(false);
+  };
+
+  const startEditDraft = (d: any) => {
+    setEditingDraftId(d.id);
+    setDraftRideCode(d.rideCode || "");
+    setDraftZone(normalizeZone(d.zone));
+    setDraftStart(d.downtimeStart || "");
+    setDraftEnd(d.downtimeEnd || "");
+    setDraftDescription(d.description || "");
+    setDraftRootCause(d.rootCause || "");
+    setDraftCorrective(d.correctiveAction || "");
+    setDraftPreventive(d.preventiveAction || "");
+    setDraftFollowUp(d.followUpAction || "");
+    setIsDraftFormOpen(true);
+    setSelectedDraftId(d.id);
+  };
+
+  const handleSaveOrUpdateDraft = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!draftRideCode.trim()) {
+      toast.error("Please enter a ride code.");
+      return;
+    }
+    const dur = parseDurationMinutes(undefined, draftStart, draftEnd);
+
+    if (editingDraftId) {
+      updateDraftMutation.mutate({
+        id: editingDraftId,
+        zone: draftZone,
+        rideCode: draftRideCode.trim().toUpperCase(),
+        attraction: draftRideCode.trim().toUpperCase(),
+        description: draftDescription.trim(),
+        downtimeStart: draftStart.trim(),
+        downtimeEnd: draftEnd.trim(),
+        durationMinutes: dur,
+        rootCause: draftRootCause.trim() || null,
+        correctiveAction: draftCorrective.trim() || null,
+        preventiveAction: draftPreventive.trim() || null,
+        followUpAction: draftFollowUp.trim() || null,
+      });
+    } else {
+      createDraftMutation.mutate({
+        reportDate: archiveSelectedDate,
+        zone: draftZone,
+        rideCode: draftRideCode.trim().toUpperCase(),
+        attraction: draftRideCode.trim().toUpperCase(),
+        description: draftDescription.trim(),
+        downtimeStart: draftStart.trim(),
+        downtimeEnd: draftEnd.trim(),
+        durationMinutes: dur,
+        rootCause: draftRootCause.trim() || null,
+        correctiveAction: draftCorrective.trim() || null,
+        preventiveAction: draftPreventive.trim() || null,
+        followUpAction: draftFollowUp.trim() || null,
+      });
+    }
+  };
 
   const handleSave = () => {
     if (!currentSavedReport) {
@@ -561,28 +672,6 @@ export default function DowntimeSummary() {
     });
   };
 
-  const handleAddDraft = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!draftRideCode.trim()) {
-      toast.error("Please enter a ride code.");
-      return;
-    }
-    const dur = parseDurationMinutes(undefined, draftStart, draftEnd);
-    createDraftMutation.mutate({
-      reportDate: archiveSelectedDate,
-      zone: draftZone,
-      rideCode: draftRideCode.trim().toUpperCase(),
-      attraction: draftRideCode.trim().toUpperCase(),
-      description: draftDescription.trim(),
-      downtimeStart: draftStart.trim(),
-      downtimeEnd: draftEnd.trim(),
-      durationMinutes: dur,
-      rootCause: draftRootCause.trim() || null,
-      correctiveAction: draftCorrective.trim() || null,
-      preventiveAction: draftPreventive.trim() || null,
-    });
-  };
-
   const processPhotoFile = async (file: File) => {
     if (!activeIncident) return;
     setIsUploadingPhoto(true);
@@ -612,7 +701,6 @@ export default function DowntimeSummary() {
       const response = await fetch("/api/downtime/summary-upload", { method: "POST", body });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Archive upload failed.");
-      const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
 
       if (result.convertedDocxFileName) {
         toast.info(`PDF converted to DOCX (${result.convertedDocxFileName}) for matching.`);
@@ -622,231 +710,222 @@ export default function DowntimeSummary() {
         reportDate: archiveSelectedDate,
         fileName: result.fileName,
         fileUrl: result.fileUrl,
-        fileType: ext,
+        fileType: file.name.split(".").pop()?.toLowerCase() || "pdf",
+        convertedDocxFileName: result.convertedDocxFileName || (file.name.endsWith(".docx") ? result.fileName : null),
+        convertedDocxUrl: result.convertedDocxUrl || (file.name.endsWith(".docx") ? result.fileUrl : null),
         extractedText: result.extractedText || null,
-        convertedDocxFileName: result.convertedDocxFileName || null,
-        convertedDocxUrl: result.convertedDocxUrl || null,
-        matchedEntries: result.matchedEntries || null,
+        matchedEntries: result.matchedIncidents ? JSON.stringify(result.matchedIncidents) : null,
       });
-
-      // Requirement: When a report is uploaded, parse it and match rootcause, corrective, preventive
-      // by ride, description, and starting time, and display them directly in the table.
-      // If we have saved summary entries for this date or raw tech logs, automatically update them!
-      if (result.matchedEntries && archiveTargetReport) {
-        try {
-          const parsedMatched: any[] = JSON.parse(result.matchedEntries);
-          const currentEntries = archiveSummaryQuery.data?.entries || [];
-          if (currentEntries.length > 0) {
-            const updated = currentEntries.map(entry => {
-              const match = parsedMatched.find(m => matchesImportedIncident(m, entry));
-              if (!match) return entry;
-              return {
-                ...entry,
-                rootCause: match.rootCause || entry.rootCause,
-                correctiveAction: match.correctiveAction || entry.correctiveAction,
-                preventiveAction: match.preventiveAction || entry.preventiveAction,
-                recurringDowntime: match.recurringDowntime || (entry as any).recurringDowntime || "No",
-                recurringDowntimeDays: match.recurringDowntimeDays || (entry as any).recurringDowntimeDays || "N/A",
-                incident: match.incident || (entry as any).incident || "No",
-              };
-            });
-            await saveMutation.mutateAsync({
-              reportDate: archiveSelectedDate,
-              sourceReportId: archiveTargetReport.id,
-              amExecutive: archiveSummaryQuery.data?.summary?.amExecutive || "",
-              pmExecutive: archiveSummaryQuery.data?.summary?.pmExecutive || "",
-              zoneBAmExecutive: (archiveSummaryQuery.data?.summary as any)?.zoneBAmExecutive || "",
-              zoneBPmExecutive: (archiveSummaryQuery.data?.summary as any)?.zoneBPmExecutive || "",
-              entries: updated as any,
-            });
-            toast.success("Archive table fields updated with imported root causes and actions.");
-          }
-        } catch (e) {
-          console.warn("Failed to auto-apply matched imported fields:", e);
-        }
-      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to upload archive file.");
+      toast.error(error instanceof Error ? error.message : "Failed to import file.");
     } finally {
       setIsImportingFile(false);
       setIsArchiveDragging(false);
     }
   };
 
-  // Determine Executive In Charge for active incident based on Zone A vs Zone B and Shift
-  const activeShift = activeIncident?.shift || "AM";
-  const activeZone = activeIncident?.zone || "Zone A";
-  const activeExecutiveInCharge = useMemo(() => {
-    if (activeZone === "Zone B") {
-      if (activeShift === "PM") {
-        return zoneBPmExecutive ? `PM – ${zoneBPmExecutive}` : (pmExecutive ? `PM – ${pmExecutive}` : "PM – (Unassigned)");
-      }
-      return zoneBAmExecutive ? `AM – ${zoneBAmExecutive}` : (amExecutive ? `AM – ${amExecutive}` : "AM – (Unassigned)");
-    }
-    if (activeShift === "PM") {
-      return pmExecutive ? `PM – ${pmExecutive}` : "PM – (Unassigned)";
-    }
-    return amExecutive ? `AM – ${amExecutive}` : "AM – (Unassigned)";
-  }, [activeZone, activeShift, amExecutive, pmExecutive, zoneBAmExecutive, zoneBPmExecutive]);
-
-  // Build archive table preview rows (from saved summary entries or fallback raw technical logs)
+  // Archive table rows construction
   const archiveTableRows = useMemo(() => {
-    const savedEntries = archiveSummaryQuery.data?.entries;
-    let importedMatched: any[] = [];
-    const latestImport = archiveSummaryQuery.data?.imports?.[0];
-    if (latestImport?.matchedEntries) {
-      try {
-        importedMatched = JSON.parse(latestImport.matchedEntries);
-      } catch {
-        // ignore
-      }
-    }
-
-    if (savedEntries && savedEntries.length > 0) {
-      return savedEntries.map(e => {
-        // Check if there's a fresh imported match if saved fields are blank
-        const match = importedMatched.find(m => matchesImportedIncident(m, e));
-
-        return {
-          id: String(e.id),
-          zone: normalizeZone(e.zone),
-          rideCode: e.rideCode,
-          description: e.description,
-          timeRange: `${e.downtimeStart}–${e.downtimeEnd}`,
-          duration: `${e.durationMinutes}m`,
-          recurringDowntime: (e as any).recurringDowntime || match?.recurringDowntime || "No",
-          recurringDowntimeDays: (e as any).recurringDowntimeDays || match?.recurringDowntimeDays || "N/A",
-          incident: (e as any).incident || match?.incident || "No",
-          rootCause: e.rootCause || match?.rootCause || "—",
-          correctiveAction: e.correctiveAction || match?.correctiveAction || "—",
-          preventiveAction: e.preventiveAction || match?.preventiveAction || "—",
-          isSaved: true,
-        };
-      });
-    }
-
-    const techLogs = archiveAnalysisQuery.data?.incidentLogs.filter(l => l.kind === "technical" && l.rideCode) || [];
-    return techLogs.map((l, idx) => {
-      const times = (l.timeRange || "").split("-");
-      const duration = parseDurationMinutes(l.durationLabel, times[0], times[1]);
-      const defaultZone = ZONE_ASSIGNMENTS[l.rideCode || ""] || "Zone A";
-      const match = importedMatched.find(m => matchesImportedIncident(m, {
-        rideCode: l.rideCode || "",
-        description: l.description,
-        downtimeStart: times[0] || "",
+    const summaryData = archiveSummaryQuery.data;
+    if (summaryData?.entries && summaryData.entries.length > 0) {
+      return summaryData.entries.map((entry, index) => ({
+        id: entry.id || `entry-${index}`,
+        zone: entry.zone,
+        rideCode: entry.rideCode,
+        description: entry.description,
+        timeRange: `${entry.downtimeStart}–${entry.downtimeEnd}`,
+        duration: `${entry.durationMinutes}m`,
+        recurringDowntime: entry.recurringDowntime,
+        recurringDowntimeDays: entry.recurringDowntimeDays,
+        incident: entry.incident,
+        rootCause: entry.rootCause,
+        correctiveAction: entry.correctiveAction,
+        preventiveAction: entry.preventiveAction,
+        partsReplaced: entry.partsReplaced,
+        followUpAction: entry.followUpAction,
+        status: entry.status,
       }));
+    }
 
-      return {
-        id: `raw-${idx}-${l.rideCode}`,
-        zone: defaultZone,
-        rideCode: l.rideCode || "",
-        description: l.description,
-        timeRange: l.timeRange || "—",
-        duration: `${duration}m`,
-        recurringDowntime: match?.recurringDowntime || "No",
-        recurringDowntimeDays: match?.recurringDowntimeDays || "N/A",
-        incident: match?.incident || "No",
-        rootCause: match?.rootCause || "— (Unsaved raw log)",
-        correctiveAction: match?.correctiveAction || "—",
-        preventiveAction: match?.preventiveAction || "—",
-        isSaved: false,
-      };
-    });
-  }, [archiveSummaryQuery.data?.entries, archiveSummaryQuery.data?.imports, archiveAnalysisQuery.data?.incidentLogs]);
+    if (archiveAnalysisQuery.data) {
+      let importedMatches: any[] = [];
+      const latestImport = summaryData?.imports?.[0];
+      if (latestImport?.matchedEntries) {
+        try {
+          importedMatches = JSON.parse(latestImport.matchedEntries);
+        } catch {
+          // ignore
+        }
+      }
 
-  // Helper to render text with clean line breaks for numbered lists in archive table
-  const renderFormattedActionText = (text: string) => {
-    if (!text || text === "—") return <span className="text-slate-400">—</span>;
-    const lines = text.split(/\r?\n/).flatMap(l => l.split(/(?=\b\d+\.\s+)/)).map(l => l.trim()).filter(Boolean);
-    if (lines.length <= 1) return <span>{text}</span>;
-    return (
-      <div className="space-y-1">
-        {lines.map((line, idx) => (
-          <div key={idx} className="leading-snug">{line}</div>
-        ))}
-      </div>
-    );
-  };
+      return archiveAnalysisQuery.data.incidentLogs
+        .filter(l => l.kind === "technical" && l.rideCode)
+        .map((l, index) => {
+          const times = (l.timeRange || "").split("-");
+          const startTime = times[0] || "";
+          const endTime = times[1] || "";
+          const dur = parseDurationMinutes(l.durationLabel, startTime, endTime);
+          const ride = l.rideCode || "";
 
-  const archiveDrafts = archiveSummaryQuery.data?.drafts || [];
+          const matched = importedMatches.find(m => matchesImportedIncident(m, {
+            rideCode: ride,
+            description: l.description,
+            downtimeStart: startTime,
+          }));
+
+          return {
+            id: l.id || `analysis-${index}`,
+            zone: ZONE_ASSIGNMENTS[ride] || "Zone A",
+            rideCode: ride,
+            description: l.description,
+            timeRange: l.timeRange || "—",
+            duration: `${dur}m`,
+            recurringDowntime: matched?.recurringDowntime || "No",
+            recurringDowntimeDays: matched?.recurringDowntimeDays || "N/A",
+            incident: matched?.incident || "No",
+            rootCause: matched?.rootCause || "—",
+            correctiveAction: matched?.correctiveAction || "—",
+            preventiveAction: matched?.preventiveAction || "—",
+            partsReplaced: "N/A",
+            followUpAction: matched?.followUpAction || "N/A",
+            status: "Monitoring",
+          };
+        });
+    }
+
+    return [];
+  }, [archiveSummaryQuery.data, archiveAnalysisQuery.data]);
+
+  // Drafts for current archive selected date
+  const archiveDrafts = useMemo(() => {
+    return archiveSummaryQuery.data?.drafts || [];
+  }, [archiveSummaryQuery.data]);
+
+  // Filtered drafts in archive tab
+  const filteredArchiveDrafts = useMemo(() => {
+    if (draftZoneFilter === "ALL") return archiveDrafts;
+    return archiveDrafts.filter(d => normalizeZone(d.zone) === draftZoneFilter);
+  }, [archiveDrafts, draftZoneFilter]);
+
   const selectedDraft = useMemo(() => {
+    if (!selectedDraftId) return null;
     return archiveDrafts.find(d => d.id === selectedDraftId) || null;
   }, [archiveDrafts, selectedDraftId]);
 
+  // Handover drafts available for the active editor dateKey
+  const activeEditorDrafts = useMemo(() => {
+    if (!summaryQuery.data?.drafts) return [];
+    return summaryQuery.data.drafts;
+  }, [summaryQuery.data]);
+
+  // Transfer ONLY rootCause, correctiveAction, preventiveAction, and followUpAction
+  const applyDraftToActiveIncident = (draftItem: any) => {
+    if (!activeIncident) return;
+    setIncidents(curr =>
+      curr.map(item => {
+        if (item.incidentKey !== activeIncident.incidentKey) return item;
+        return {
+          ...item,
+          rootCause: draftItem.rootCause || item.rootCause || "",
+          correctiveAction: draftItem.correctiveAction || item.correctiveAction || "",
+          preventiveAction: draftItem.preventiveAction || item.preventiveAction || "",
+          followUpAction: draftItem.followUpAction || item.followUpAction || "N/A",
+        };
+      })
+    );
+    toast.success(`Handover info from ${draftItem.rideCode} applied to active incident (Root Cause, Actions, Follow-Up).`);
+  };
+
+  const activeExecutiveInCharge = useMemo(() => {
+    if (!activeIncident) return "—";
+    const isPm = activeIncident.shift === "PM";
+    const isZoneB = activeIncident.zone === "Zone B";
+    if (isZoneB) {
+      return isPm
+        ? (zoneBPmExecutive || pmExecutive || "Zone B PM Officer")
+        : (zoneBAmExecutive || amExecutive || "Zone B AM Officer");
+    }
+    return isPm ? (pmExecutive || "PM Executive") : (amExecutive || "AM Executive");
+  }, [activeIncident, amExecutive, pmExecutive, zoneBAmExecutive, zoneBPmExecutive]);
+
   return (
     <DashboardLayout>
-      <div className="min-h-[calc(100vh-2rem)] pb-28 text-slate-900">
-        <header className="px-1 pt-1 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+      <div className="min-h-screen bg-[#f3f5f9] p-4 sm:p-6 lg:p-8">
+        {/* Top Header */}
+        <header className="flex flex-col gap-4 border-b border-[#adbBda]/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <Link href="/analysis">
-                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-xs text-[#1e4ca1] hover:bg-blue-50">
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to Analysis Studio
-                </Button>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <Link href="/analysis" className="hover:text-[#1e4ca1] flex items-center gap-1 transition-colors">
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span>Analysis Studio</span>
               </Link>
-              <Badge className="bg-indigo-100 text-[#1e4ca1] hover:bg-indigo-100">
-                Daily Downtime Summary
-              </Badge>
-              {dateKey && (
-                <Badge variant="outline" className="border-indigo-300 font-mono text-indigo-900">
-                  {formatDisplayDate(dateKey)}
-                </Badge>
-              )}
+              <span>/</span>
+              <span className="text-[#1e4ca1] font-bold">Downtime Summary</span>
             </div>
-            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#162b5b]">
-              Downtime Summary Workspace
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#162b5b] sm:text-3xl">
+              Daily Downtime Summary Workspace
             </h1>
+            <p className="mt-1 text-xs text-slate-600">
+              Technical 11-1 daily reports • 2-page DOCX per event • Memory &amp; shift handover drafts
+            </p>
+          </div>
 
-            {/* Requirement: Position tabs right below the page title */}
-            <div className="mt-3 inline-flex rounded-xl bg-slate-200/90 p-1 shadow-inner">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setActiveTab("editor")}
-                className={`rounded-lg px-4 py-1.5 text-xs font-extrabold transition-all ${
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-all ${
                   activeTab === "editor"
-                    ? "bg-[#1e4ca1] text-white shadow-sm"
+                    ? "bg-white text-[#1e4ca1] shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Summary Form
+                <FileText className="h-3.5 w-3.5" />
+                <span>Active Summary Form</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("archive")}
-                className={`rounded-lg px-4 py-1.5 text-xs font-extrabold transition-all ${
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-all ${
                   activeTab === "archive"
-                    ? "bg-[#1e4ca1] text-white shadow-sm"
+                    ? "bg-white text-[#1e4ca1] shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                Memory & Archive
+                <History className="h-3.5 w-3.5" />
+                <span>Memory &amp; Archive</span>
               </button>
             </div>
           </div>
 
           {activeTab === "editor" && (
-            <div className="flex flex-wrap items-center gap-2.5 sm:self-center">
+            <div className="flex flex-wrap items-center gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleSave}
-                disabled={saveMutation.isPending}
-                className="h-9 gap-1.5 border-indigo-200 text-[#1e4ca1] hover:bg-indigo-50 font-bold"
+                disabled={saveMutation.isPending || incidents.length === 0}
+                className="h-8 gap-1.5 border-indigo-200 bg-white font-bold text-[#1e4ca1] shadow-xs hover:bg-blue-50"
               >
-                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save Progress
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                <span>Save to Memory</span>
               </Button>
+
               <Button
                 size="sm"
                 onClick={handleDownload}
-                disabled={generateDocxMutation.isPending}
-                className="h-9 gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold shadow-sm"
+                disabled={generateDocxMutation.isPending || selectedKeysForExport.size === 0}
+                className="h-8 gap-1.5 bg-[#1e4ca1] hover:bg-[#162b5b] font-bold text-white shadow-xs"
               >
                 {generateDocxMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5" />
                 )}
                 Download Summary Report (DOCX) ({selectedKeysForExport.size} ticked)
               </Button>
@@ -856,7 +935,7 @@ export default function DowntimeSummary() {
 
         {activeTab === "editor" && (
           <div className="mt-5 space-y-5">
-            {/* Requirement: Executive in Charge section shall be shortened, like drop down, when click only show up */}
+            {/* Executive in Charge section: Collapsible panel */}
             <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
               <CardContent className="p-3 sm:p-4">
                 <button
@@ -953,6 +1032,56 @@ export default function DowntimeSummary() {
               </CardContent>
             </Card>
 
+            {/* Handover Drafts Bar in Active Summary Form */}
+            {activeEditorDrafts.length > 0 && (
+              <Card className="border-amber-300 bg-amber-50/60 shadow-xs">
+                <CardContent className="p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-200 text-amber-900 font-bold text-[10px]">
+                        Same-Date Shift Handover Drafts ({activeEditorDrafts.length})
+                      </Badge>
+                      <span className="text-[11px] text-slate-600 hidden sm:inline">
+                        Click &ldquo;Apply to Active Incident&rdquo; to transfer root cause, actions, and follow-up only.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 overflow-x-auto pb-1 pt-1">
+                    {activeEditorDrafts.map(d => (
+                      <div
+                        key={d.id}
+                        className="min-w-[280px] max-w-[320px] shrink-0 rounded-xl border border-amber-300 bg-white p-3 shadow-xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-black text-[#1e4ca1]">{d.rideCode}</span>
+                          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-800">
+                            {d.zone} • {d.downtimeStart || "—"} to {d.downtimeEnd || "—"}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] font-semibold text-slate-800 line-clamp-1">{d.description || "Draft entry"}</p>
+                        {d.rootCause && (
+                          <p className="text-[10px] text-slate-600 line-clamp-2 italic">
+                            Cause: {d.rootCause}
+                          </p>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => applyDraftToActiveIncident(d)}
+                          disabled={!activeIncident}
+                          className="w-full h-6 text-[10px] font-bold border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100"
+                        >
+                          <ClipboardPaste className="h-3 w-3 mr-1" />
+                          Apply to {activeIncident ? activeIncident.rideCode : "Active Incident"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid gap-6 lg:grid-cols-[330px_1fr]">
               <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm h-fit">
                 <CardContent className="p-4 space-y-4">
@@ -1032,7 +1161,6 @@ export default function DowntimeSummary() {
 
                           <div className="min-w-0 flex-1 py-3 pr-3">
                             <div className="flex items-center justify-between gap-1">
-                              {/* Requirement: ride code bold and clear font in downtime selection */}
                               <span className="font-mono text-sm font-black tracking-wide text-[#1e4ca1]">
                                 {inc.rideCode}
                               </span>
@@ -1120,7 +1248,6 @@ export default function DowntimeSummary() {
                             </td>
                           </tr>
 
-                          {/* Requirement: Recurring Downtime, Downtime No. of Day, Incident checkboxes */}
                           <tr className="border-b border-slate-300">
                             <td className="bg-slate-100 p-2.5 font-bold text-slate-700 border-r border-slate-300">
                               Recurring Downtime
@@ -1391,407 +1518,475 @@ export default function DowntimeSummary() {
 
         {activeTab === "archive" && (
           <div className="mt-5 space-y-6">
-            <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
-              <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm h-fit">
-                <CardContent className="p-4 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-[#162b5b]">Summary Calendar Memory</h3>
-                      <p className="text-[11px] text-slate-500">
-                        Selected: <strong className="text-[#1e4ca1] font-mono">{formatDisplayDate(archiveSelectedDate)}</strong>
-                      </p>
-                    </div>
+            {/* Top Action & Memory Selector Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={() => setIsCalendarDialogOpen(true)}
+                  className="h-9 gap-2 bg-[#1e4ca1] hover:bg-[#162b5b] text-white text-xs font-bold"
+                >
+                  <CalendarDays className="h-4 w-4" />
+                  <span>Choose Summary Date: {formatDisplayDate(archiveSelectedDate)}</span>
+                </Button>
+                <span className="text-xs text-slate-500 hidden sm:inline">
+                  Click to open pop-up calendar with marked summary dates.
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => archiveInputRef.current?.click()}
+                  disabled={isImportingFile}
+                  className="h-8 gap-1.5 border-indigo-300 bg-white text-xs font-bold text-[#1e4ca1] hover:bg-indigo-50"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  <span>{isImportingFile ? "Converting & Matching..." : "Import DOCX / PDF"}</span>
+                </Button>
+                <input
+                  ref={archiveInputRef}
+                  type="file"
+                  accept=".docx,.doc,.pdf"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) processArchiveFile(file);
+                  }}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
+            {/* Calendar Memory Dialog Modal */}
+            <Dialog open={isCalendarDialogOpen} onOpenChange={setIsCalendarDialogOpen}>
+              <DialogContent className="sm:max-w-md bg-white p-6 rounded-2xl shadow-xl">
+                <DialogHeader>
+                  <DialogTitle className="text-base font-extrabold text-[#162b5b] flex items-center gap-2">
                     <CalendarDays className="h-4 w-4 text-[#1e4ca1]" />
-                  </div>
+                    <span>Summary Calendar Memory</span>
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    Dates marked with blue indicator have saved web summaries or past reports.
+                  </DialogDescription>
+                </DialogHeader>
 
-                  <div className="flex justify-center">
-                    <Calendar
-                      mode="single"
-                      selected={archiveSelectedDate ? new Date(`${archiveSelectedDate}T12:00:00`) : undefined}
-                      onDayClick={day => {
-                        const y = day.getFullYear();
-                        const m = String(day.getMonth() + 1).padStart(2, "0");
-                        const d = String(day.getDate()).padStart(2, "0");
-                        setArchiveSelectedDate(`${y}-${m}-${d}`);
-                      }}
-                      weekStartsOn={1}
-                      modifiers={{
-                        savedLog: datesWithData.map(d => new Date(`${d}T12:00:00`)),
-                      }}
-                      className="rounded-xl bg-[#f8faff] p-2"
-                    />
-                  </div>
+                <div className="flex justify-center py-2">
+                  <Calendar
+                    mode="single"
+                    selected={archiveSelectedDate ? new Date(`${archiveSelectedDate}T12:00:00`) : undefined}
+                    onDayClick={day => {
+                      const y = day.getFullYear();
+                      const m = String(day.getMonth() + 1).padStart(2, "0");
+                      const d = String(day.getDate()).padStart(2, "0");
+                      setArchiveSelectedDate(`${y}-${m}-${d}`);
+                      setIsCalendarDialogOpen(false);
+                    }}
+                    weekStartsOn={1}
+                    modifiers={{
+                      savedLog: datesWithData.map(d => new Date(`${d}T12:00:00`)),
+                    }}
+                    className="rounded-xl bg-[#f8faff] p-2"
+                  />
+                </div>
 
-                  <div className="border-t border-slate-100 pt-3 space-y-2">
-                    <span className="block text-xs font-bold text-slate-700">Import Past Report (PDF/Word)</span>
-                    <p className="text-[10px] text-slate-500">
-                      Uploading replaces previous import for this date, converts PDFs to DOCX, and updates root causes &amp; actions in the table above.
-                    </p>
-                    <div
-                      onDragOver={e => {
-                        e.preventDefault();
-                        setIsArchiveDragging(true);
-                      }}
-                      onDragLeave={() => setIsArchiveDragging(false)}
-                      onDrop={e => {
-                        e.preventDefault();
-                        setIsArchiveDragging(false);
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) processArchiveFile(file);
-                      }}
-                      className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-4 text-center transition-all ${
-                        isArchiveDragging
-                          ? "border-[#1e4ca1] bg-indigo-50/90"
-                          : "border-indigo-300 bg-indigo-50/40 hover:bg-indigo-50/70"
-                      }`}
-                    >
-                      <input
-                        ref={archiveInputRef}
-                        type="file"
-                        accept=".docx,.doc,.pdf"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) processArchiveFile(file);
-                        }}
-                        className="hidden"
-                      />
+                <DialogFooter className="sm:justify-between items-center pt-2 border-t border-slate-100">
+                  <span className="text-xs text-slate-500">
+                    Selected: <strong>{formatDisplayDate(archiveSelectedDate)}</strong>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCalendarDialogOpen(false)}
+                    className="h-8 text-xs font-bold"
+                  >
+                    Done
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
-                      <FileUp className="h-5 w-5 text-[#1e4ca1] mb-1" />
-                      <span className="text-xs font-medium text-slate-700">
-                        Drag and drop DOCX / PDF report here
+            {/* Archive Table Preview for Selected Date */}
+            <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                        Archive View
                       </span>
+                      {archiveSummaryQuery.data?.summary ? (
+                        <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Saved Web Summary</Badge>
+                      ) : archiveTableRows.length > 0 ? (
+                        <Badge variant="outline" className="border-blue-300 text-[#1e4ca1] text-[10px]">Technical Log Preview</Badge>
+                      ) : null}
+                      {archiveSummaryQuery.data?.imports?.length ? (
+                        <Badge variant="outline" className="border-emerald-300 text-emerald-800 text-[10px]">
+                          Import Matched
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <h2 className="text-xl font-extrabold text-[#162b5b]">
+                      Summary Details for {formatDisplayDate(archiveSelectedDate)}
+                    </h2>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Link href={`/summary?date=${archiveSelectedDate}`}>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold border-indigo-200 text-[#1e4ca1]">
+                        Open In Editor
+                      </Button>
+                    </Link>
+                    {archiveSummaryQuery.data?.summary?.generatedFileUrl && (
+                      <a
+                        href={archiveSummaryQuery.data.summary.generatedFileUrl}
+                        download={archiveSummaryQuery.data.summary.generatedFileName || "Summary.docx"}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold h-8 gap-1.5">
+                          <Download className="h-3.5 w-3.5" />
+                          Download Generated DOCX
+                        </Button>
+                      </a>
+                    )}
+                    {archiveSummaryQuery.data?.imports?.[0]?.convertedDocxUrl && (
+                      <a
+                        href={archiveSummaryQuery.data.imports[0].convertedDocxUrl!}
+                        download={archiveSummaryQuery.data.imports[0].convertedDocxFileName || "converted.docx"}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs font-bold border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                          <Download className="h-3.5 w-3.5" />
+                          DOCX Import
+                        </Button>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {archiveTableRows.length ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <span>Zone A AM: <strong>{archiveSummaryQuery.data?.summary?.amExecutive || "—"}</strong></span>
+                      <span>Zone A PM: <strong>{archiveSummaryQuery.data?.summary?.pmExecutive || "—"}</strong></span>
+                      <span>Zone B AM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBAmExecutive || "—"}</strong></span>
+                      <span>Zone B PM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBPmExecutive || "—"}</strong></span>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-extrabold text-[10px]">
+                          <tr>
+                            <th className="p-2.5 text-left w-16">Zone</th>
+                            <th className="p-2.5 text-left w-16">Ride</th>
+                            <th className="p-2.5 text-left min-w-[180px]">Description</th>
+                            <th className="p-2.5 text-left w-24">Time</th>
+                            <th className="p-2.5 text-left w-16">Duration</th>
+                            <th className="p-2.5 text-left w-20">Recurring</th>
+                            <th className="p-2.5 text-left min-w-[200px]">Root Cause</th>
+                            <th className="p-2.5 text-left min-w-[200px]">Corrective Action</th>
+                            <th className="p-2.5 text-left min-w-[180px]">Preventive</th>
+                            <th className="p-2.5 text-left min-w-[150px]">Follow-Up</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 bg-white">
+                          {archiveTableRows.map(row => (
+                            <tr key={row.id} className="hover:bg-slate-50/80 align-top">
+                              <td className="p-2.5 font-bold text-[#1e4ca1]">{row.zone}</td>
+                              <td className="p-2.5 font-mono font-bold text-slate-800">{row.rideCode}</td>
+                              <td className="p-2.5">
+                                <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                  {row.description}
+                                </div>
+                              </td>
+                              <td className="p-2.5 whitespace-nowrap font-medium text-slate-600">{row.timeRange}</td>
+                              <td className="p-2.5 font-bold text-rose-700 whitespace-nowrap">{row.duration}</td>
+                              <td className="p-2.5 whitespace-nowrap text-[11px]">
+                                <Badge variant="outline" className={row.recurringDowntime === "Yes" ? "border-amber-400 text-amber-800 bg-amber-50" : "border-slate-200 text-slate-500"}>
+                                  {row.recurringDowntime === "Yes" ? `Yes (${row.recurringDowntimeDays || "1"})` : "No"}
+                                </Badge>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                  {renderFormattedActionText(row.rootCause)}
+                                </div>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                  {renderFormattedActionText(row.correctiveAction)}
+                                </div>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                  {renderFormattedActionText(row.preventiveAction)}
+                                </div>
+                              </td>
+                              <td className="p-2.5">
+                                <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
+                                  {row.followUpAction || "N/A"}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-500">
+                    No technical downtime or summary records found for {formatDisplayDate(archiveSelectedDate)}.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Shift Handover Drafts Section: Zone Tabs + Edit/Save + Side-by-Side View */}
+            <Card className="border-[#adbBda]/70 bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/30 shadow-sm">
+              <CardContent className="p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-amber-100 text-amber-900 text-[10px] font-extrabold">
+                        Shift Handover Drafts
+                      </Badge>
+                      <span className="text-[11px] text-slate-500">
+                        For {formatDisplayDate(archiveSelectedDate)} (Jot down info before 7:00 PM ops log upload)
+                      </span>
+                    </div>
+                    <h2 className="text-lg font-extrabold text-[#162b5b] mt-1">
+                      Pass Downtime Info to Next Shift Executive
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Zone Tabs */}
+                    <div className="flex rounded-lg bg-amber-100/70 p-0.5 text-xs font-bold">
+                      {(["ALL", "Zone A", "Zone B"] as const).map(z => (
+                        <button
+                          key={z}
+                          type="button"
+                          onClick={() => setDraftZoneFilter(z)}
+                          className={`rounded-md px-2.5 py-1 text-[11px] transition-all ${
+                            draftZoneFilter === z
+                              ? "bg-white text-amber-900 shadow-xs font-extrabold"
+                              : "text-amber-800 hover:text-amber-950"
+                          }`}
+                        >
+                          {z}
+                        </button>
+                      ))}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (isDraftFormOpen) resetDraftForm();
+                        else setIsDraftFormOpen(true);
+                      }}
+                      className="h-8 gap-1.5 text-xs font-bold border-amber-300 text-amber-900 hover:bg-amber-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>{isDraftFormOpen ? "Close Form" : "Add Handover Draft"}</span>
+                    </Button>
+                    <Badge variant="outline" className="border-amber-300 text-amber-800 text-xs">
+                      {filteredArchiveDrafts.length} draft card(s)
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Collapsible / Editable Draft Form */}
+                {isDraftFormOpen && (
+                  <form onSubmit={handleSaveOrUpdateDraft} className="rounded-xl border border-amber-300 bg-amber-50/50 p-4 space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#162b5b]">
+                      <div className="flex items-center gap-1.5">
+                        {editingDraftId ? <Edit2 className="h-4 w-4 text-[#1e4ca1]" /> : <Plus className="h-4 w-4 text-[#1e4ca1]" />}
+                        <span>{editingDraftId ? "Edit Shift Handover Draft" : "Create Shift Handover Draft Downtime"}</span>
+                      </div>
+                      {editingDraftId && (
+                        <Badge className="bg-amber-200 text-amber-900 font-mono text-[10px]">
+                          Editing #{editingDraftId}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Ride Code *</label>
+                        <Input
+                          placeholder="e.g. PTA or TTC"
+                          value={draftRideCode}
+                          onChange={e => setDraftRideCode(e.target.value)}
+                          className="mt-1 h-8 text-xs font-mono uppercase bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Zone</label>
+                        <select
+                          value={draftZone}
+                          onChange={e => setDraftZone(e.target.value as "Zone A" | "Zone B")}
+                          className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
+                        >
+                          <option value="Zone A">Zone A</option>
+                          <option value="Zone B">Zone B</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Time Down</label>
+                        <Input
+                          placeholder="e.g. 10:25"
+                          value={draftStart}
+                          onChange={e => setDraftStart(e.target.value)}
+                          className="mt-1 h-8 text-xs bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Time Up</label>
+                        <Input
+                          placeholder="e.g. 11:15"
+                          value={draftEnd}
+                          onChange={e => setDraftEnd(e.target.value)}
+                          className="mt-1 h-8 text-xs bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700">Downtime Description</label>
+                      <Input
+                        placeholder="e.g. Technical inspection on RV06 (BGM Issue)"
+                        value={draftDescription}
+                        onChange={e => setDraftDescription(e.target.value)}
+                        className="mt-1 h-8 text-xs bg-white"
+                      />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Root Cause</label>
+                        <Textarea
+                          placeholder="Suspect wiring loose..."
+                          value={draftRootCause}
+                          onChange={e => setDraftRootCause(e.target.value)}
+                          onKeyDown={e => handleNumberedListKeyDown(e, draftRootCause, setDraftRootCause)}
+                          className="mt-1 min-h-[60px] text-xs font-sans bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Corrective Action</label>
+                        <Textarea
+                          placeholder="1. Power cycle RV... (Enter for 2.)"
+                          value={draftCorrective}
+                          onChange={e => setDraftCorrective(e.target.value)}
+                          onKeyDown={e => handleNumberedListKeyDown(e, draftCorrective, setDraftCorrective)}
+                          className="mt-1 min-h-[60px] text-xs font-sans bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Preventive Action</label>
+                        <Textarea
+                          placeholder="1. Check connector... (Enter for 2.)"
+                          value={draftPreventive}
+                          onChange={e => setDraftPreventive(e.target.value)}
+                          onKeyDown={e => handleNumberedListKeyDown(e, draftPreventive, setDraftPreventive)}
+                          className="mt-1 min-h-[60px] text-xs font-sans bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700">Follow-Up Action</label>
+                        <Textarea
+                          placeholder="Check on next dark day..."
+                          value={draftFollowUp}
+                          onChange={e => setDraftFollowUp(e.target.value)}
+                          className="mt-1 min-h-[60px] text-xs font-sans bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => archiveInputRef.current?.click()}
-                        disabled={isImportingFile}
-                        className="mt-2 h-7 border-indigo-300 bg-white text-xs font-bold text-[#1e4ca1] hover:bg-indigo-50"
+                        onClick={resetDraftForm}
+                        className="h-8 text-xs text-slate-600"
                       >
-                        {isImportingFile ? "Converting & Matching..." : "Choose File"}
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={createDraftMutation.isPending || updateDraftMutation.isPending}
+                        className="h-8 gap-1.5 bg-[#1e4ca1] hover:bg-[#162b5b] text-white text-xs font-bold"
+                      >
+                        {(createDraftMutation.isPending || updateDraftMutation.isPending) ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Save className="h-3.5 w-3.5" />
+                        )}
+                        <span>{editingDraftId ? "Save Changes" : "Save Shift Draft"}</span>
                       </Button>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </form>
+                )}
 
-              <div className="space-y-6">
-                {/* Archive Table Preview for Selected Date */}
-                <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                            Archive View
-                          </span>
-                          {archiveSummaryQuery.data?.summary ? (
-                            <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Saved Web Summary</Badge>
-                          ) : archiveTableRows.length > 0 ? (
-                            <Badge variant="outline" className="border-blue-300 text-[#1e4ca1] text-[10px]">Technical Log Preview</Badge>
-                          ) : null}
-                          {archiveSummaryQuery.data?.imports?.length ? (
-                            <Badge variant="outline" className="border-emerald-300 text-emerald-800 text-[10px]">
-                              Import Matched
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <h2 className="text-xl font-extrabold text-[#162b5b]">
-                          Summary Details for {formatDisplayDate(archiveSelectedDate)}
-                        </h2>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Link href={`/summary?date=${archiveSelectedDate}`}>
-                          <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs font-bold border-indigo-200 text-[#1e4ca1]">
-                            Open In Editor
-                          </Button>
-                        </Link>
-                        {archiveSummaryQuery.data?.summary?.generatedFileUrl && (
-                          <a
-                            href={archiveSummaryQuery.data.summary.generatedFileUrl}
-                            download={archiveSummaryQuery.data.summary.generatedFileName || "Summary.docx"}
-                            target="_blank"
-                            rel="noreferrer"
+                {/* Draft Cards & Details Layout (Side-by-Side on Desktop) */}
+                {filteredArchiveDrafts.length > 0 ? (
+                  <div className="grid gap-4 lg:grid-cols-[1.1fr_1.3fr] items-start">
+                    {/* Cards list */}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {filteredArchiveDrafts.map(d => {
+                        const isSelected = selectedDraftId === d.id;
+                        return (
+                          <div
+                            key={d.id}
+                            onClick={() => setSelectedDraftId(d.id === selectedDraftId ? null : d.id)}
+                            className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
+                              isSelected
+                                ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-300 shadow-sm"
+                                : "border-slate-200 bg-white hover:border-amber-300 hover:shadow-xs"
+                            }`}
                           >
-                            <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold h-8 gap-1.5">
-                              <Download className="h-3.5 w-3.5" />
-                              Download Generated DOCX
-                            </Button>
-                          </a>
-                        )}
-                        {archiveSummaryQuery.data?.imports?.[0]?.convertedDocxUrl && (
-                          <a
-                            href={archiveSummaryQuery.data.imports[0].convertedDocxUrl!}
-                            download={archiveSummaryQuery.data.imports[0].convertedDocxFileName || "converted.docx"}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <Button size="sm" variant="outline" className="h-8 gap-1 text-xs font-bold border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-                              <Download className="h-3.5 w-3.5" />
-                              DOCX Import
-                            </Button>
-                          </a>
-                        )}
-                      </div>
-                    </div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-sm font-black text-[#1e4ca1]">{d.rideCode}</span>
+                              <Badge variant="outline" className="text-[9px] border-slate-300">{d.zone}</Badge>
+                            </div>
+                            <div className="mt-1 text-xs font-semibold text-slate-800 line-clamp-1">{d.description || "Draft incident"}</div>
+                            <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
+                              <span>{d.downtimeStart || "—"} - {d.downtimeEnd || "—"}</span>
+                              <span className="font-bold text-rose-700">{d.durationMinutes ? `${d.durationMinutes}m` : ""}</span>
+                            </div>
+                            {d.rootCause && (
+                              <p className="mt-1.5 text-[10px] text-slate-600 line-clamp-2 italic">
+                                Cause: {d.rootCause}
+                              </p>
+                            )}
 
-                    {archiveTableRows.length ? (
-                      <div className="space-y-4">
-                        <div className="flex flex-wrap gap-4 text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                          <span>Zone A AM: <strong>{archiveSummaryQuery.data?.summary?.amExecutive || "—"}</strong></span>
-                          <span>Zone A PM: <strong>{archiveSummaryQuery.data?.summary?.pmExecutive || "—"}</strong></span>
-                          <span>Zone B AM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBAmExecutive || "—"}</strong></span>
-                          <span>Zone B PM: <strong>{(archiveSummaryQuery.data?.summary as any)?.zoneBPmExecutive || "—"}</strong></span>
-                        </div>
-
-                        <div className="overflow-x-auto rounded-xl border border-slate-300 bg-white">
-                          <table className="w-full text-xs">
-                            <thead className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-extrabold text-[10px]">
-                              <tr>
-                                <th className="p-2.5 text-left w-16">Zone</th>
-                                <th className="p-2.5 text-left w-16">Ride</th>
-                                <th className="p-2.5 text-left min-w-[180px]">Description</th>
-                                <th className="p-2.5 text-left w-24">Time</th>
-                                <th className="p-2.5 text-left w-16">Duration</th>
-                                <th className="p-2.5 text-left w-20">Recurring</th>
-                                <th className="p-2.5 text-left min-w-[200px]">Root Cause</th>
-                                <th className="p-2.5 text-left min-w-[200px]">Corrective Action</th>
-                                <th className="p-2.5 text-left min-w-[180px]">Preventive</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 bg-white">
-                              {archiveTableRows.map(row => (
-                                <tr key={row.id} className="hover:bg-slate-50/80 align-top">
-                                  <td className="p-2.5 font-bold text-[#1e4ca1]">{row.zone}</td>
-                                  <td className="p-2.5 font-mono font-bold text-slate-800">{row.rideCode}</td>
-                                  <td className="p-2.5">
-                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                      {row.description}
-                                    </div>
-                                  </td>
-                                  <td className="p-2.5 whitespace-nowrap font-medium text-slate-600">{row.timeRange}</td>
-                                  <td className="p-2.5 font-bold text-rose-700 whitespace-nowrap">{row.duration}</td>
-                                  <td className="p-2.5 whitespace-nowrap text-[11px]">
-                                    <Badge variant="outline" className={row.recurringDowntime === "Yes" ? "border-amber-400 text-amber-800 bg-amber-50" : "border-slate-200 text-slate-500"}>
-                                      {row.recurringDowntime === "Yes" ? `Yes (${row.recurringDowntimeDays || "1"})` : "No"}
-                                    </Badge>
-                                  </td>
-                                  <td className="p-2.5">
-                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                      {renderFormattedActionText(row.rootCause)}
-                                    </div>
-                                  </td>
-                                  <td className="p-2.5">
-                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                      {renderFormattedActionText(row.correctiveAction)}
-                                    </div>
-                                  </td>
-                                  <td className="p-2.5">
-                                    <div className="max-h-[4.5em] overflow-y-auto leading-relaxed text-slate-700 pr-1">
-                                      {renderFormattedActionText(row.preventiveAction)}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="py-8 text-center text-xs text-slate-500">
-                        No technical downtime or summary records found for {formatDisplayDate(archiveSelectedDate)}.
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Requirement: Shift Handover Drafts section that is collapsible/expandable, and shows selected card details below */}
-                <Card className="border-[#adbBda]/70 bg-gradient-to-br from-white via-blue-50/20 to-indigo-50/30 shadow-sm">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Badge className="bg-amber-100 text-amber-900 text-[10px] font-extrabold">
-                            Shift Handover Drafts
-                          </Badge>
-                          <span className="text-[11px] text-slate-500">
-                            For {formatDisplayDate(archiveSelectedDate)} (Before 7:00 PM ops log upload)
-                          </span>
-                        </div>
-                        <h2 className="text-lg font-extrabold text-[#162b5b] mt-1">
-                          Pass Downtime Info to Next Shift Executive
-                        </h2>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setIsDraftFormOpen(prev => !prev)}
-                          className="h-8 gap-1.5 text-xs font-bold border-amber-300 text-amber-900 hover:bg-amber-50"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          <span>{isDraftFormOpen ? "Close Form" : "Add New Handover Draft"}</span>
-                        </Button>
-                        <Badge variant="outline" className="border-amber-300 text-amber-800 text-xs">
-                          {archiveDrafts.length} draft card(s)
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Collapsible Add New Draft Form */}
-                    {isDraftFormOpen && (
-                      <form onSubmit={handleAddDraft} className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-[#162b5b]">
-                          <Plus className="h-4 w-4 text-[#1e4ca1]" />
-                          <span>Create Shift Handover Draft Downtime</span>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-4">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Ride Code *</label>
-                            <Input
-                              placeholder="e.g. PTA or TTC"
-                              value={draftRideCode}
-                              onChange={e => setDraftRideCode(e.target.value)}
-                              className="mt-1 h-8 text-xs font-mono uppercase bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Zone</label>
-                            <select
-                              value={draftZone}
-                              onChange={e => setDraftZone(e.target.value as "Zone A" | "Zone B")}
-                              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800"
-                            >
-                              <option value="Zone A">Zone A</option>
-                              <option value="Zone B">Zone B</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Time Down</label>
-                            <Input
-                              placeholder="e.g. 10:25"
-                              value={draftStart}
-                              onChange={e => setDraftStart(e.target.value)}
-                              className="mt-1 h-8 text-xs bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Time Up</label>
-                            <Input
-                              placeholder="e.g. 11:15"
-                              value={draftEnd}
-                              onChange={e => setDraftEnd(e.target.value)}
-                              className="mt-1 h-8 text-xs bg-white"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700">Downtime Description</label>
-                          <Input
-                            placeholder="e.g. Technical inspection on RV06 (BGM Issue)"
-                            value={draftDescription}
-                            onChange={e => setDraftDescription(e.target.value)}
-                            className="mt-1 h-8 text-xs bg-white"
-                          />
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Root Cause</label>
-                            <Textarea
-                              placeholder="Suspect wiring loose..."
-                              value={draftRootCause}
-                              onChange={e => setDraftRootCause(e.target.value)}
-                              onKeyDown={e => handleNumberedListKeyDown(e, draftRootCause, setDraftRootCause)}
-                              className="mt-1 min-h-[60px] text-xs font-sans bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Corrective Action</label>
-                            <Textarea
-                              placeholder="1. Power cycle RV... (Enter for 2.)"
-                              value={draftCorrective}
-                              onChange={e => setDraftCorrective(e.target.value)}
-                              onKeyDown={e => handleNumberedListKeyDown(e, draftCorrective, setDraftCorrective)}
-                              className="mt-1 min-h-[60px] text-xs font-sans bg-white"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700">Preventive Action</label>
-                            <Textarea
-                              placeholder="1. Check connector... (Enter for 2.)"
-                              value={draftPreventive}
-                              onChange={e => setDraftPreventive(e.target.value)}
-                              onKeyDown={e => handleNumberedListKeyDown(e, draftPreventive, setDraftPreventive)}
-                              className="mt-1 min-h-[60px] text-xs font-sans bg-white"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setIsDraftFormOpen(false)}
-                            className="h-8 text-xs text-slate-600"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            size="sm"
-                            disabled={createDraftMutation.isPending}
-                            className="h-8 gap-1.5 bg-[#1e4ca1] hover:bg-[#162b5b] text-white text-xs font-bold"
-                          >
-                            {createDraftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                            <span>Save Shift Draft</span>
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-
-                    {/* Draft Cards View */}
-                    {archiveDrafts.length > 0 ? (
-                      <div className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
-                          {archiveDrafts.map(d => (
-                            <div
-                              key={d.id}
-                              onClick={() => setSelectedDraftId(d.id === selectedDraftId ? null : d.id)}
-                              className={`rounded-xl border p-3.5 transition-all cursor-pointer ${
-                                selectedDraftId === d.id
-                                  ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-300"
-                                  : "border-slate-200 bg-white hover:border-amber-300 hover:shadow-xs"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="font-mono text-sm font-black text-[#1e4ca1]">{d.rideCode}</span>
-                                <Badge variant="outline" className="text-[9px] border-slate-300">{d.zone}</Badge>
-                              </div>
-                              <div className="mt-1 text-xs font-semibold text-slate-800 line-clamp-1">{d.description || "Draft incident"}</div>
-                              <div className="mt-2 text-[11px] text-slate-500 flex justify-between">
-                                <span>{d.downtimeStart || "—"} - {d.downtimeEnd || "—"}</span>
-                                <span className="font-bold text-rose-700">{d.durationMinutes ? `${d.durationMinutes}m` : ""}</span>
-                              </div>
-                              {d.rootCause && (
-                                <p className="mt-1.5 text-[10px] text-slate-600 line-clamp-2 italic">
-                                  Cause: {d.rootCause}
-                                </p>
-                              )}
-                              <div className="mt-2 flex items-center justify-between pt-1 border-t border-slate-100">
-                                <span className="text-[10px] font-bold text-amber-800">
-                                  {selectedDraftId === d.id ? "Viewing below ↓" : "Click to view full"}
-                                </span>
+                            <div className="mt-3 flex items-center justify-between pt-2 border-t border-slate-100">
+                              <span className="text-[10px] font-bold text-amber-800">
+                                {isSelected ? "Viewing details →" : "Click to view"}
+                              </span>
+                              <div className="flex items-center gap-1">
                                 <Button
                                   size="sm"
                                   variant="ghost"
                                   onClick={e => {
                                     e.stopPropagation();
-                                    deleteDraftMutation.mutate({ id: d.id });
+                                    startEditDraft(d);
+                                  }}
+                                  className="h-6 px-1.5 text-xs text-[#1e4ca1] hover:bg-blue-50"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                  <span className="text-[10px] ml-1">Edit</span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    setDraftToDelete({ id: d.id, rideCode: d.rideCode });
                                   }}
                                   className="h-6 px-1.5 text-xs text-rose-600 hover:bg-rose-50"
                                 >
@@ -1800,57 +1995,126 @@ export default function DowntimeSummary() {
                                 </Button>
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                        {/* Requirement: Selected draft details displayed below the drafts section */}
-                        {selectedDraft && (
-                          <div className="rounded-xl border border-amber-300 bg-white p-4 shadow-sm space-y-3">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                              <div>
-                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
-                                  Selected Handover Draft Details
-                                </span>
-                                <h3 className="text-sm font-extrabold text-[#162b5b]">
-                                  {selectedDraft.rideCode} — {selectedDraft.zone} ({selectedDraft.downtimeStart || "—"} to {selectedDraft.downtimeEnd || "—"})
-                                </h3>
-                              </div>
+                    {/* Details Panel Side-by-Side */}
+                    <div>
+                      {selectedDraft ? (
+                        <div className="rounded-xl border border-amber-300 bg-white p-4 shadow-sm space-y-3">
+                          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div>
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700">
+                                Selected Handover Draft Details
+                              </span>
+                              <h3 className="text-sm font-extrabold text-[#162b5b]">
+                                {selectedDraft.rideCode} — {selectedDraft.zone} ({selectedDraft.downtimeStart || "—"} to {selectedDraft.downtimeEnd || "—"})
+                              </h3>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => startEditDraft(selectedDraft)}
+                                className="h-7 text-xs font-bold border-indigo-200 text-[#1e4ca1]"
+                              >
+                                <Edit2 className="h-3 w-3 mr-1" />
+                                Edit Draft
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => setSelectedDraftId(null)}
                                 className="h-7 text-xs text-slate-400 hover:text-slate-700"
                               >
-                                Close Details
+                                Close
                               </Button>
                             </div>
+                          </div>
 
-                            <div className="grid gap-3 text-xs sm:grid-cols-3">
-                              <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-                                <span className="block font-bold text-slate-700 mb-1">Root Cause</span>
-                                <p className="text-slate-600 whitespace-pre-wrap">{selectedDraft.rootCause || "—"}</p>
-                              </div>
-                              <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-                                <span className="block font-bold text-slate-700 mb-1">Corrective Action</span>
-                                <p className="text-slate-600 whitespace-pre-wrap">{selectedDraft.correctiveAction || "—"}</p>
-                              </div>
-                              <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-                                <span className="block font-bold text-slate-700 mb-1">Preventive Action</span>
-                                <p className="text-slate-600 whitespace-pre-wrap">{selectedDraft.preventiveAction || "—"}</p>
+                          <div className="space-y-2 text-xs">
+                            <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+                              <span className="block font-bold text-slate-700 mb-0.5">Downtime Description</span>
+                              <p className="text-slate-800 font-mono text-[11px]">{selectedDraft.description || "—"}</p>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+                              <span className="block font-bold text-slate-700 mb-0.5">Root Cause</span>
+                              <p className="text-slate-600 whitespace-pre-wrap">{selectedDraft.rootCause || "—"}</p>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+                              <span className="block font-bold text-slate-700 mb-0.5">Corrective Action</span>
+                              <div className="text-slate-600">
+                                {renderFormattedActionText(selectedDraft.correctiveAction)}
                               </div>
                             </div>
+
+                            <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+                              <span className="block font-bold text-slate-700 mb-0.5">Preventive Action</span>
+                              <div className="text-slate-600">
+                                {renderFormattedActionText(selectedDraft.preventiveAction)}
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+                              <span className="block font-bold text-slate-700 mb-0.5">Follow-Up Action</span>
+                              <p className="text-slate-600 whitespace-pre-wrap">{selectedDraft.followUpAction || "N/A"}</p>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/30 p-4 text-center text-xs text-amber-900">
-                        No handover drafts created for {formatDisplayDate(archiveSelectedDate)} yet. Use the button above to jot down daytime downtime before ops uploads the 7:00 PM log.
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-amber-200 bg-white/70 p-8 text-center text-xs text-slate-500">
+                          Select a handover draft card on the left to review its complete details alongside.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/30 p-6 text-center text-xs text-amber-900">
+                    No handover drafts created for {formatDisplayDate(archiveSelectedDate)} {draftZoneFilter !== "ALL" ? `under ${draftZoneFilter}` : ""} yet.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Confirmation Dialog for Draft Deletion */}
+            <Dialog open={Boolean(draftToDelete)} onOpenChange={open => !open && setDraftToDelete(null)}>
+              <DialogContent className="sm:max-w-sm bg-white p-5 rounded-2xl shadow-xl">
+                <DialogHeader>
+                  <DialogTitle className="text-sm font-extrabold text-[#162b5b]">
+                    Confirm Delete Handover Draft
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-600">
+                    Are you sure you want to delete the handover draft for <strong>{draftToDelete?.rideCode}</strong>? This action cannot be undone.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDraftToDelete(null)}
+                    className="h-8 text-xs font-semibold"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={deleteDraftMutation.isPending}
+                    onClick={() => draftToDelete && deleteDraftMutation.mutate({ id: draftToDelete.id })}
+                    className="h-8 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold gap-1"
+                  >
+                    {deleteDraftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    <span>Confirm Delete</span>
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </div>

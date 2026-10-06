@@ -249,6 +249,7 @@ export const appRouter = router({
           rootCause: z.string().nullable().optional(),
           correctiveAction: z.string().nullable().optional(),
           preventiveAction: z.string().nullable().optional(),
+          followUpAction: z.string().nullable().optional(),
           notes: z.string().nullable().optional(),
         })
       )
@@ -269,6 +270,7 @@ export const appRouter = router({
           rootCause: z.string().nullable().optional(),
           correctiveAction: z.string().nullable().optional(),
           preventiveAction: z.string().nullable().optional(),
+          followUpAction: z.string().nullable().optional(),
           notes: z.string().nullable().optional(),
         })
       )

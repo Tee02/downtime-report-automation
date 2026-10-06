@@ -3,7 +3,7 @@ import multer from "multer";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createSavedDowntimeReport, findSavedDowntimeReport, getSavedDowntimeReportsByIds } from "./db";
+import { getSavedDowntimeReportsByIds, replaceSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { combineMappedWorkbooks, processDowntimeWorkbooks, type ProcessingResult } from "./downtimeProcessor";
 import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
@@ -184,6 +184,7 @@ export type MatchedSummaryField = {
   rootCause?: string;
   correctiveAction?: string;
   preventiveAction?: string;
+  followUpAction?: string;
 };
 
 export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField[] {
@@ -254,6 +255,7 @@ export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField
     const rootMatch = /Root Cause\(s\)\s*[:\s]*([\s\S]*?)(?=(?:Corrective Action|Preventive Action|Part\(s\)|ANR|Status|$))/i.exec(chunk);
     const corrMatch = /Corrective Action\s*[:\s]*([\s\S]*?)(?=(?:Preventive Action|Part\(s\)|Follow-Up|ANR|Status|$))/i.exec(chunk);
     const prevMatch = /Preventive Action\s*[:\s]*([\s\S]*?)(?=(?:Part\(s\)|Follow-Up|ANR|Other Supporting|Status|$))/i.exec(chunk);
+    const followUpMatch = /Follow-Up Action(?:\s*\(if any\))?\s*[:\s]*([\s\S]*?)(?=(?:ANR|Other Supporting|Status|$))/i.exec(chunk);
 
     results.push({
       rideCode,
@@ -267,6 +269,7 @@ export function parseSummaryIncidentsFromText(text: string): MatchedSummaryField
       rootCause: rootMatch ? rootMatch[1].trim() : undefined,
       correctiveAction: corrMatch ? corrMatch[1].trim() : undefined,
       preventiveAction: prevMatch ? prevMatch[1].trim() : undefined,
+      followUpAction: followUpMatch ? followUpMatch[1].trim() : undefined,
     });
   }
   return results;
@@ -355,8 +358,9 @@ export function registerDowntimeRoutes(app: Express) {
       try {
         const manualClosedRideCodes = parseManualClosures(request.body.closedRideCodes);
         const weatherText = parseWeatherText(request.body.weatherText);
-        // User requirement: Every uploaded daily log is automatically saved to the website library
-        // Existing logs for the same date are skipped/not duplicated rather than dropping the whole save.
+        // Every uploaded daily log is saved to the website library. Re-uploads for
+        // the same operational date replace the saved source instead of producing
+        // duplicate or stale saved logs.
         const savePreferenceParam = request.body.saveToStorage;
         const saveToStorage = savePreferenceParam === undefined || savePreferenceParam === "" || savePreferenceParam === "true";
         let parkCloseTimes: Record<string, string> | undefined;
@@ -370,21 +374,20 @@ export function registerDowntimeRoutes(app: Express) {
         const result = await processDowntimeWorkbooks(operationsFile.buffer, await getFixedTemplate(), { manualClosedRideCodes, weatherText, parkCloseTimes });
         const reportDate = /_(\d{4}-\d{2}-\d{2})\.xlsx$/i.exec(result.outputFileName)?.[1];
         if (!reportDate) throw new Error("The generated report date could not be saved.");
-        const existingReport = await findSavedDowntimeReport(reportDate);
-        const shouldSaveReport = saveToStorage && !existingReport;
         const reportId = crypto.randomUUID();
         const stored = await storagePut(
           `downtime-reports/${reportId}/${result.outputFileName}`,
           result.outputBuffer,
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
-        if (shouldSaveReport) {
+        let replacedExisting = false;
+        if (saveToStorage) {
           const source = await storagePut(
             `downtime-logs/${reportId}/${safeFileName(operationsFile.originalname)}`,
             operationsFile.buffer,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           );
-          await createSavedDowntimeReport({
+          const replacement = await replaceSavedDowntimeReport({
             reportDate,
             sourceFileName: operationsFile.originalname,
             sourceFileUrl: source.url,
@@ -395,6 +398,7 @@ export function registerDowntimeRoutes(app: Express) {
             weatherIntervalCount: result.weatherIntervalCount,
             weatherText: weatherText?.trim() || result.weatherText || null,
           });
+          replacedExisting = replacement.replacedExisting;
         }
         return response.json({
           ...result,
@@ -402,8 +406,8 @@ export function registerDowntimeRoutes(app: Express) {
           parkCloseTimes,
           outputBuffer: undefined,
           downloadUrl: stored.url,
-          savedToLibrary: shouldSaveReport,
-          alreadyExisted: Boolean(existingReport),
+          savedToLibrary: saveToStorage,
+          replacedExisting,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : "The workbook could not be processed.";

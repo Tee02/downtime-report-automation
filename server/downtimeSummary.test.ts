@@ -25,7 +25,7 @@ describe("downtimeSummaryDocx", () => {
           recurringDowntimeDays: "3",
           incident: "No",
           rootCause: "Suspect wiring loose for audio system.",
-          correctiveAction: "Verified the issue, no fault on HMI. Power cycle RV06. Reconnected connector.",
+          correctiveAction: "1. Verified the issue, no fault on HMI.\n2. Power cycle RV06.\n3. Reconnected connector.",
           preventiveAction: "To ensure the connector is tight during weekly PM.",
           partsReplaced: "N/A",
           followUpAction: "N/A",
@@ -68,6 +68,9 @@ describe("downtimeSummaryDocx", () => {
     expect(docXml).toContain("PM – Rajesh");
     expect(docXml).toContain("Technical inspection on RV06 (BGM ISSUE)");
     expect(docXml).toContain("Duration of Downtime: 23min");
+    expect(docXml).toContain("DAILY DOWNTIME SUMMARY REPORT FORM");
+    expect(docXml).toContain("Follow-Up Action (if any)");
+    expect(docXml).toContain("Replace joystick on next dark day.");
     expect(docXml).toContain("☑ Monitoring");
     expect(docXml).toContain("☑ Yes");
     expect(docXml).toContain("☑ No");

@@ -544,7 +544,7 @@ export default function Home() {
           }),
         });
       }
-      const payload = await result.json() as ProcessingResponse & { error?: string; savedToLibrary?: boolean; alreadyExisted?: boolean };
+      const payload = await result.json() as ProcessingResponse & { error?: string; savedToLibrary?: boolean; replacedExisting?: boolean };
       if (!result.ok) throw new Error(payload.error ?? "The Mapping Excel could not be generated.");
 
       // Complete smoothly to 100%
@@ -558,10 +558,10 @@ export default function Home() {
       await utils.savedReports.list.invalidate();
 
       if (sourceMode === "upload") {
-        if (payload.savedToLibrary) {
+        if (payload.replacedExisting) {
+          toast.success("Mapping Excel generated. The previous saved downtime log for this date was replaced.");
+        } else if (payload.savedToLibrary) {
           toast.success("Mapping Excel generated and source log saved to website.");
-        } else if (payload.alreadyExisted) {
-          toast.success("Mapping Excel generated. Existing saved log was kept.");
         } else {
           toast.success("Mapping Excel generated successfully.");
         }
@@ -681,12 +681,12 @@ export default function Home() {
                           </div>
                           <div className="mt-4 flex items-start gap-2 rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-xs font-semibold leading-5 text-sky-800" role="status">
                             <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                            <span>New source logs are saved automatically. Existing logs are not duplicated.</span>
+                            <span>Source logs are saved automatically. Uploading the same reporting date replaces the older saved log.</span>
                           </div>
                           {duplicateDate && (
                             <div className="mt-3 flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-900" role="status">
                               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                              <span className="flex-1"><strong className="block">This downtime log already exists in the website.</strong>It will not be saved again.</span>
+                              <span className="flex-1"><strong className="block">This downtime log already exists in the website.</strong>Uploading it will replace the previous saved version.</span>
                               <button type="button" aria-label="Dismiss duplicate information" onClick={() => setDuplicateDate(undefined)} className="rounded p-0.5 hover:bg-white/70"><X className="h-3.5 w-3.5" /></button>
                             </div>
                           )}
@@ -852,7 +852,7 @@ export default function Home() {
                 <span className="hidden size-10 shrink-0 items-center justify-center rounded-xl border border-white/25 bg-white/10 sm:flex"><FileCheck2 className="h-5 w-5" /></span>
                 <div className="min-w-0">
                   <p className="font-extrabold">Ready to build mapping Excel.</p>
-                  <p className="mt-0.5 text-xs text-emerald-50/85">New source logs are saved automatically; existing logs are not duplicated.</p>
+                  <p className="mt-0.5 text-xs text-emerald-50/85">Source logs are saved automatically; re-uploading the same date replaces the prior saved version.</p>
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
