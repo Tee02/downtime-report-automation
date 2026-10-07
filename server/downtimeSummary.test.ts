@@ -63,12 +63,20 @@ describe("downtimeSummaryDocx", () => {
 
     const zip = await JSZip.loadAsync(buffer);
     const docXml = await zip.file("word/document.xml")?.async("string");
+    const headerXml = await zip.file("word/header1.xml")?.async("string");
+    const stylesXml = await zip.file("word/styles.xml")?.async("string");
     expect(docXml).toBeDefined();
+    expect(headerXml).toBeDefined();
+    expect(stylesXml).toBeDefined();
     expect(docXml).toContain("AM – Firdaus, Adam");
     expect(docXml).toContain("PM – Rajesh");
     expect(docXml).toContain("Technical inspection on RV06 (BGM ISSUE)");
     expect(docXml).toContain("Duration of Downtime: 23min");
-    expect(docXml).toContain("DAILY DOWNTIME SUMMARY REPORT FORM");
+    expect(headerXml).toContain("DAILY DOWNTIME SUMMARY REPORT FORM");
+    expect(headerXml).toContain("wordprocessingDrawing");
+    expect(docXml).not.toContain("DAILY DOWNTIME SUMMARY REPORT FORM");
+    expect(stylesXml).toContain('w:ascii="Cambria"');
+    expect(stylesXml).not.toContain("Segoe UI Symbol");
     expect(docXml).toContain("Follow-Up Action (if any)");
     expect(docXml).toContain("Replace joystick on next dark day.");
     expect(docXml).toContain("☑ Monitoring");

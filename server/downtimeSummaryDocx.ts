@@ -92,7 +92,7 @@ function labelPara(text: string, bold = false): Paragraph {
     runs.push(
       new TextRun({
         text: line,
-        font: "Segoe UI Symbol",
+        font: "Cambria",
         size: 20,
         bold,
         color: "000000",
@@ -114,7 +114,7 @@ function valuePara(text?: string | null, bold = false): Paragraph {
     runs.push(
       new TextRun({
         text: line,
-        font: "Segoe UI Symbol",
+        font: "Cambria",
         size: 20,
         bold,
         color: "000000",
@@ -155,14 +155,14 @@ function formattedNumberedActionParas(raw?: string | null): Paragraph[] {
           children: [
             new TextRun({
               text: `${match[1]} `,
-              font: "Segoe UI Symbol",
+              font: "Cambria",
               size: 20,
               bold: true,
               color: "000000",
             }),
             new TextRun({
               text: match[2] || "",
-              font: "Segoe UI Symbol",
+              font: "Cambria",
               size: 20,
               bold: false,
               color: "000000",
@@ -177,7 +177,7 @@ function formattedNumberedActionParas(raw?: string | null): Paragraph[] {
           children: [
             new TextRun({
               text: line,
-              font: "Segoe UI Symbol",
+              font: "Cambria",
               size: 20,
               bold: false,
               color: "000000",
@@ -221,7 +221,7 @@ function getHeaderLogoBuffer(): Buffer | null {
   return null;
 }
 
-function buildHeaderParagraph(): Paragraph {
+function buildDocumentHeader(): Header {
   const logo = getHeaderLogoBuffer();
   const children: any[] = [];
   if (logo) {
@@ -229,27 +229,31 @@ function buildHeaderParagraph(): Paragraph {
       new ImageRun({
         data: logo,
         transformation: {
-          width: 140,
-          height: 48,
+          width: 146,
+          height: 61,
         },
       } as any)
     );
-    children.push(new TextRun({ text: "   " }));
+    children.push(new TextRun({ text: " " }));
   }
   children.push(
     new TextRun({
       text: "DAILY DOWNTIME SUMMARY REPORT FORM",
-      font: "Segoe UI Symbol",
-      size: 23,
+      font: "Cambria",
+      size: 24,
       bold: true,
       color: "000000",
     })
   );
 
-  return new Paragraph({
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 40, after: 80 },
-    children,
+  return new Header({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 0 },
+        children,
+      }),
+    ],
   });
 }
 
@@ -270,9 +274,6 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     if (i > 0) {
       sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));
     }
-
-    // Page 1 header title block matching template v2
-    sectionsChildren.push(buildHeaderParagraph());
 
     // Table 1: Date & Ride, Executive
     const t0 = new Table({
@@ -307,8 +308,8 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Segoe UI Symbol", size: 20, bold: entry.recurringDowntime === "Yes" }),
-                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☐ No" : "☑ No", font: "Segoe UI Symbol", size: 20, bold: entry.recurringDowntime !== "Yes" }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Cambria", size: 20, bold: entry.recurringDowntime === "Yes" }),
+                new TextRun({ text: entry.recurringDowntime === "Yes" ? "☐ No" : "☑ No", font: "Cambria", size: 20, bold: entry.recurringDowntime !== "Yes" }),
               ],
             })], 4401),
           ],
@@ -325,8 +326,8 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
             cell([new Paragraph({
               spacing: { before: 20, after: 20 },
               children: [
-                new TextRun({ text: entry.incident === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Segoe UI Symbol", size: 20, bold: entry.incident === "Yes" }),
-                new TextRun({ text: entry.incident === "Yes" ? "☐ No" : "☑ No", font: "Segoe UI Symbol", size: 20, bold: entry.incident !== "Yes" }),
+                new TextRun({ text: entry.incident === "Yes" ? "☑ Yes   " : "☐ Yes   ", font: "Cambria", size: 20, bold: entry.incident === "Yes" }),
+                new TextRun({ text: entry.incident === "Yes" ? "☐ No" : "☑ No", font: "Cambria", size: 20, bold: entry.incident !== "Yes" }),
               ],
             })], 4401),
           ],
@@ -459,7 +460,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
       photoChildren.push(new Paragraph({
         spacing: { before: 20, after: 40 },
         children: [
-          new TextRun({ text: entry.supportInfo.trim(), font: "Segoe UI Symbol", size: 20 }),
+          new TextRun({ text: entry.supportInfo.trim(), font: "Cambria", size: 20 }),
         ],
       }));
     }
@@ -499,7 +500,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     if (!photoChildren.length) {
       photoChildren.push(new Paragraph({
         spacing: { before: 30, after: 30 },
-        children: [new TextRun({ text: "N/A", font: "Segoe UI Symbol", size: 20, color: "666666" })],
+        children: [new TextRun({ text: "N/A", font: "Cambria", size: 20, color: "666666" })],
       }));
     }
 
@@ -535,9 +536,9 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
               new Paragraph({
                 spacing: { before: 20, after: 20 },
                 children: [
-                  new TextRun({ text: isClosedStatus ? "☑ Closed   " : "☐ Closed   ", font: "Segoe UI Symbol", size: 20, bold: isClosedStatus }),
-                  new TextRun({ text: isMonitoring ? "☑ Monitoring   " : "☐ Monitoring   ", font: "Segoe UI Symbol", size: 20, bold: isMonitoring }),
-                  new TextRun({ text: isPendingParts ? "☑ Pending Parts" : "☐ Pending Parts", font: "Segoe UI Symbol", size: 20, bold: isPendingParts }),
+                  new TextRun({ text: isClosedStatus ? "☑ Closed   " : "☐ Closed   ", font: "Cambria", size: 20, bold: isClosedStatus }),
+                  new TextRun({ text: isMonitoring ? "☑ Monitoring   " : "☐ Monitoring   ", font: "Cambria", size: 20, bold: isMonitoring }),
+                  new TextRun({ text: isPendingParts ? "☑ Pending Parts" : "☐ Pending Parts", font: "Cambria", size: 20, bold: isPendingParts }),
                 ],
               }),
             ], 7105),
@@ -549,7 +550,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     const spacer = () => new Paragraph({ spacing: { before: 35, after: 35 } });
 
     // Page 1: Tables t0, t1, t2, t3, t4, t5
-    // Page 2: Header title, then Tables t6, t7, t8, t9, t10, t11
+    // Page 2: The repeating document header is retained, then Tables t6, t7, t8, t9, t10, t11
     sectionsChildren.push(
       t0, spacer(),
       t1, spacer(),
@@ -561,7 +562,6 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
 
     // Explicit page boundary to ensure 2 pages per incident
     sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));
-    sectionsChildren.push(buildHeaderParagraph());
 
     sectionsChildren.push(
       t6, spacer(),
@@ -583,16 +583,31 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
               height: 15418,
             },
             margin: {
-              top: 1400,
-              bottom: 1400,
-              left: 1750,
-              right: 1750,
+              top: 1440,
+              bottom: 1440,
+              left: 1800,
+              right: 1800,
+              header: 720,
+              footer: 720,
             },
           },
+        },
+        headers: {
+          default: buildDocumentHeader(),
         },
         children: sectionsChildren,
       },
     ],
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Cambria",
+            size: 20,
+          },
+        },
+      },
+    },
   });
 
   return await Packer.toBuffer(doc);

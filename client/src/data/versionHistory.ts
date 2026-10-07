@@ -9,9 +9,26 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.36";
+export const CURRENT_VERSION = "v1.37";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.37",
+    commit: "pending",
+    date: "2026-10-08",
+    time: "01:23 GMT+8",
+    timestamp: "2026-10-08 01:23:04",
+    title: "Cambria Summary Header Correction & Troubleshoot Wiki",
+    tasks: [
+      "Corrected generated Daily Downtime Summary reports so the official logo and report title are placed in a repeating Word header, rather than document-body content, matching the approved template structure on both pages.",
+      "Standardised all generated summary report text runs and document defaults to Cambria (Body), while retaining the approved fixed-box layout and two-page pacing per selected downtime event.",
+      "Added a new Troubleshoot Wiki page to the Studio sidebar with browse-by-ride navigation, keyword search, category filters, reference sorting, and compact single-open accordion fault cards.",
+      "Added structured visual fault references for symptoms, root causes, corrective actions, preventive actions, manual-reference previews, and read-only supporting-photo previews without exposing deletion controls.",
+      "Added a responsive Create troubleshooting card modal with ride selection, category chips, corrective/preventive fields, accessible image-upload placeholders, session-only card creation, and an operator-access information notice.",
+      "Added DOCX header/font and Troubleshoot Wiki filter regression tests, rendered DOCX header verification, desktop/mobile UI checks, full test suite, and production build validation.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.36",
     commit: "pending",
@@ -27,7 +44,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Rebuilt DOCX export to the official DailyDowntimeSummaryReport-templatev2 geometry: header branding, exact field sequence, fixed minimum box dimensions that expand only for overflow, bold numbered corrective-action prefixes, and explicit two-page pacing per selected downtime event.",
       "Extended import parsing and regression coverage for Follow-Up Action, saved-log replacement, draft persistence/editing, template content, full project tests, and production build validation.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.35",
