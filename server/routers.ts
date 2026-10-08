@@ -19,6 +19,15 @@ import {
   createDowntimeSummaryDraft,
   updateDowntimeSummaryDraft,
   deleteDowntimeSummaryDraft,
+  listFaultpediaCards,
+  createFaultpediaCard,
+  updateFaultpediaCard,
+  deleteFaultpediaCard,
+  listAnalysisDailySnapshots,
+  listAnalysisComparisonHistories,
+  createAnalysisComparisonHistory,
+  deleteAnalysisComparisonHistory,
+  clearAllAnalysisComparisonHistories,
   setDarkDay,
   setSiteContent,
   upsertUser,
@@ -161,6 +170,85 @@ export const appRouter = router({
       if (reports.length !== input.reportIds.length) throw new Error("One or more selected saved reports are no longer available.");
       return exportCompiledDowntimeLog(reports, input.rideCodes);
     }),
+    dailySnapshots: publicProcedure.query(async () => {
+      return listAnalysisDailySnapshots();
+    }),
+    comparisonHistory: router({
+      list: publicProcedure.query(async () => {
+        return listAnalysisComparisonHistories();
+      }),
+      save: publicProcedure
+        .input(z.object({ label: z.string(), scenariosJson: z.string() }))
+        .mutation(async ({ input }) => {
+          return createAnalysisComparisonHistory(input);
+        }),
+      delete: publicProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .mutation(async ({ input }) => {
+          return deleteAnalysisComparisonHistory(input.id);
+        }),
+      clearAll: publicProcedure.mutation(async () => {
+        return clearAllAnalysisComparisonHistories();
+      }),
+    }),
+  }),
+  faultpedia: router({
+    list: publicProcedure.query(async () => {
+      return listFaultpediaCards();
+    }),
+    create: publicProcedure
+      .input(
+        z.object({
+          rideCode: z.string(),
+          rideName: z.string(),
+          faultDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          title: z.string(),
+          faultCode: z.string().default("Reference"),
+          severity: z.string().default("Watch"),
+          category: z.string().default("Other"),
+          description: z.string(),
+          rootCause: z.string(),
+          correctiveAction: z.string(),
+          preventiveAction: z.string(),
+          manualScreenshotName: z.string().nullable().optional(),
+          manualScreenshotUrl: z.string().nullable().optional(),
+          supportPhotoName: z.string().nullable().optional(),
+          supportPhotoUrl: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return createFaultpediaCard(input as any);
+      }),
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          rideCode: z.string().optional(),
+          rideName: z.string().optional(),
+          faultDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          title: z.string().optional(),
+          faultCode: z.string().optional(),
+          severity: z.string().optional(),
+          category: z.string().optional(),
+          description: z.string().optional(),
+          rootCause: z.string().optional(),
+          correctiveAction: z.string().optional(),
+          preventiveAction: z.string().optional(),
+          manualScreenshotName: z.string().nullable().optional(),
+          manualScreenshotUrl: z.string().nullable().optional(),
+          supportPhotoName: z.string().nullable().optional(),
+          supportPhotoUrl: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateFaultpediaCard(id, data as any);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        return deleteFaultpediaCard(input.id);
+      }),
   }),
   downtimeSummary: router({
     getByDate: publicProcedure

@@ -1,10 +1,14 @@
+import { FLEET_RIDES } from "@/components/RideCombinationSwitch";
+
 export type FaultSeverity = "Critical" | "High" | "Watch";
 export type FaultCategory = "Electrical" | "Mechanical" | "Controls" | "Safety" | "Other";
 
 export type TroubleFault = {
-  id: string;
+  id: string | number;
+  dbId?: number;
   rideCode: string;
   rideName: string;
+  faultDate: string;
   title: string;
   faultCode: string;
   severity: FaultSeverity;
@@ -15,16 +19,19 @@ export type TroubleFault = {
   correctiveActions: string[];
   preventiveAction: string;
   manualPages: string;
+  manualScreenshotUrl?: string | null;
   supportPhotoName: string;
+  supportPhotoUrl?: string | null;
+  isDbBacked?: boolean;
 };
 
 export const WIKI_RIDES = [
   { code: "ALL", label: "All rides", subtitle: "All attractions" },
-  { code: "ETI", label: "ETI", subtitle: "Expedition Thin Ice" },
-  { code: "RCC", label: "RCC", subtitle: "Rio Carnaval Chaos" },
-  { code: "TTC", label: "TTC", subtitle: "Terraform Tower Challenge" },
-  { code: "ESD", label: "ESD", subtitle: "Global Defender" },
-  { code: "BCT", label: "BCT", subtitle: "Boot Camp" },
+  ...FLEET_RIDES.map(([code, name]) => ({
+    code,
+    label: code,
+    subtitle: name,
+  })),
 ] as const;
 
 export const WIKI_CATEGORIES: FaultCategory[] = ["Electrical", "Mechanical", "Controls", "Safety", "Other"];
@@ -34,6 +41,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     id: "eti-heartbeat",
     rideCode: "ETI",
     rideName: "Expedition Thin Ice",
+    faultDate: "2026-09-18",
     title: "Vehicle navigation communication heartbeat stopped updating",
     faultCode: "Alarms.Active.Estop1[12].2",
     severity: "Critical",
@@ -54,6 +62,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     id: "eti-motion-controller",
     rideCode: "ETI",
     rideName: "Expedition Thin Ice",
+    faultDate: "2026-09-15",
     title: "Motion controller fault — Logix",
     faultCode: "VCS15Torcs.Alarm High",
     severity: "High",
@@ -74,6 +83,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     id: "eti-lap-bar",
     rideCode: "ETI",
     rideName: "Expedition Thin Ice",
+    faultDate: "2026-09-10",
     title: "Lap bar 24V fuse control voltage tripped",
     faultCode: "LB24V.Fuse.Trip",
     severity: "Watch",
@@ -94,6 +104,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     id: "rcc-home-position",
     rideCode: "RCC",
     rideName: "Rio Carnaval Chaos",
+    faultDate: "2026-09-08",
     title: "Vehicle not at home position after cycle reset",
     faultCode: "RCC.Home.Position",
     severity: "High",
@@ -114,6 +125,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     id: "ttc-valve-response",
     rideCode: "TTC",
     rideName: "Terraform Tower Challenge",
+    faultDate: "2026-09-02",
     title: "Hydraulic valve response delay",
     faultCode: "TTC.Hydraulic.Valve.Delay",
     severity: "Watch",
@@ -132,7 +144,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
   },
 ];
 
-export type WikiSort = "referenced" | "severity" | "alphabetical";
+export type WikiSort = "referenced" | "severity" | "alphabetical" | "dateDesc" | "dateAsc";
 
 export function filterWikiFaults(
   faults: TroubleFault[],
@@ -140,6 +152,8 @@ export function filterWikiFaults(
   category: FaultCategory | "All faults",
   query: string,
   sort: WikiSort,
+  startDate?: string,
+  endDate?: string,
 ): TroubleFault[] {
   const normalizedQuery = query.trim().toLowerCase();
   const severityOrder: Record<FaultSeverity, number> = { Critical: 0, High: 1, Watch: 2 };
@@ -148,8 +162,16 @@ export function filterWikiFaults(
     .filter((fault) => rideCode === "ALL" || fault.rideCode === rideCode)
     .filter((fault) => category === "All faults" || fault.category === category)
     .filter((fault) => {
+      if (!startDate) return true;
+      return fault.faultDate >= startDate;
+    })
+    .filter((fault) => {
+      if (!endDate) return true;
+      return fault.faultDate <= endDate;
+    })
+    .filter((fault) => {
       if (!normalizedQuery) return true;
-      return [fault.title, fault.faultCode, fault.symptom, fault.rootCause, fault.rideCode]
+      return [fault.title, fault.faultCode, fault.symptom, fault.rootCause, fault.rideCode, fault.rideName]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
@@ -157,6 +179,8 @@ export function filterWikiFaults(
     .sort((a, b) => {
       if (sort === "severity") return severityOrder[a.severity] - severityOrder[b.severity] || b.references - a.references;
       if (sort === "alphabetical") return a.title.localeCompare(b.title);
+      if (sort === "dateAsc") return a.faultDate.localeCompare(b.faultDate);
+      if (sort === "dateDesc") return b.faultDate.localeCompare(a.faultDate);
       return b.references - a.references;
     });
 }

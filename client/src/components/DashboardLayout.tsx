@@ -36,7 +36,7 @@ import { toast } from "sonner";
 const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
   { icon: BarChart3, label: "Analysis studio", path: "/analysis" },
-  { icon: BookOpenCheck, label: "Troubleshoot wiki", path: "/troubleshoot-wiki" },
+  { icon: BookOpenCheck, label: "Faultpedia", path: "/troubleshoot-wiki" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
