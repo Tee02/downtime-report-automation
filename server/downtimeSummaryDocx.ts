@@ -55,25 +55,14 @@ export type SummaryReportPayload = {
 };
 
 function formatDisplayDate(dateKey: string): string {
-  const raw = (dateKey || "").trim();
-  if (raw.includes("/")) {
-    const slashParts = raw.split("/");
-    if (slashParts.length === 3) {
-      // If day/month/year or year/month/day
-      if (slashParts[0].length === 4) {
-        return `${parseInt(slashParts[2], 10)}/${parseInt(slashParts[1], 10)}/${slashParts[0]}`;
-      }
-      return `${parseInt(slashParts[0], 10)}/${parseInt(slashParts[1], 10)}/${slashParts[2]}`;
-    }
-  }
-  const parts = raw.split("-");
+  const parts = dateKey.split("-");
   if (parts.length === 3) {
     const day = parseInt(parts[2], 10);
     const month = parseInt(parts[1], 10);
     const year = parts[0];
     return `${day}/${month}/${year}`;
   }
-  return raw;
+  return dateKey;
 }
 
 function normalizeTime(val: string): string {

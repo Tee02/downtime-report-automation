@@ -9,28 +9,9 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.38";
+export const CURRENT_VERSION = "v1.37";
 
 export const VERSION_HISTORY: VersionRecord[] = [
-  {
-    version: "v1.38",
-    commit: "pending",
-    date: "2026-10-09",
-    time: "00:54 GMT+8",
-    timestamp: "2026-10-09 00:54:43",
-    title: "Persistent Faultpedia, Snapshot Heat Maps & Analysis Compare Memory",
-    tasks: [
-      "Upgraded the former Troubleshoot Wiki into persistent Faultpedia: cards now save to the website database, survive page reloads, and are available to all operators without exposing delete controls in the interface.",
-      "Expanded Faultpedia with the complete 21-attraction ride browser, ride/category/date-range filters, keyword search across fault fields, severity/recent/reference sorting, and storage-backed manual/supporting image attachments.",
-      "Added safe Faultpedia storage uploads with image validation and server-side persistence APIs, while retaining the existing reference cards as initial guidance whenever no stored card exists.",
-      "Added upload-time daily KPI snapshot storage. The Analysis Studio Heat map now reads these compact snapshots directly, so it can review saved daily trend values without reopening historical downtime workbooks.",
-      "Enhanced Analysis Studio trend controls with Bar, Line, and snapshot-backed Heat map modes; the normal Bar and Line modes retain full incident-level calculations and all existing metric cards.",
-      "Added persistent Analysis Compare history with up to 10 saved scenario pairs, one-click restore, individual deletion, and clear-all controls backed by database records rather than browser-only memory.",
-      "Corrected Daily Downtime Summary export date normalization so both uploaded date formats produce a clean D/M/YYYY date in the official Cambria report layout.",
-      "Added snapshot-upload, Faultpedia filter/persistence, DOCX header/date-format regression coverage; completed browser reload verification, full test suite, TypeScript validation, and production build validation.",
-    ],
-    isCurrent: true,
-  },
   {
     version: "v1.37",
     commit: "pending",
@@ -46,7 +27,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added a responsive Create troubleshooting card modal with ride selection, category chips, corrective/preventive fields, accessible image-upload placeholders, session-only card creation, and an operator-access information notice.",
       "Added DOCX header/font and Troubleshoot Wiki filter regression tests, rendered DOCX header verification, desktop/mobile UI checks, full test suite, and production build validation.",
     ],
-    isCurrent: false,
+    isCurrent: true,
   },
   {
     version: "v1.36",

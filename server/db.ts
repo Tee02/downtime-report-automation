@@ -7,17 +7,11 @@ import {
   InsertDowntimeSummaryDraft,
   InsertSavedDowntimeReport,
   InsertUser,
-  InsertFaultpediaCard,
-  InsertAnalysisDailySnapshot,
-  InsertAnalysisComparisonHistory,
-  analysisComparisonHistories,
-  analysisDailySnapshots,
   darkDays,
   downtimeSummaries,
   downtimeSummaryDrafts,
   downtimeSummaryEntries,
   downtimeSummaryImports,
-  faultpediaCards,
   savedDowntimeReports,
   siteContent,
   users,
@@ -329,84 +323,4 @@ export async function deleteDowntimeSummaryDraft(id: number) {
   if (!db) throw new Error("Database unavailable");
   await db.delete(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.id, id));
   return { success: true };
-}
-
-export async function listFaultpediaCards() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(faultpediaCards).orderBy(desc(faultpediaCards.faultDate), desc(faultpediaCards.id));
-}
-
-export async function createFaultpediaCard(card: InsertFaultpediaCard) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  const result = await db.insert(faultpediaCards).values(card);
-  const insertId = Number((result as any)[0]?.insertId || (result as any).insertId);
-  const inserted = await db.select().from(faultpediaCards).where(eq(faultpediaCards.id, insertId)).limit(1);
-  return inserted[0];
-}
-
-export async function updateFaultpediaCard(id: number, card: Partial<InsertFaultpediaCard>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.update(faultpediaCards).set(card).where(eq(faultpediaCards.id, id));
-  const updated = await db.select().from(faultpediaCards).where(eq(faultpediaCards.id, id)).limit(1);
-  return updated[0];
-}
-
-export async function deleteFaultpediaCard(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(faultpediaCards).where(eq(faultpediaCards.id, id));
-  return { success: true };
-}
-
-export async function saveAnalysisDailySnapshot(snapshot: InsertAnalysisDailySnapshot) {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(analysisDailySnapshots).values(snapshot).onDuplicateKeyUpdate({
-    set: {
-      reportId: snapshot.reportId,
-      snapshotJson: snapshot.snapshotJson,
-    },
-  });
-}
-
-export async function listAnalysisDailySnapshots() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(analysisDailySnapshots).orderBy(analysisDailySnapshots.reportDate);
-}
-
-export async function listAnalysisComparisonHistories() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(analysisComparisonHistories).orderBy(desc(analysisComparisonHistories.id)).limit(10);
-}
-
-export async function createAnalysisComparisonHistory(params: { label: string; scenariosJson: string }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.insert(analysisComparisonHistories).values(params);
-  // Keep only the 10 most recent entries
-  const rows = await db.select({ id: analysisComparisonHistories.id }).from(analysisComparisonHistories).orderBy(desc(analysisComparisonHistories.id));
-  if (rows.length > 10) {
-    const excessIds = rows.slice(10).map(r => r.id);
-    await db.delete(analysisComparisonHistories).where(inArray(analysisComparisonHistories.id, excessIds));
-  }
-  return listAnalysisComparisonHistories();
-}
-
-export async function deleteAnalysisComparisonHistory(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(analysisComparisonHistories).where(eq(analysisComparisonHistories.id, id));
-  return listAnalysisComparisonHistories();
-}
-
-export async function clearAllAnalysisComparisonHistories() {
-  const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
-  await db.delete(analysisComparisonHistories);
-  return [];
 }

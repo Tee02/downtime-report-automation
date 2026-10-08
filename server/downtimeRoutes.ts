@@ -3,7 +3,7 @@ import multer from "multer";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { getSavedDowntimeReportsByIds, replaceSavedDowntimeReport, saveAnalysisDailySnapshot } from "./db";
+import { getSavedDowntimeReportsByIds, replaceSavedDowntimeReport } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { combineMappedWorkbooks, processDowntimeWorkbooks, type ProcessingResult } from "./downtimeProcessor";
 import { parseParkCloseTimesFromPdf } from "./parkCloseParser";
@@ -399,28 +399,6 @@ export function registerDowntimeRoutes(app: Express) {
             weatherText: weatherText?.trim() || result.weatherText || null,
           });
           replacedExisting = replacement.replacedExisting;
-
-          // Store a compact immutable snapshot of daily KPIs and per-ride technical metrics
-          try {
-            const snapshot = {
-              reportDate,
-              totalTechnicalMinutes: result.totalTechnicalMinutes,
-              totalEvents: result.records.filter(r => !r.isClosed && !r.isFireAlarm).length,
-              totalNetworkPercentage: result.totalNetworkPercentage,
-              rides: result.summaryByRide.map(r => ({
-                rideCode: r.rideCode,
-                minutes: r.minutes,
-                events: r.events,
-                percentage: r.percentage,
-              })),
-            };
-            await saveAnalysisDailySnapshot({
-              reportDate,
-              snapshotJson: JSON.stringify(snapshot),
-            });
-          } catch (snapshotErr) {
-            console.warn("Failed to store daily analysis snapshot:", snapshotErr);
-          }
         }
         return response.json({
           ...result,

@@ -12,12 +12,11 @@ const mocks = vi.hoisted(() => ({
   findSavedDowntimeReport: vi.fn(),
   getSavedDowntimeReportsByIds: vi.fn(),
   loadSavedDowntimeReports: vi.fn(),
-  saveAnalysisDailySnapshot: vi.fn(),
 }));
 
 vi.mock("./downtimeProcessor", () => ({ combineMappedWorkbooks: mocks.combineMappedWorkbooks, processDowntimeWorkbooks: mocks.processDowntimeWorkbooks }));
 vi.mock("./storage", () => ({ storageGetSignedUrl: mocks.storageGetSignedUrl, storagePut: mocks.storagePut }));
-vi.mock("./db", () => ({ replaceSavedDowntimeReport: mocks.replaceSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds, saveAnalysisDailySnapshot: mocks.saveAnalysisDailySnapshot }));
+vi.mock("./db", () => ({ replaceSavedDowntimeReport: mocks.replaceSavedDowntimeReport, findSavedDowntimeReport: mocks.findSavedDowntimeReport, getSavedDowntimeReportsByIds: mocks.getSavedDowntimeReportsByIds }));
 vi.mock("./downtimeAnalysis", () => ({ loadSavedDowntimeReports: mocks.loadSavedDowntimeReports }));
 
 import { registerDowntimeRoutes } from "./downtimeRoutes";
@@ -75,10 +74,6 @@ describe("downtime analyze upload route", () => {
       sourceFileName: "downtime.xlsx",
       weatherIntervalCount: 2,
       weatherText: expect.stringContaining("Inclement Weather"),
-    }));
-    expect(mocks.saveAnalysisDailySnapshot).toHaveBeenCalledWith(expect.objectContaining({
-      reportDate: "2026-08-03",
-      snapshotJson: expect.stringContaining('"totalTechnicalMinutes":0'),
     }));
     const download = await fetch(`http://127.0.0.1:${port}${body.downloadUrl}`);
     expect(download.status).toBe(200);
