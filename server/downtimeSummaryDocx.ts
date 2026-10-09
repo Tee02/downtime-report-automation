@@ -550,8 +550,10 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     const spacer = () => new Paragraph({ spacing: { before: 35, after: 35 } });
 
     // Page 1: Tables t0, t1, t2, t3, t4, t5
-    // Page 2: The repeating document header is retained, then Tables t6, t7, t8, t9, t10, t11
+    // Template v2 has 1 blank line break after the header before Table 1
+    // Page 2: Has 1 blank line break before Preventive Action (Table 6)
     sectionsChildren.push(
+      spacer(),
       t0, spacer(),
       t1, spacer(),
       t2, spacer(),
@@ -564,6 +566,7 @@ export async function buildDowntimeSummaryDocx(payload: SummaryReportPayload): P
     sectionsChildren.push(new Paragraph({ children: [new PageBreak()] }));
 
     sectionsChildren.push(
+      spacer(),
       t6, spacer(),
       t7, spacer(),
       t8, spacer(),

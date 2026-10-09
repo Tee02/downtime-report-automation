@@ -15,6 +15,9 @@ import {
   savedDowntimeReports,
   siteContent,
   users,
+  faultpediaCards,
+  type FaultpediaCard,
+  type InsertFaultpediaCard,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -322,5 +325,33 @@ export async function deleteDowntimeSummaryDraft(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(downtimeSummaryDrafts).where(eq(downtimeSummaryDrafts.id, id));
+  return { success: true };
+}
+
+export async function listFaultpediaCards() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(faultpediaCards).orderBy(desc(faultpediaCards.createdAt));
+}
+
+export async function createFaultpediaCard(card: InsertFaultpediaCard) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(faultpediaCards).values(card);
+  const insertId = Number((result as any)[0]?.insertId || (result as any).insertId);
+  return db.select().from(faultpediaCards).where(eq(faultpediaCards.id, insertId)).limit(1).then(r => r[0]);
+}
+
+export async function updateFaultpediaCard(id: number, card: Partial<InsertFaultpediaCard>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(faultpediaCards).set(card).where(eq(faultpediaCards.id, id));
+  return db.select().from(faultpediaCards).where(eq(faultpediaCards.id, id)).limit(1).then(r => r[0]);
+}
+
+export async function deleteFaultpediaCard(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(faultpediaCards).where(eq(faultpediaCards.id, id));
   return { success: true };
 }

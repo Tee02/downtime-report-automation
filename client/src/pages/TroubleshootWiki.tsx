@@ -1,37 +1,46 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  AlertTriangle,
   ArrowDownUp,
   BookOpenCheck,
   Camera,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
+  ExternalLink,
   FileText,
   Gauge,
   ImagePlus,
-  Info,
   Layers3,
   LockKeyhole,
   Plus,
   Search,
-  ShieldAlert,
   SlidersHorizontal,
+  Trash2,
   Wrench,
   X,
 } from "lucide-react";
-import { ChangeEvent, useMemo, useRef, useState } from "react";
+import React, { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   FaultCategory,
-  FaultSeverity,
   filterWikiFaults,
   INITIAL_TROUBLE_FAULTS,
   TroubleFault,
@@ -39,11 +48,12 @@ import {
   WIKI_RIDES,
   WikiSort,
 } from "@/data/troubleshootWiki";
+import { trpc } from "@/lib/trpc";
 
-const severityPresentation: Record<FaultSeverity, { icon: typeof ShieldAlert; className: string }> = {
-  Critical: { icon: ShieldAlert, className: "border-rose-200 bg-rose-50 text-rose-700" },
-  High: { icon: AlertTriangle, className: "border-amber-200 bg-amber-50 text-amber-700" },
-  Watch: { icon: CircleHelp, className: "border-yellow-200 bg-yellow-50 text-yellow-800" },
+type UploadedFileState = {
+  name: string;
+  url: string;
+  size?: number;
 };
 
 const blankDraft = {
@@ -56,72 +66,167 @@ const blankDraft = {
   preventiveAction: "",
 };
 
-function ManualPreview({ label }: { label: string }) {
+function RideGlyph({ rideCode }: { rideCode: string }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-      <div className="flex h-28 items-stretch bg-gradient-to-br from-slate-100 via-white to-slate-200">
-        <div className="w-9 border-r border-slate-200 bg-slate-800 p-1.5">
-          <div className="h-1.5 w-full rounded bg-slate-500" />
-          <div className="mt-2 space-y-1">
-            <div className="h-1 w-full rounded bg-slate-600" />
-            <div className="h-1 w-3/4 rounded bg-slate-600" />
-            <div className="h-1 w-full rounded bg-slate-600" />
-          </div>
-        </div>
-        <div className="relative flex-1 p-3">
-          <div className="h-2 w-20 rounded bg-slate-400" />
-          <div className="mt-2 grid grid-cols-3 gap-1.5">
-            <span className="h-9 rounded border border-slate-300 bg-white" />
-            <span className="h-9 rounded border-2 border-rose-400 bg-rose-50" />
-            <span className="h-9 rounded border border-slate-300 bg-white" />
-          </div>
-          <div className="mt-2 h-1.5 w-4/5 rounded bg-slate-300" />
-          <div className="mt-1 h-1.5 w-3/5 rounded bg-slate-300" />
-          <span className="absolute right-2 top-2 rounded bg-rose-600 px-1.5 py-0.5 text-[8px] font-bold text-white">CHECK</span>
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5 border-t border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-600">
-        <FileText className="h-3.5 w-3.5 text-indigo-500" /> {label}
-      </div>
-    </div>
+    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-black tracking-tight text-slate-600">
+      {rideCode === "ALL" ? <Layers3 className="h-3.5 w-3.5" /> : rideCode}
+    </span>
   );
 }
 
-function SeverityChip({ severity }: { severity: FaultSeverity }) {
-  const config = severityPresentation[severity];
-  const Icon = config.icon;
-  return <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-bold ${config.className}`}><Icon className="h-3.5 w-3.5" />{severity}</span>;
-}
-
-function RideGlyph({ rideCode }: { rideCode: string }) {
-  return <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-black tracking-tight text-slate-600">{rideCode === "ALL" ? <Layers3 className="h-3.5 w-3.5" /> : rideCode}</span>;
-}
-
 export default function TroubleshootWiki() {
-  const [faults, setFaults] = useState<TroubleFault[]>(INITIAL_TROUBLE_FAULTS);
   const [selectedRide, setSelectedRide] = useState("ALL");
   const [selectedCategory, setSelectedCategory] = useState<FaultCategory | "All faults">("All faults");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<WikiSort>("referenced");
-  const [modalOpen, setModalOpen] = useState(false);
+
+  // Create card modal
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [draft, setDraft] = useState(blankDraft);
-  const [manualFile, setManualFile] = useState<File | null>(null);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [manualUpload, setManualUpload] = useState<UploadedFileState | null>(null);
+  const [photoUpload, setPhotoUpload] = useState<UploadedFileState | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Detail Pop-Up Dialog
+  const [activeFault, setActiveFault] = useState<TroubleFault | null>(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+
   const rideScrollerRef = useRef<HTMLDivElement>(null);
 
+  // DB queries and mutations
+  const trpcUtils = trpc.useUtils();
+  const { data: dbCards, isLoading } = trpc.faultpedia.list.useQuery();
+  const createMutation = trpc.faultpedia.create.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.faultpedia.list.invalidate();
+      toast.success("Faultpedia card saved to the website system.");
+      setCreateModalOpen(false);
+      setDraft(blankDraft);
+      setManualUpload(null);
+      setPhotoUpload(null);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to save card.");
+    },
+  });
+
+  // Combine DB cards with initial reference cards if none exist in DB
+  const allFaults: TroubleFault[] = useMemo(() => {
+    const savedCards = (dbCards || []).map((c) => {
+        const parsedActions = c.correctiveAction
+          ? c.correctiveAction
+              .split(/\r?\n|(?=\d+\.\s)/)
+              .map((item) => item.replace(/^\d+\.\s*/, "").trim())
+              .filter(Boolean)
+          : [];
+        return {
+          id: `db-${c.id}`,
+          dbId: c.id,
+          rideCode: c.rideCode,
+          rideName: c.rideName,
+          faultDate: c.faultDate,
+          title: c.title,
+          faultCode: c.faultCode || "Reference",
+          category: (c.category as FaultCategory) || "Other",
+          references: c.referenceCount || 0,
+          symptom: c.description,
+          rootCause: c.rootCause,
+          correctiveActions: parsedActions.length ? parsedActions : [c.correctiveAction],
+          preventiveAction: c.preventiveAction,
+          manualScreenshotName: c.manualScreenshotName,
+          manualScreenshotUrl: c.manualScreenshotUrl,
+          supportPhotoName: c.supportPhotoName,
+          supportPhotoUrl: c.supportPhotoUrl,
+          createdAt: c.createdAt,
+        };
+      });
+
+    // The supplied reference cards remain available as a starter library. Saved
+    // site records appear first and remain visible together with those references.
+    return [...savedCards, ...INITIAL_TROUBLE_FAULTS];
+  }, [dbCards]);
+
   const displayedFaults = useMemo(
-    () => filterWikiFaults(faults, selectedRide, selectedCategory, query, sort),
-    [faults, selectedRide, selectedCategory, query, sort],
+    () => filterWikiFaults(allFaults, selectedRide, selectedCategory, query, sort),
+    [allFaults, selectedRide, selectedCategory, query, sort]
   );
+
   const visibleRideLabel = selectedRide === "ALL" ? "All rides" : selectedRide;
-  const activeCards = faults.length;
-  const coveredRides = new Set(faults.map((fault) => fault.rideCode)).size;
+  const activeCards = allFaults.length;
+  const coveredRides = new Set(allFaults.map((fault) => fault.rideCode)).size;
 
-  const scrollRides = (direction: number) => rideScrollerRef.current?.scrollBy({ left: direction * 240, behavior: "smooth" });
-  const updateDraft = (key: keyof typeof blankDraft, value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  const scrollRides = (direction: number) =>
+    rideScrollerRef.current?.scrollBy({ left: direction * 240, behavior: "smooth" });
 
-  const handleFile = (setter: (file: File | null) => void) => (event: ChangeEvent<HTMLInputElement>) => {
-    setter(event.target.files?.[0] ?? null);
+  const updateDraft = (key: keyof typeof blankDraft, value: string) =>
+    setDraft((current) => ({ ...current, [key]: value }));
+
+  // Auto-numbering handler for textareas (Corrective Action & Preventive Action)
+  const handleAutoNumberKeyDown = (
+    field: "correctiveAction" | "preventiveAction",
+    event: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      const textarea = event.currentTarget;
+      const cursor = textarea.selectionStart;
+      const text = textarea.value;
+      const lineStart = text.lastIndexOf("\n", cursor - 1) + 1;
+      const currentLine = text.substring(lineStart, cursor);
+      const match = currentLine.match(/^(\d+)\.\s*(.*)$/);
+
+      if (match) {
+        event.preventDefault();
+        const currentNumber = parseInt(match[1], 10);
+        const nextNumber = currentNumber + 1;
+        const insertText = `\n${nextNumber}. `;
+        const newText = text.substring(0, cursor) + insertText + text.substring(cursor);
+
+        updateDraft(field, newText);
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = cursor + insertText.length;
+        }, 0);
+      }
+    }
+  };
+
+  // Upload file helper via /api/downtime/summary-upload
+  const uploadAttachment = async (file: File): Promise<UploadedFileState> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/downtime/summary-upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to upload image.");
+    }
+    const data = await res.json();
+    return {
+      name: file.name,
+      url: data.fileUrl,
+      size: file.size,
+    };
+  };
+
+  const handleFileUpload = async (
+    file: File,
+    setter: (state: UploadedFileState | null) => void
+  ) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose a PNG, JPG, or WEBP image file.");
+      return;
+    }
+    try {
+      setIsUploading(true);
+      const uploaded = await uploadAttachment(file);
+      setter(uploaded);
+      toast.success(`Uploaded ${file.name}`);
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const saveCard = () => {
@@ -130,35 +235,31 @@ export default function TroubleshootWiki() {
       return;
     }
     const ride = WIKI_RIDES.find((item) => item.code === draft.rideCode);
-    const actions = draft.correctiveAction.split(/\r?\n|(?=\d+\.\s)/).map((item) => item.replace(/^\d+\.\s*/, "").trim()).filter(Boolean);
-    const id = `custom-${Date.now()}`;
-    setFaults((current) => [
-      {
-        id,
-        rideCode: draft.rideCode,
-        rideName: ride?.subtitle || draft.rideCode,
-        title: draft.title.trim(),
-        faultCode: "New reference",
-        severity: "Watch",
-        category: draft.category,
-        references: 0,
-        symptom: draft.symptom.trim(),
-        rootCause: draft.rootCause.trim(),
-        correctiveActions: actions.length ? actions : ["Review the incident and complete the approved troubleshooting steps."],
-        preventiveAction: draft.preventiveAction.trim() || "Add a planned preventive action.",
-        manualPages: manualFile ? manualFile.name : "Manual reference pending",
-        supportPhotoName: photoFile ? photoFile.name : "No supporting photo attached",
-      },
-      ...current,
-    ]);
-    setSelectedRide(draft.rideCode);
-    setSelectedCategory("All faults");
-    setQuery("");
-    setDraft(blankDraft);
-    setManualFile(null);
-    setPhotoFile(null);
-    setModalOpen(false);
-    toast.success("Troubleshooting card added for this session.");
+
+    createMutation.mutate({
+      rideCode: draft.rideCode,
+      rideName: ride?.subtitle || draft.rideCode,
+      title: draft.title.trim(),
+      faultCode: "Reference",
+      severity: "Watch",
+      category: draft.category,
+      description: draft.symptom.trim(),
+      rootCause: draft.rootCause.trim(),
+      correctiveAction:
+        draft.correctiveAction.trim() ||
+        "Review the incident and complete approved troubleshooting steps.",
+      preventiveAction: draft.preventiveAction.trim() || "Add a planned preventive action.",
+      referenceCount: 0,
+      manualScreenshotName: manualUpload ? manualUpload.name : null,
+      manualScreenshotUrl: manualUpload ? manualUpload.url : null,
+      supportPhotoName: photoUpload ? photoUpload.name : null,
+      supportPhotoUrl: photoUpload ? photoUpload.url : null,
+    });
+  };
+
+  const openFaultDetail = (fault: TroubleFault) => {
+    setActiveFault(fault);
+    setDetailModalOpen(true);
   };
 
   return (
@@ -166,90 +267,715 @@ export default function TroubleshootWiki() {
       <div className="mx-auto max-w-[1500px] space-y-5 pb-10">
         <header className="flex flex-col justify-between gap-4 border-b border-[#9facd3]/55 pb-5 sm:flex-row sm:items-start">
           <div>
-            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#5b6aa4]"><BookOpenCheck className="h-3.5 w-3.5" /> Technical reference library</p>
-            <h1 className="text-3xl font-black tracking-tight text-[#22305e] sm:text-4xl">Troubleshoot Wiki</h1>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">Find common ride faults, root causes, corrective actions, preventive actions, and manual references.</p>
+            <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#5b6aa4]">
+              <BookOpenCheck className="h-3.5 w-3.5" /> Technical reference library
+            </p>
+            <h1 className="text-3xl font-black tracking-tight text-[#22305e] sm:text-4xl">
+              Faultpedia
+            </h1>
+            <p className="mt-1.5 max-w-2xl text-sm text-slate-600">
+              Find common ride faults, root causes, corrective actions, preventive actions, and manual references across all attractions.
+            </p>
           </div>
-          <Button onClick={() => setModalOpen(true)} className="h-10 shrink-0 gap-2 bg-emerald-700 px-4 font-bold text-white shadow-lg shadow-emerald-900/15 hover:bg-emerald-800"><Plus className="h-4 w-4" />Create troubleshooting card</Button>
+          <Button
+            onClick={() => setCreateModalOpen(true)}
+            className="h-10 shrink-0 gap-2 bg-emerald-700 px-4 font-bold text-white shadow-lg shadow-emerald-900/15 hover:bg-emerald-800"
+          >
+            <Plus className="h-4 w-4" />
+            Create troubleshooting card
+          </Button>
         </header>
 
+        {/* Ride Navigator: All 21 rides */}
         <section className="rounded-2xl border border-[#b3bfdc]/65 bg-white/95 p-4 shadow-[0_12px_30px_rgba(55,71,132,0.08)] sm:p-5">
-          <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-sm font-extrabold text-[#27345e]">Browse by ride</h2><span className="text-xs text-slate-500">Swipe or use arrows to explore</span></div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-extrabold text-[#27345e]">Browse by ride</h2>
+            <span className="text-xs text-slate-500">Swipe or use arrows to explore all 21 attractions</span>
+          </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => scrollRides(-1)} aria-label="Scroll ride navigator left" className="h-9 w-9 shrink-0 border-slate-200 bg-white"><ChevronLeft className="h-4 w-4" /></Button>
-            <div ref={rideScrollerRef} className="flex flex-1 snap-x gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Browse faults by ride">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => scrollRides(-1)}
+              aria-label="Scroll ride navigator left"
+              className="h-9 w-9 shrink-0 border-slate-200 bg-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div
+              ref={rideScrollerRef}
+              className="flex flex-1 snap-x gap-2 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+              aria-label="Browse faults by ride"
+            >
               {WIKI_RIDES.map((ride) => {
                 const active = selectedRide === ride.code;
-                return <button key={ride.code} role="tab" aria-selected={active} onClick={() => setSelectedRide(ride.code)} className={`min-w-[150px] snap-start rounded-xl border px-3 py-2.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${active ? "border-emerald-300 bg-emerald-50 shadow-sm" : "border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white"}`}>
-                  <div className="flex items-center gap-2"><RideGlyph rideCode={ride.code} /><div><p className={`text-xs font-extrabold ${active ? "text-emerald-800" : "text-slate-700"}`}>{ride.label}</p><p className="mt-0.5 truncate text-[10px] text-slate-500">{ride.subtitle}</p></div></div>
-                </button>;
+                return (
+                  <button
+                    key={ride.code}
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setSelectedRide(ride.code)}
+                    className={`min-w-[160px] snap-start rounded-xl border px-3 py-2.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 ${
+                      active
+                        ? "border-emerald-400 bg-emerald-50 shadow-sm"
+                        : "border-slate-200 bg-slate-50/70 hover:border-slate-300 hover:bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <RideGlyph rideCode={ride.code} />
+                      <div className="min-w-0 flex-1">
+                        <p className={`truncate text-xs font-extrabold ${active ? "text-emerald-800" : "text-slate-700"}`}>
+                          {ride.label}
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-slate-500">{ride.subtitle}</p>
+                      </div>
+                    </div>
+                  </button>
+                );
               })}
             </div>
-            <Button variant="outline" size="icon" onClick={() => scrollRides(1)} aria-label="Scroll ride navigator right" className="h-9 w-9 shrink-0 border-slate-200 bg-white"><ChevronRight className="h-4 w-4" /></Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => scrollRides(1)}
+              aria-label="Scroll ride navigator right"
+              className="h-9 w-9 shrink-0 border-slate-200 bg-white"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_278px]">
           <main className="space-y-4">
+            {/* Filter Bar: search, limited 3 categories, sort */}
             <section className="rounded-2xl border border-[#b3bfdc]/65 bg-white/95 p-4 shadow-[0_12px_30px_rgba(55,71,132,0.08)] sm:p-5">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="relative min-w-0 flex-1"><Label htmlFor="fault-search" className="sr-only">Search troubleshoot wiki</Label><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input id="fault-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search fault code, symptom, or keyword" className="h-10 border-slate-200 bg-slate-50 pl-9 shadow-none focus-visible:border-emerald-500" /></div>
-                <div className="flex flex-wrap gap-1.5" aria-label="Fault category filters">
-                  {(["All faults", ...WIKI_CATEGORIES] as const).map((category) => <button key={category} onClick={() => setSelectedCategory(category)} className={`rounded-full px-3 py-2 text-xs font-bold transition-colors ${selectedCategory === category ? "bg-emerald-700 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{category}</button>)}
+                <div className="relative min-w-0 flex-1">
+                  <Label htmlFor="fault-search" className="sr-only">
+                    Search Faultpedia
+                  </Label>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    id="fault-search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search fault code, title, symptom, or keyword"
+                    className="h-10 border-slate-200 bg-slate-50 pl-9 shadow-none focus-visible:border-emerald-500"
+                  />
                 </div>
-                <Select value={sort} onValueChange={(value) => setSort(value as WikiSort)}><SelectTrigger aria-label="Sort troubleshoot cards" className="h-10 w-full border-slate-200 bg-white text-xs font-bold text-slate-700 lg:w-[165px]"><span className="flex items-center gap-2"><ArrowDownUp className="h-3.5 w-3.5 text-slate-500" /><SelectValue /></span></SelectTrigger><SelectContent><SelectItem value="referenced">Most referenced</SelectItem><SelectItem value="severity">Severity</SelectItem><SelectItem value="alphabetical">A–Z</SelectItem></SelectContent></Select>
+                <div className="flex flex-wrap gap-1.5" aria-label="Fault category filters">
+                  {(["All faults", ...WIKI_CATEGORIES] as const).map((category) => (
+                    <button
+                      key={category}
+                      onClick={() => setSelectedCategory(category)}
+                      className={`rounded-full px-3 py-2 text-xs font-bold transition-colors ${
+                        selectedCategory === category
+                          ? "bg-emerald-700 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+                <Select value={sort} onValueChange={(value) => setSort(value as WikiSort)}>
+                  <SelectTrigger
+                    aria-label="Sort fault cards"
+                    className="h-10 w-full border-slate-200 bg-white text-xs font-bold text-slate-700 lg:w-[165px]"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ArrowDownUp className="h-3.5 w-3.5 text-slate-500" />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="referenced">Most referenced</SelectItem>
+                    <SelectItem value="recent">Newest saved</SelectItem>
+                    <SelectItem value="alphabetical">A–Z</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </section>
 
+            {/* Fault Cards Listing: Click opens Window Pop-Up, NO severity tag */}
             <section className="rounded-2xl border border-[#b3bfdc]/65 bg-white/95 shadow-[0_12px_30px_rgba(55,71,132,0.08)]">
-              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><p className="text-sm font-extrabold text-[#27345e]">Common faults · {visibleRideLabel}</p><p className="mt-0.5 text-xs text-slate-500">Open one card at a time for a focused troubleshooting flow.</p></div><span className="text-xs font-semibold text-slate-500">{displayedFaults.length} fault{displayedFaults.length === 1 ? "" : "s"}</span></div>
-              {displayedFaults.length ? <Accordion type="single" collapsible className="divide-y divide-slate-200 px-2 sm:px-4">{displayedFaults.map((fault) => <FaultAccordion key={fault.id} fault={fault} />)}</Accordion> : <div className="px-6 py-12 text-center"><SlidersHorizontal className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-3 text-sm font-bold text-slate-600">No matching fault cards</p><p className="mt-1 text-xs text-slate-500">Adjust the ride, category, or search term.</p></div>}
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <p className="text-sm font-extrabold text-[#27345e]">
+                    Fault cards · {visibleRideLabel}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Click any fault card to open its troubleshooting window pop-up with full details and photos.
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-slate-500">
+                  {displayedFaults.length} card{displayedFaults.length === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {isLoading ? (
+                <div className="py-16 text-center text-xs font-bold text-slate-400">
+                  Loading Faultpedia records...
+                </div>
+              ) : displayedFaults.length ? (
+                <div className="divide-y divide-slate-100 p-2 sm:p-4">
+                  {displayedFaults.map((fault) => (
+                    <button
+                      key={fault.id}
+                      onClick={() => openFaultDetail(fault)}
+                      className="group flex w-full items-center justify-between gap-3 rounded-xl p-3.5 text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <RideGlyph rideCode={fault.rideCode} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-extrabold text-slate-800 group-hover:text-emerald-800">
+                            {fault.title}
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Fault code · <span className="font-mono font-semibold text-slate-700">{fault.faultCode}</span>
+                            <span className="mx-1.5 text-slate-300">•</span>
+                            <span className="font-semibold text-slate-600">{fault.rideCode}</span>
+                            <span className="text-slate-400"> ({fault.rideName})</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-2">
+                        {/* Only category badge, NO severity tag as requested */}
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                          {fault.category}
+                        </span>
+                        {(fault.supportPhotoUrl || fault.manualScreenshotUrl) && (
+                          <span
+                            title="Has photo attachment"
+                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"
+                          >
+                            <Camera className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                        <span className="text-xs font-bold text-emerald-700 group-hover:translate-x-0.5 transition-transform">
+                          Open →
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-6 py-12 text-center">
+                  <SlidersHorizontal className="mx-auto h-7 w-7 text-slate-300" />
+                  <p className="mt-3 text-sm font-bold text-slate-600">No matching fault cards</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Adjust the ride, category, or search term, or create a new card.
+                  </p>
+                </div>
+              )}
             </section>
           </main>
 
+          {/* Quick reference sidebar */}
           <aside className="h-fit rounded-2xl border border-[#b3bfdc]/65 bg-white/95 p-4 shadow-[0_12px_30px_rgba(55,71,132,0.08)] xl:sticky xl:top-5">
-            <div className="flex items-center gap-2"><Gauge className="h-4 w-4 text-indigo-600" /><h2 className="text-sm font-extrabold text-[#27345e]">Quick reference</h2></div>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
-              <MetricTile icon={FileText} value={String(activeCards)} label="Active cards" tone="text-indigo-600 bg-indigo-50" />
-              <MetricTile icon={Layers3} value={String(coveredRides)} label="Rides covered" tone="text-blue-600 bg-blue-50" />
-              <MetricTile icon={Wrench} value="6" label="Updated this month" tone="text-emerald-700 bg-emerald-50" />
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-indigo-600" />
+              <h2 className="text-sm font-extrabold text-[#27345e]">Quick reference</h2>
             </div>
-            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/65 p-3 text-xs leading-relaxed text-indigo-800"><p className="font-bold">Operational note</p><p className="mt-1 text-indigo-700">Use the approved ride process and safety requirements before applying any reference action.</p></div>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1">
+              <MetricTile
+                icon={FileText}
+                value={String(activeCards)}
+                label="Active cards"
+                tone="text-indigo-600 bg-indigo-50"
+              />
+              <MetricTile
+                icon={Layers3}
+                value={String(coveredRides)}
+                label="Rides covered"
+                tone="text-blue-600 bg-blue-50"
+              />
+              <MetricTile
+                icon={Wrench}
+                value={String(allFaults.filter((f) => !!f.dbId).length || "6")}
+                label="Saved records"
+                tone="text-emerald-700 bg-emerald-50"
+              />
+            </div>
+            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/65 p-3 text-xs leading-relaxed text-indigo-800">
+              <p className="font-bold">Operational note</p>
+              <p className="mt-1 text-indigo-700">
+                Use approved ride procedures and safety requirements before applying any reference action.
+              </p>
+            </div>
           </aside>
         </div>
       </div>
 
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent showCloseButton={false} className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl sm:max-w-5xl" aria-describedby="troubleshoot-card-subtitle">
-          <DialogHeader className="border-b border-slate-200 px-5 py-5 sm:px-7"><div className="flex items-start justify-between gap-3"><div><DialogTitle className="text-xl font-black text-[#24325e]">Create troubleshooting card</DialogTitle><DialogDescription id="troubleshoot-card-subtitle" className="mt-1 text-sm">Turn a recurring downtime incident into a reusable troubleshooting reference.</DialogDescription></div><button onClick={() => setModalOpen(false)} aria-label="Close create troubleshooting card modal" className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"><X className="h-5 w-5" /></button></div></DialogHeader>
+      {/* DETAIL WINDOW POP-UP DIALOG */}
+      <Dialog open={detailModalOpen} onOpenChange={setDetailModalOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[92vh] max-w-4xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl sm:max-w-4xl"
+          aria-describedby="fault-detail-subtitle"
+        >
+          {activeFault && (
+            <div>
+              <DialogHeader className="border-b border-slate-200 bg-slate-50/80 px-6 py-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RideGlyph rideCode={activeFault.rideCode} />
+                      <span className="font-mono text-xs font-extrabold text-slate-700">
+                        {activeFault.rideCode} · {activeFault.rideName}
+                      </span>
+                      <span className="rounded-full bg-slate-200/80 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
+                        {activeFault.category}
+                      </span>
+                    </div>
+                    <DialogTitle className="mt-2 text-xl font-black text-[#24325e]">
+                      {activeFault.title}
+                    </DialogTitle>
+                    <DialogDescription id="fault-detail-subtitle" className="mt-0.5 text-xs text-slate-500">
+                      Fault code: <span className="font-mono font-semibold text-slate-700">{activeFault.faultCode}</span>
+                    </DialogDescription>
+                  </div>
+                  <button
+                    onClick={() => setDetailModalOpen(false)}
+                    aria-label="Close fault window"
+                    className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </DialogHeader>
+
+              <div className="space-y-4 px-6 py-5">
+                <DetailPanel label="Symptom">
+                  <p className="text-sm text-slate-800">{activeFault.symptom}</p>
+                </DetailPanel>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <DetailPanel label="Root cause" className="border-amber-200 bg-amber-50/60 text-amber-950">
+                    <p className="text-sm font-medium">{activeFault.rootCause}</p>
+                  </DetailPanel>
+
+                  <DetailPanel label="Preventive action" className="border-blue-200 bg-blue-50/60 text-blue-950">
+                    <p className="text-sm font-medium whitespace-pre-line">{activeFault.preventiveAction}</p>
+                  </DetailPanel>
+                </div>
+
+                <DetailPanel label="Corrective action">
+                  <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-800">
+                    {activeFault.correctiveActions.map((action, index) => (
+                      <li key={`${activeFault.id}-ca-${index}`} className="leading-relaxed">
+                        {action}
+                      </li>
+                    ))}
+                  </ol>
+                </DetailPanel>
+
+                {/* Photo and Manual display section */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  {/* Manual Screenshot */}
+                  <div>
+                    <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600">
+                      Manual Screenshot / Reference
+                    </p>
+                    {activeFault.manualScreenshotUrl ? (
+                      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                        <img
+                          src={activeFault.manualScreenshotUrl}
+                          alt={activeFault.manualScreenshotName || "Manual screenshot"}
+                          className="max-h-64 w-full object-contain bg-slate-100"
+                        />
+                        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-xs">
+                          <span className="truncate font-semibold text-slate-700">
+                            {activeFault.manualScreenshotName || "Manual Screenshot"}
+                          </span>
+                          <a
+                            href={activeFault.manualScreenshotUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:underline"
+                          >
+                            Full size <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-400">
+                        No manual screenshot attached
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Supporting Photo */}
+                  <div>
+                    <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600">
+                      Supporting Photo
+                    </p>
+                    {activeFault.supportPhotoUrl ? (
+                      <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                        <img
+                          src={activeFault.supportPhotoUrl}
+                          alt={activeFault.supportPhotoName || "Supporting photo"}
+                          className="max-h-64 w-full object-contain bg-slate-100"
+                        />
+                        <div className="flex items-center justify-between border-t border-slate-200 bg-white px-3 py-2 text-xs">
+                          <span className="truncate font-semibold text-slate-700">
+                            {activeFault.supportPhotoName || "Supporting Photo"}
+                          </span>
+                          <a
+                            href={activeFault.supportPhotoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-bold text-emerald-700 hover:underline"
+                          >
+                            Full size <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-xs text-slate-400">
+                        No supporting photo attached
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+                <Button onClick={() => setDetailModalOpen(false)} className="bg-slate-700 text-white hover:bg-slate-800">
+                  Close window
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* CREATE TROUBLESHOOTING CARD MODAL */}
+      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl sm:max-w-5xl"
+          aria-describedby="troubleshoot-card-subtitle"
+        >
+          <DialogHeader className="border-b border-slate-200 px-5 py-5 sm:px-7">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogTitle className="text-xl font-black text-[#24325e]">
+                  Create troubleshooting card
+                </DialogTitle>
+                <DialogDescription id="troubleshoot-card-subtitle" className="mt-1 text-sm">
+                  Turn a recurring downtime incident into a permanent troubleshooting reference in Faultpedia.
+                </DialogDescription>
+              </div>
+              <button
+                onClick={() => setCreateModalOpen(false)}
+                aria-label="Close create troubleshooting card modal"
+                className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </DialogHeader>
+
           <div className="grid gap-6 px-5 py-5 sm:px-7 lg:grid-cols-2">
             <div className="space-y-4">
-              <div><Label htmlFor="wiki-ride">Ride</Label><Select value={draft.rideCode} onValueChange={(value) => updateDraft("rideCode", value)}><SelectTrigger id="wiki-ride" className="mt-1.5 h-10 w-full"><SelectValue placeholder="Select a ride" /></SelectTrigger><SelectContent>{WIKI_RIDES.filter((ride) => ride.code !== "ALL").map((ride) => <SelectItem key={ride.code} value={ride.code}>{ride.code} · {ride.subtitle}</SelectItem>)}</SelectContent></Select></div>
-              <div><Label htmlFor="wiki-title">Fault title</Label><Input id="wiki-title" value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} placeholder="e.g. Brief descriptive title" className="mt-1.5 h-10" /></div>
-              <div><Label>Category</Label><div className="mt-1.5 flex flex-wrap gap-1.5">{WIKI_CATEGORIES.map((category) => <button key={category} onClick={() => updateDraft("category", category)} className={`rounded-full px-3 py-2 text-xs font-bold ${draft.category === category ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{category}</button>)}</div></div>
-              <div><Label htmlFor="wiki-symptom">Symptom</Label><Textarea id="wiki-symptom" value={draft.symptom} onChange={(event) => updateDraft("symptom", event.target.value)} placeholder="Describe the fault or symptom" className="mt-1.5 min-h-28 resize-y" /></div>
-              <div><Label htmlFor="wiki-cause">Root cause</Label><Textarea id="wiki-cause" value={draft.rootCause} onChange={(event) => updateDraft("rootCause", event.target.value)} placeholder="What is the likely root cause?" className="mt-1.5 min-h-28 resize-y" /></div>
+              {/* All 21 rides available in dropdown */}
+              <div>
+                <Label htmlFor="wiki-ride">Ride (All 21 attractions)</Label>
+                <Select value={draft.rideCode} onValueChange={(value) => updateDraft("rideCode", value)}>
+                  <SelectTrigger id="wiki-ride" className="mt-1.5 h-10 w-full">
+                    <SelectValue placeholder="Select an attraction" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {WIKI_RIDES.filter((ride) => ride.code !== "ALL").map((ride) => (
+                      <SelectItem key={ride.code} value={ride.code}>
+                        <span className="font-bold text-slate-800">{ride.code}</span> · {ride.subtitle}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="wiki-title">Fault title</Label>
+                <Input
+                  id="wiki-title"
+                  value={draft.title}
+                  onChange={(event) => updateDraft("title", event.target.value)}
+                  placeholder="e.g. 24V Fuse Control Voltage Lap Bar Tripped"
+                  className="mt-1.5 h-10"
+                />
+              </div>
+
+              {/* Categories limited to: Electrical & Mechanical & Other */}
+              <div>
+                <Label>Category</Label>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {WIKI_CATEGORIES.map((category) => (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => updateDraft("category", category)}
+                      className={`rounded-full px-4 py-2 text-xs font-bold transition ${
+                        draft.category === category
+                          ? "bg-emerald-700 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="wiki-symptom">Symptom / Description</Label>
+                <Textarea
+                  id="wiki-symptom"
+                  value={draft.symptom}
+                  onChange={(event) => updateDraft("symptom", event.target.value)}
+                  placeholder="Describe what occurs when the fault happens..."
+                  className="mt-1.5 min-h-24 resize-y"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="wiki-cause">Root cause</Label>
+                <Textarea
+                  id="wiki-cause"
+                  value={draft.rootCause}
+                  onChange={(event) => updateDraft("rootCause", event.target.value)}
+                  placeholder="What is the root cause found during inspection?"
+                  className="mt-1.5 min-h-24 resize-y"
+                />
+              </div>
             </div>
+
             <div className="space-y-4">
-              <div><Label htmlFor="wiki-corrective">Corrective action</Label><Textarea id="wiki-corrective" value={draft.correctiveAction} onChange={(event) => updateDraft("correctiveAction", event.target.value)} placeholder={"1. Step one...\n2. Step two...\n3. Step three..."} className="mt-1.5 min-h-28 resize-y" /></div>
-              <div><Label htmlFor="wiki-preventive">Preventive action</Label><Textarea id="wiki-preventive" value={draft.preventiveAction} onChange={(event) => updateDraft("preventiveAction", event.target.value)} placeholder="What can be done to prevent this fault?" className="mt-1.5 min-h-24 resize-y" /></div>
-              <UploadZone label="Manual screenshot" helper="Drag and drop an image, or browse" file={manualFile} onChange={handleFile(setManualFile)} />
-              <UploadZone label="Supporting photos" helper="Upload additional supporting photo" file={photoFile} onChange={handleFile(setPhotoFile)} />
+              {/* Corrective Action with auto-numbering */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="wiki-corrective">Corrective action</Label>
+                  <span className="text-[11px] text-slate-400">Press Enter for auto-numbering (1. → 2.)</span>
+                </div>
+                <Textarea
+                  id="wiki-corrective"
+                  value={draft.correctiveAction}
+                  onChange={(event) => updateDraft("correctiveAction", event.target.value)}
+                  onKeyDown={(e) => handleAutoNumberKeyDown("correctiveAction", e)}
+                  placeholder={"1. Isolate the affected ride vehicle\n2. Check fuse holder tension..."}
+                  className="mt-1.5 min-h-28 resize-y font-sans text-sm leading-relaxed"
+                />
+              </div>
+
+              {/* Preventive Action with auto-numbering */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="wiki-preventive">Preventive action</Label>
+                  <span className="text-[11px] text-slate-400">Press Enter for auto-numbering</span>
+                </div>
+                <Textarea
+                  id="wiki-preventive"
+                  value={draft.preventiveAction}
+                  onChange={(event) => updateDraft("preventiveAction", event.target.value)}
+                  onKeyDown={(e) => handleAutoNumberKeyDown("preventiveAction", e)}
+                  placeholder={"1. Inspect connector condition during weekly PM..."}
+                  className="mt-1.5 min-h-24 resize-y font-sans text-sm leading-relaxed"
+                />
+              </div>
+
+              {/* Drag-and-drop Upload with Delete before save */}
+              <InteractiveDropzone
+                label="Manual screenshot"
+                helper="Drag & drop screenshot, or click to browse"
+                uploaded={manualUpload}
+                onFileSelected={(file) => handleFileUpload(file, setManualUpload)}
+                onDelete={() => setManualUpload(null)}
+                isUploading={isUploading}
+              />
+
+              <InteractiveDropzone
+                label="Supporting photos"
+                helper="Drag & drop supporting photo, or click to browse"
+                uploaded={photoUpload}
+                onFileSelected={(file) => handleFileUpload(file, setPhotoUpload)}
+                onDelete={() => setPhotoUpload(null)}
+                isUploading={isUploading}
+              />
             </div>
           </div>
-          <DialogFooter className="flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7"><p className="flex max-w-lg items-center gap-2 text-left text-xs text-slate-500"><LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-400" />Editing and deletion controls are available only in an authenticated operator session.</p><div className="flex w-full gap-2 sm:w-auto"><Button variant="outline" onClick={() => setModalOpen(false)} className="flex-1 bg-white sm:flex-none">Cancel</Button><Button onClick={saveCard} className="flex-1 bg-emerald-700 text-white hover:bg-emerald-800 sm:flex-none">Save troubleshooting card</Button></div></DialogFooter>
+
+          <DialogFooter className="flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <p className="flex max-w-lg items-center gap-2 text-left text-xs text-slate-500">
+              <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              Cards are saved directly to the website system database and remain visible after page reloads.
+            </p>
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => setCreateModalOpen(false)}
+                className="flex-1 bg-white sm:flex-none"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={saveCard}
+                disabled={createMutation.isPending || isUploading}
+                className="flex-1 bg-emerald-700 text-white hover:bg-emerald-800 sm:flex-none"
+              >
+                {createMutation.isPending ? "Saving to database..." : "Save troubleshooting card"}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout>
   );
 }
 
-function FaultAccordion({ fault }: { fault: TroubleFault }) {
-  return <AccordionItem value={fault.id} className="border-0"><AccordionTrigger className="items-center rounded-xl px-3 py-4 no-underline hover:bg-slate-50 hover:no-underline [&>svg]:mr-1"><div className="flex min-w-0 flex-1 items-center gap-3 text-left"><SeverityChip severity={fault.severity} /><div className="min-w-0 flex-1"><p className="text-sm font-extrabold leading-snug text-slate-800">{fault.title}</p><p className="mt-0.5 text-xs leading-snug text-slate-500">Fault code · {fault.faultCode} <span className="mx-1 text-slate-300">•</span> {fault.rideCode} · {fault.rideName}</p></div><span className="hidden rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 sm:inline-flex">{fault.category}</span></div></AccordionTrigger><AccordionContent className="px-3 pb-5"><div className="grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-2"><DetailPanel label="Symptom" className="md:col-span-2"><p>{fault.symptom}</p></DetailPanel><DetailPanel label="Root cause" className="border-amber-200 bg-amber-50 text-amber-950"><p>{fault.rootCause}</p></DetailPanel><DetailPanel label="Preventive action" className="border-blue-200 bg-blue-50 text-blue-950"><p>{fault.preventiveAction}</p></DetailPanel><DetailPanel label="Corrective action" className="md:col-span-2"><ol className="list-decimal space-y-1.5 pl-4">{fault.correctiveActions.map((action, index) => <li key={`${fault.id}-${index}`}>{action}</li>)}</ol></DetailPanel><div><p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-slate-500">Manual reference</p><ManualPreview label={fault.manualPages} /></div><div><p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-slate-500">Supporting photos</p><div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50"><div className="flex h-28 items-center justify-center bg-gradient-to-br from-slate-200 via-slate-100 to-blue-100"><Camera className="h-8 w-8 text-slate-400" /></div><div className="flex items-center gap-1.5 border-t border-slate-200 bg-white px-2.5 py-2 text-[11px] font-semibold text-slate-600"><Camera className="h-3.5 w-3.5 text-emerald-600" />{fault.supportPhotoName}</div></div></div></div></AccordionContent></AccordionItem>;
+function DetailPanel({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-relaxed text-slate-700 ${className}`}>
+      <p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600">{label}</p>
+      {children}
+    </div>
+  );
 }
 
-function DetailPanel({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) { return <div className={`rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm leading-relaxed text-slate-700 ${className}`}><p className="mb-1.5 text-xs font-extrabold uppercase tracking-wide text-slate-600">{label}</p>{children}</div>; }
+function MetricTile({
+  icon: Icon,
+  value,
+  label,
+  tone,
+}: {
+  icon: typeof FileText;
+  value: string;
+  label: string;
+  tone: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 xl:flex xl:items-center xl:gap-3">
+      <span className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg xl:mb-0 ${tone}`}>
+        <Icon className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-lg font-black leading-none text-[#26345e]">{value}</p>
+        <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+      </div>
+    </div>
+  );
+}
 
-function MetricTile({ icon: Icon, value, label, tone }: { icon: typeof FileText; value: string; label: string; tone: string }) { return <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 xl:flex xl:items-center xl:gap-3"><span className={`mb-2 flex h-8 w-8 items-center justify-center rounded-lg xl:mb-0 ${tone}`}><Icon className="h-4 w-4" /></span><div><p className="text-lg font-black leading-none text-[#26345e]">{value}</p><p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p></div></div>; }
+/**
+ * Drag-and-drop dropzone with immediate delete option before saving
+ */
+function InteractiveDropzone({
+  label,
+  helper,
+  uploaded,
+  onFileSelected,
+  onDelete,
+  isUploading,
+}: {
+  label: string;
+  helper: string;
+  uploaded: UploadedFileState | null;
+  onFileSelected: (file: File) => void;
+  onDelete: () => void;
+  isUploading: boolean;
+}) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-function UploadZone({ label, helper, file, onChange }: { label: string; helper: string; file: File | null; onChange: (event: ChangeEvent<HTMLInputElement>) => void }) { const id = `upload-${label.toLowerCase().replace(/[^a-z]+/g, "-")}`; return <div><Label htmlFor={id}>{label}</Label><label htmlFor={id} className="mt-1.5 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 text-center transition hover:border-emerald-400 hover:bg-emerald-50"><ImagePlus className="h-5 w-5 text-slate-400" /><span className="mt-1 text-xs font-bold text-slate-600">{helper}</span><span className="mt-1 text-[10px] text-slate-500">PNG, JPG up to 5 MB</span><input id={id} type="file" accept="image/png,image/jpeg" className="sr-only" onChange={onChange} /></label>{file && <div className="mt-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-xs"><FileText className="h-4 w-4 text-indigo-600" /><span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{file.name}</span><span className="shrink-0 text-slate-400">{Math.max(1, Math.round(file.size / 1024 / 1024 * 10) / 10)} MB</span></div>}</div>; }
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      onFileSelected(file);
+    }
+  };
+
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onFileSelected(file);
+    }
+  };
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      {uploaded ? (
+        <div className="mt-1.5 flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50/60 p-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <img
+              src={uploaded.url}
+              alt={uploaded.name}
+              className="h-10 w-10 shrink-0 rounded-lg object-cover border border-emerald-200 bg-white"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-slate-800">{uploaded.name}</p>
+              <p className="text-[10px] text-emerald-700 font-semibold">Ready to save</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            title="Delete this photo before saving"
+            className="h-8 w-8 p-0 text-slate-500 hover:bg-rose-100 hover:text-rose-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`mt-1.5 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-3 text-center transition ${
+            isDragOver
+              ? "border-emerald-500 bg-emerald-50/80"
+              : "border-slate-300 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/40"
+          }`}
+        >
+          <ImagePlus className={`h-5 w-5 ${isDragOver ? "text-emerald-600" : "text-slate-400"}`} />
+          <span className="mt-1 text-xs font-bold text-slate-700">{helper}</span>
+          <span className="mt-0.5 text-[10px] text-slate-500">PNG, JPG up to 10 MB</span>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={handleInputChange}
+            disabled={isUploading}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

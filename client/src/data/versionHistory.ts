@@ -9,9 +9,30 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.37";
+export const CURRENT_VERSION = "v1.38";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.38",
+    commit: "pending",
+    date: "2026-10-09",
+    time: "13:08 GMT+8",
+    timestamp: "2026-10-09 13:08:31",
+    title: "Faultpedia Renaming, All 21 Attractions, 3-Category Refinement, Window Pop-Up, Auto-Numbering, Dropzone & Template v2 Line Breaks",
+    tasks: [
+      "Renamed Troubleshoot Wiki to Faultpedia across page titles, subtitles, headers, and sidebar navigation menu.",
+      "Expanded Faultpedia attraction selection to cover all 21 attractions in Genting SkyWorlds fleet, including browse-by-ride tabs and creation modal dropdown.",
+      "Refined fault categories strictly to Electrical, Mechanical, and Other (removed Controls and Safety as requested).",
+      "Removed severity tags (Critical, High, Watch) from the card listing and detail views to present clean operational references.",
+      "Implemented automatic numbering on line break for Corrective Action and Preventive Action textareas (e.g. typing '1. ' and pressing Enter automatically supplies '2. ').",
+      "Added interactive drag-and-drop file upload zones for manual screenshots and supporting photos with immediate delete buttons before saving.",
+      "Connected Faultpedia cards to the MySQL database (faultpediaCards table) via tRPC procedures (faultpedia.list, faultpedia.create, faultpedia.update, faultpedia.delete) so newly created cards persist permanently across browser reloads.",
+      "Transformed fault card interaction from inline accordions into a dedicated Window Pop-Up dialog displaying full symptoms, root cause, numbered corrective actions, preventive actions, and full-size photo attachments.",
+      "Updated Daily Downtime Summary Report template v2 generation with 1 blank line break after the header on page 1 before Table 1, and 1 blank line break on page 2 before Preventive Action, strictly maintaining the Cambria font and 2-page pacing per incident.",
+      "Added automated regression tests covering Faultpedia filters, all 21 attractions, category restrictions, DOCX line breaks, full test suite pass (40 tests), and clean production build.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.37",
     commit: "pending",
@@ -27,7 +48,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added a responsive Create troubleshooting card modal with ride selection, category chips, corrective/preventive fields, accessible image-upload placeholders, session-only card creation, and an operator-access information notice.",
       "Added DOCX header/font and Troubleshoot Wiki filter regression tests, rendered DOCX header verification, desktop/mobile UI checks, full test suite, and production build validation.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.36",

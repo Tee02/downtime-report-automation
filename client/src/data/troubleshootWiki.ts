@@ -1,33 +1,38 @@
-export type FaultSeverity = "Critical" | "High" | "Watch";
-export type FaultCategory = "Electrical" | "Mechanical" | "Controls" | "Safety" | "Other";
+import { FLEET_RIDES } from "@/components/RideCombinationSwitch";
+
+export type FaultCategory = "Electrical" | "Mechanical" | "Other";
 
 export type TroubleFault = {
   id: string;
+  dbId?: number;
   rideCode: string;
   rideName: string;
+  faultDate?: string;
   title: string;
   faultCode: string;
-  severity: FaultSeverity;
   category: FaultCategory;
   references: number;
   symptom: string;
   rootCause: string;
   correctiveActions: string[];
   preventiveAction: string;
-  manualPages: string;
-  supportPhotoName: string;
+  manualScreenshotName?: string | null;
+  manualScreenshotUrl?: string | null;
+  supportPhotoName?: string | null;
+  supportPhotoUrl?: string | null;
+  createdAt?: string | Date;
 };
 
-export const WIKI_RIDES = [
+export const WIKI_RIDES: Array<{ code: string; label: string; subtitle: string }> = [
   { code: "ALL", label: "All rides", subtitle: "All attractions" },
-  { code: "ETI", label: "ETI", subtitle: "Expedition Thin Ice" },
-  { code: "RCC", label: "RCC", subtitle: "Rio Carnaval Chaos" },
-  { code: "TTC", label: "TTC", subtitle: "Terraform Tower Challenge" },
-  { code: "ESD", label: "ESD", subtitle: "Global Defender" },
-  { code: "BCT", label: "BCT", subtitle: "Boot Camp" },
-] as const;
+  ...FLEET_RIDES.map(([code, name]) => ({
+    code,
+    label: code,
+    subtitle: name,
+  })),
+];
 
-export const WIKI_CATEGORIES: FaultCategory[] = ["Electrical", "Mechanical", "Controls", "Safety", "Other"];
+export const WIKI_CATEGORIES: FaultCategory[] = ["Electrical", "Mechanical", "Other"];
 
 export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
   {
@@ -36,8 +41,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     rideName: "Expedition Thin Ice",
     title: "Vehicle navigation communication heartbeat stopped updating",
     faultCode: "Alarms.Active.Estop1[12].2",
-    severity: "Critical",
-    category: "Controls",
+    category: "Other",
     references: 18,
     symptom: "Vehicle stops responding, the navigation heartbeat timestamp no longer updates, and the ride enters a safe state.",
     rootCause: "Loose vehicle navigation connector after vibration.",
@@ -47,7 +51,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
       "Restart the vehicle controller and confirm heartbeat resumes.",
     ],
     preventiveAction: "Inspect connector seating during weekly PM.",
-    manualPages: "Manual pages 42–44",
+    manualScreenshotName: "Manual pages 42–44",
     supportPhotoName: "Connector inspection.jpg",
   },
   {
@@ -56,7 +60,6 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     rideName: "Expedition Thin Ice",
     title: "Motion controller fault — Logix",
     faultCode: "VCS15Torcs.Alarm High",
-    severity: "High",
     category: "Mechanical",
     references: 12,
     symptom: "The vehicle cannot complete its commanded movement and the controller records a motion-drive fault.",
@@ -67,7 +70,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
       "Clear the fault only after the movement path is safe.",
     ],
     preventiveAction: "Confirm encoder and drive connections during scheduled inspection.",
-    manualPages: "Manual pages 61–63",
+    manualScreenshotName: "Manual pages 61–63",
     supportPhotoName: "Drive diagnostic panel.jpg",
   },
   {
@@ -76,7 +79,6 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     rideName: "Expedition Thin Ice",
     title: "Lap bar 24V fuse control voltage tripped",
     faultCode: "LB24V.Fuse.Trip",
-    severity: "Watch",
     category: "Electrical",
     references: 9,
     symptom: "A restraint circuit does not initialise and the lap bar status remains unavailable.",
@@ -87,7 +89,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
       "Restore power and perform a restraint functional check.",
     ],
     preventiveAction: "Inspect fuse-holder tension and connector condition during weekly PM.",
-    manualPages: "Manual pages 18–20",
+    manualScreenshotName: "Manual pages 18–20",
     supportPhotoName: "Lap bar control circuit.jpg",
   },
   {
@@ -96,8 +98,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     rideName: "Rio Carnaval Chaos",
     title: "Vehicle not at home position after cycle reset",
     faultCode: "RCC.Home.Position",
-    severity: "High",
-    category: "Controls",
+    category: "Other",
     references: 7,
     symptom: "The ride cannot begin the next cycle because a vehicle remains outside its expected home position.",
     rootCause: "Position confirmation did not return after a controlled stop.",
@@ -107,7 +108,7 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
       "Perform the approved recovery sequence and verify home confirmation.",
     ],
     preventiveAction: "Clean and inspect position sensor targets during PM.",
-    manualPages: "Manual pages 34–36",
+    manualScreenshotName: "Manual pages 34–36",
     supportPhotoName: "Home position check.jpg",
   },
   {
@@ -116,7 +117,6 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
     rideName: "Terraform Tower Challenge",
     title: "Hydraulic valve response delay",
     faultCode: "TTC.Hydraulic.Valve.Delay",
-    severity: "Watch",
     category: "Mechanical",
     references: 5,
     symptom: "A movement command completes slower than its normal operating window.",
@@ -127,12 +127,12 @@ export const INITIAL_TROUBLE_FAULTS: TroubleFault[] = [
       "Escalate for hydraulic service if response remains delayed.",
     ],
     preventiveAction: "Review hydraulic condition during the next planned maintenance window.",
-    manualPages: "Manual pages 72–75",
+    manualScreenshotName: "Manual pages 72–75",
     supportPhotoName: "Valve inspection.jpg",
   },
 ];
 
-export type WikiSort = "referenced" | "severity" | "alphabetical";
+export type WikiSort = "referenced" | "alphabetical" | "recent";
 
 export function filterWikiFaults(
   faults: TroubleFault[],
@@ -142,21 +142,20 @@ export function filterWikiFaults(
   sort: WikiSort,
 ): TroubleFault[] {
   const normalizedQuery = query.trim().toLowerCase();
-  const severityOrder: Record<FaultSeverity, number> = { Critical: 0, High: 1, Watch: 2 };
 
   return faults
     .filter((fault) => rideCode === "ALL" || fault.rideCode === rideCode)
     .filter((fault) => category === "All faults" || fault.category === category)
     .filter((fault) => {
       if (!normalizedQuery) return true;
-      return [fault.title, fault.faultCode, fault.symptom, fault.rootCause, fault.rideCode]
+      return [fault.title, fault.faultCode, fault.symptom, fault.rootCause, fault.rideCode, fault.rideName]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
     })
     .sort((a, b) => {
-      if (sort === "severity") return severityOrder[a.severity] - severityOrder[b.severity] || b.references - a.references;
       if (sort === "alphabetical") return a.title.localeCompare(b.title);
+      if (sort === "recent") return (b.dbId || 0) - (a.dbId || 0);
       return b.references - a.references;
     });
 }

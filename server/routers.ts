@@ -22,6 +22,10 @@ import {
   setDarkDay,
   setSiteContent,
   upsertUser,
+  listFaultpediaCards,
+  createFaultpediaCard,
+  updateFaultpediaCard,
+  deleteFaultpediaCard,
 } from "./db";
 import { buildAnalysis, exportCompiledDowntimeLog, loadSavedDowntimeReports } from "./downtimeAnalysis";
 import { buildDowntimeSummaryDocx, type SummaryEntryData } from "./downtimeSummaryDocx";
@@ -282,6 +286,63 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ input }) => {
         return deleteDowntimeSummaryDraft(input.id);
+      }),
+  }),
+  faultpedia: router({
+    list: publicProcedure.query(async () => {
+      return listFaultpediaCards();
+    }),
+    create: publicProcedure
+      .input(
+        z.object({
+          rideCode: z.string(),
+          rideName: z.string(),
+          faultDate: z.string().default(() => new Date().toISOString().slice(0, 10)),
+          title: z.string(),
+          faultCode: z.string().default("Reference"),
+          severity: z.string().default("Watch"),
+          category: z.enum(["Electrical", "Mechanical", "Other"]).default("Other"),
+          description: z.string().default(""),
+          rootCause: z.string(),
+          correctiveAction: z.string(),
+          preventiveAction: z.string(),
+          referenceCount: z.number().int().default(0),
+          manualScreenshotName: z.string().nullable().optional(),
+          manualScreenshotUrl: z.string().nullable().optional(),
+          supportPhotoName: z.string().nullable().optional(),
+          supportPhotoUrl: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return createFaultpediaCard(input as any);
+      }),
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          rideCode: z.string().optional(),
+          rideName: z.string().optional(),
+          title: z.string().optional(),
+          faultCode: z.string().optional(),
+          category: z.enum(["Electrical", "Mechanical", "Other"]).optional(),
+          description: z.string().optional(),
+          rootCause: z.string().optional(),
+          correctiveAction: z.string().optional(),
+          preventiveAction: z.string().optional(),
+          manualScreenshotName: z.string().nullable().optional(),
+          manualScreenshotUrl: z.string().nullable().optional(),
+          supportPhotoName: z.string().nullable().optional(),
+          supportPhotoUrl: z.string().nullable().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateFaultpediaCard(id, data as any);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        return deleteFaultpediaCard(input.id);
       }),
   }),
 });
