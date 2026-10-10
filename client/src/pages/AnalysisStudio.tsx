@@ -29,10 +29,12 @@ import {
   Copy,
   FileText,
   Gauge,
+  History,
   Info,
   Layers3,
   Loader2,
   Pencil,
+  PieChart as PieChartIcon,
   Plus,
   Search,
   ShieldCheck,
@@ -47,8 +49,11 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
@@ -68,79 +73,212 @@ type Scenario = {
   rideCodes: string[];
 };
 
+type CompareHistoryItem = {
+  id: string;
+  timestamp: number;
+  label: string; // e.g. "TTC on 21/6 vs ACR on 21/6 – 23/6" or "TTC on 21/6"
+  scenarioA: {
+    name: string;
+    dateKeys: string[];
+    rideCodes: string[];
+  };
+  scenarioB: {
+    name: string;
+    dateKeys: string[];
+    rideCodes: string[];
+  };
+};
+
+const CARD_CLASS = "border-[#d8e2f4] bg-white shadow-sm transition-all";
+const RIDE_COLORS = [
+  "#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed",
+  "#0891b2", "#db2777", "#4b5563", "#4338ca", "#047857",
+  "#b45309", "#b91c1c", "#6d28d9", "#0e7490", "#be185d",
+  "#374151", "#1d4ed8", "#0f766e", "#c2410c", "#991b1b",
+  "#5b21b6",
+];
+
+function rideColor(index: number) {
+  return RIDE_COLORS[index % RIDE_COLORS.length];
+}
+
 type SavedReport = {
   id: number;
   reportDate: string;
   sourceFileName: string;
+  sourceFileUrl: string;
+  outputFileName: string;
+  outputFileUrl: string;
   totalTechnicalMinutes: number;
   totalNetworkPercentage: number;
+  weatherIntervalCount: number;
+  weatherText?: string | null;
+  createdAt: string | Date;
 };
 
-const FLEET_COUNT = FLEET_RIDES.length;
-const CARD_CLASS = "border-[#adbBda]/70 bg-white/90 shadow-[0_12px_30px_rgba(61,82,160,0.10)]";
-const STANDARD_SEVERITY = {
-  monitor: { max: 29, label: "Monitor <30 min", color: "#9fc5ff", background: "#eaf2ff" },
-  elevated: { max: 59, label: "Elevated 30–59 min", color: "#f8d775", background: "#fff7da" },
-  high: { max: 119, label: "High 60–119 min", color: "#f6ae45", background: "#fff0de" },
-  critical: { max: Infinity, label: "Critical 120+ min", color: "#ef6d87", background: "#ffe8ed" },
-};
-
-function dateKey(value: Date) {
-  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+function asDate(dateKey: string): Date {
+  return new Date(`${dateKey}T00:00:00Z`);
 }
 
-function asDate(key: string) {
-  return new Date(`${key}T12:00:00`);
+function dateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
-function shortDate(key: string) {
-  return asDate(key).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+function shortDate(dateKey: string): string {
+  const date = asDate(dateKey);
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-function dateWithWeekday(key: string) {
-  return asDate(key).toLocaleDateString("en-GB", { day: "numeric", month: "short", weekday: "short" }).replace(",", " •");
+function dateWithWeekday(dateKey: string): string {
+  const date = asDate(dateKey);
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-function compactDateRange(keys: Set<string> | string[]) {
-  const sorted = Array.from(keys).sort();
-  if (!sorted.length) return "Select reporting dates";
-  const first = asDate(sorted[0]);
-  const last = asDate(sorted[sorted.length - 1]);
-  const sameDay = sorted.length === 1;
-  const sameMonth = first.getFullYear() === last.getFullYear() && first.getMonth() === last.getMonth();
-  const firstDay = first.getDate();
-  const lastDay = last.getDate();
-  const firstMonth = first.toLocaleDateString("en-GB", { month: "short" });
-  const lastMonth = last.toLocaleDateString("en-GB", { month: "short" });
-  if (sameDay) return `${firstDay} ${firstMonth} ${first.getFullYear()}`;
-  if (sameMonth) return `${firstDay}–${lastDay} ${lastMonth} ${last.getFullYear()}`;
-  return `${firstDay} ${firstMonth}–${lastDay} ${lastMonth} ${last.getFullYear()}`;
+function formatDayMonth(dateKey: string): string {
+  const date = asDate(dateKey);
+  return `${date.getUTCDate()}/${date.getUTCMonth() + 1}`;
 }
 
-function scopeLabel(codes: string[]) {
-  if (!codes.length) return `All ${FLEET_COUNT} rides`;
-  if (codes.length === 1) return codes[0];
-  if (codes.length === 2) return codes.join(" + ");
-  return `${codes.length} selected rides`;
+function scenarioHistorySummary(rideCodes: string[], dateKeys: Set<string> | string[]): string {
+  const keysArr = Array.isArray(dateKeys) ? dateKeys : Array.from(dateKeys);
+  const sorted = [...keysArr].sort();
+  const rideLabel = rideCodes.length === 1 ? rideCodes[0] : rideCodes.length > 1 ? `${rideCodes.length} rides` : "All rides";
+  if (!sorted.length) return `${rideLabel} on —`;
+  if (sorted.length === 1) {
+    return `${rideLabel} on ${formatDayMonth(sorted[0])}`;
+  }
+  return `${rideLabel} on ${formatDayMonth(sorted[0])} – ${formatDayMonth(sorted[sorted.length - 1])}`;
 }
 
-function severityFor(minutes: number) {
-  if (minutes <= STANDARD_SEVERITY.monitor.max) return "monitor" as const;
-  if (minutes <= STANDARD_SEVERITY.elevated.max) return "elevated" as const;
-  if (minutes <= STANDARD_SEVERITY.high.max) return "high" as const;
-  return "critical" as const;
+function compactDateRange(dateKeys: Set<string>): string {
+  const sorted = Array.from(dateKeys).sort();
+  if (!sorted.length) return "No dates selected";
+  if (sorted.length === 1) return dateWithWeekday(sorted[0]);
+  return `${shortDate(sorted[0])} – ${shortDate(sorted[sorted.length - 1])} (${sorted.length} days)`;
 }
 
-function rollingTrend(points: AnalysisResult["dailyTrend"]) {
-  return points.map((point, index) => {
-    const window = points.slice(Math.max(0, index - 6), index + 1);
-    return { ...point, rolling: window.reduce((sum, item) => sum + item.minutes, 0) / window.length };
-  });
+function scopeLabel(rideCodes: string[]): string {
+  if (!rideCodes.length) return "All 21 rides";
+  if (rideCodes.length === 1) {
+    const matched = FLEET_RIDES.find(([code]) => code === rideCodes[0]);
+    return matched ? `${matched[0]} · ${matched[1]}` : rideCodes[0];
+  }
+  return `${rideCodes.length} selected rides`;
 }
 
-function deltaPercent(current: number, base: number) {
-  if (!base) return null;
-  return ((current - base) / base) * 100;
+function deltaPercent(current?: number | null, baseline?: number | null): number | null {
+  if (typeof current !== "number" || typeof baseline !== "number" || baseline === 0) return null;
+  return ((current - baseline) / baseline) * 100;
+}
+
+function RideScopePicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: string[];
+  onChange: (codes: string[]) => void;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const isAll = value.length === 0;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return FLEET_RIDES;
+    return FLEET_RIDES.filter(([code, name]) => code.toLowerCase().includes(q) || name.toLowerCase().includes(q));
+  }, [search]);
+
+  const toggle = (code: string) => {
+    if (value.includes(code)) {
+      onChange(value.filter(item => item !== code));
+    } else {
+      onChange([...value, code]);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          className={`h-auto min-w-0 flex-1 justify-start gap-3 rounded-none px-5 py-3 text-left hover:bg-slate-50 ${
+            compact ? "h-9 border border-[#c9d3ed] bg-white px-3 py-1.5" : ""
+          }`}
+        >
+          <Layers3 className="h-5 w-5 shrink-0 text-[#1e4ca1]" />
+          <span className="min-w-0">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Ride scope</span>
+            <span className="block truncate text-sm font-extrabold text-[#172c5b]">{scopeLabel(value)}</span>
+          </span>
+          <ChevronDown className="ml-auto h-4 w-4 text-slate-400" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[320px] rounded-2xl border-[#adbBda]/80 bg-white p-3 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <p className="text-xs font-extrabold text-slate-900">Filter attraction scope</p>
+          <Button variant="ghost" size="sm" onClick={() => onChange([])} className="h-6 px-1.5 text-[10px] text-slate-500">
+            Select all
+          </Button>
+        </div>
+        <div className="relative mt-2">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search 21 attractions..."
+            className="h-8 pl-8 text-xs"
+          />
+        </div>
+        <div className="mt-2 max-h-56 space-y-1 overflow-y-auto pr-1">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-bold transition-colors ${
+              isAll ? "bg-blue-50 text-[#1e4ca1]" : "text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <span>All 21 attractions</span>
+            {isAll && <Check className="h-3.5 w-3.5 text-[#1e4ca1]" />}
+          </button>
+          {filtered.map(([code, name]) => {
+            const active = value.includes(code);
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => toggle(code)}
+                className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                  active ? "bg-blue-50 font-bold text-[#1e4ca1]" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                <span className="truncate">
+                  <strong className="mr-1.5 font-mono">{code}</strong>
+                  {name}
+                </span>
+                {active && <Check className="h-3.5 w-3.5 text-[#1e4ca1]" />}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function MiniSparkline({ values, tone = "green" }: { values: number[]; tone?: "green" | "rose" }) {
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = Math.max(max - min, 1);
+  const points = values.length > 1
+    ? values.map((value, index) => `${(index / (values.length - 1)) * 100},${24 - ((value - min) / range) * 20}`).join(" ")
+    : "0,15 100,15";
+  return (
+    <svg viewBox="0 0 100 28" aria-hidden="true" className="h-7 w-20 shrink-0">
+      <polyline fill="none" stroke={tone === "green" ? "#20ad88" : "#dd4c7f"} strokeWidth="2" points={points} />
+    </svg>
+  );
 }
 
 function MetricCard({
@@ -170,46 +308,6 @@ function MetricCard({
         <span className={`mt-3 inline-flex max-w-full rounded-full px-2.5 py-1 text-[10px] font-bold ${toneClass}`}>{detail}</span>
       </CardContent>
     </Card>
-  );
-}
-
-function TrendTooltip({ active, payload, label, tone = "blue" }: any) {
-  if (!active || !payload?.length) return null;
-  const item = payload.find((entry: any) => entry.dataKey === "minutes")?.payload ?? payload[0]?.payload;
-  if (!item) return null;
-  const value = item.minutes ?? item.aMinutes ?? 0;
-  const percentage = item.percentage ?? item.aPercentage ?? 0;
-  return (
-    <div className={`rounded-lg px-3 py-2 text-xs font-bold text-white shadow-xl ${tone === "amber" ? "bg-amber-500" : "bg-[#18366e]"}`}>
-      {item.label ?? label} • {Math.round(value)} min • {Number(percentage).toFixed(1)}%
-    </div>
-  );
-}
-
-function OverlapTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  const item = payload[0]?.payload;
-  if (!item) return null;
-  return (
-    <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl">
-      <p className="mb-1.5 text-[10px] uppercase tracking-wide text-blue-100">{item.label ?? label}</p>
-      {item.aMinutes !== undefined && <p><span className="text-[#79a8ff]">Scenario A</span> • {Math.round(item.aMinutes)} min • {Number(item.aPercentage).toFixed(1)}%</p>}
-      {item.bMinutes !== undefined && <p className="mt-1"><span className="text-[#ffd05a]">Scenario B</span> • {Math.round(item.bMinutes)} min • {Number(item.bPercentage).toFixed(1)}%</p>}
-    </div>
-  );
-}
-
-function MiniSparkline({ values, tone = "green" }: { values: number[]; tone?: "green" | "rose" }) {
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
-  const range = Math.max(max - min, 1);
-  const points = values.length > 1
-    ? values.map((value, index) => `${(index / (values.length - 1)) * 100},${24 - ((value - min) / range) * 20}`).join(" ")
-    : "0,15 100,15";
-  return (
-    <svg viewBox="0 0 100 28" aria-hidden="true" className="h-7 w-20 shrink-0">
-      <polyline fill="none" stroke={tone === "green" ? "#20ad88" : "#dd4c7f"} strokeWidth="2" points={points} />
-    </svg>
   );
 }
 
@@ -302,34 +400,16 @@ function DateRangePicker({
             onDayClick={choose}
             disabled={day => !availableDateKeys.includes(dateKey(day))}
             weekStartsOn={1}
-            modifiers={{ savedLog: availableDateKeys.map(asDate), darkDay: darkDays.map(asDate), rangePending: rangeStartKey ? [asDate(rangeStartKey)] : [], range_start: rangeStart ? [rangeStart] : [], range_end: rangeEnd ? [rangeEnd] : [], range_middle: rangeMiddle }}
-            className="rounded-xl bg-[#f8faff] p-2"
+            modifiers={{
+              savedLog: availableDateKeys.map(asDate),
+              darkDay: darkDays.map(asDate),
+              rangePending: rangeStartKey ? [asDate(rangeStartKey)] : [],
+              range_start: rangeStart ? [rangeStart] : [],
+              range_end: rangeEnd ? [rangeEnd] : [],
+              range_middle: rangeMiddle,
+            }}
+            className="w-full rounded-xl bg-[#f8faff] p-2"
           />
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function RideScopePicker({ value, onChange, compact = false }: { value: string[]; onChange: (codes: string[]) => void; compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const filtered = FLEET_RIDES.filter(([code, name]) => `${code} ${name}`.toLowerCase().includes(search.toLowerCase()));
-  const toggle = (code: string) => onChange(value.includes(code) ? value.filter(item => item !== code) : [...value, code]);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        {compact ? (
-          <Button variant="outline" size="sm" className="h-8 w-full justify-between border-[#c9d3ed] bg-white text-xs font-bold text-[#172c5b]"><span className="flex min-w-0 items-center gap-1.5 truncate"><Layers3 className="h-3.5 w-3.5 text-[#1e4ca1]" />{scopeLabel(value)}</span><ChevronDown className="h-3.5 w-3.5 text-slate-400" /></Button>
-        ) : (
-          <Button variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-3 rounded-none border-l border-slate-100 px-5 py-3 text-left hover:bg-slate-50"><Layers3 className="h-5 w-5 shrink-0 text-[#1e4ca1]" /><span className="min-w-0"><span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Ride scope</span><span className="block truncate text-sm font-extrabold text-[#172c5b]">{scopeLabel(value)}</span></span><ChevronDown className="ml-auto h-4 w-4 text-slate-400" /></Button>
-        )}
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 rounded-2xl border-[#adbBda]/80 bg-white p-3 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2"><span className="text-xs font-extrabold text-slate-900">Ride scope</span><div className="flex gap-1"><Button variant="ghost" size="sm" onClick={() => onChange([])} className="h-6 px-1.5 text-[10px] font-bold text-[#1e4ca1]">All rides</Button><Button variant="ghost" size="sm" onClick={() => onChange([])} className="h-6 px-1.5 text-[10px] text-slate-400">Clear</Button></div></div>
-        <div className="relative my-2"><Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find a ride" className="h-8 pl-8 text-xs" /></div>
-        <div className="max-h-60 space-y-0.5 overflow-y-auto pr-1">
-          {filtered.map(([code, name]) => { const selected = value.includes(code); return <button key={code} type="button" onClick={() => toggle(code)} className={`flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs ${selected ? "bg-blue-50 text-[#172c5b]" : "hover:bg-slate-50 text-slate-700"}`}><span className={`flex h-4 w-4 items-center justify-center rounded border ${selected ? "border-[#1e4ca1] bg-[#1e4ca1] text-white" : "border-slate-300"}`}>{selected && <Check className="h-3 w-3" />}</span><strong className="w-14 shrink-0 font-mono text-[10px] text-[#1e4ca1]">{code}</strong><span className="truncate">{name}</span></button>; })}
         </div>
       </PopoverContent>
     </Popover>
@@ -374,45 +454,450 @@ function SavedSourceManager({
           {reportsOnDate.length > 1 && <div className="space-y-1">{reportsOnDate.map(report => <button type="button" key={report.id} onClick={() => setSelectedId(report.id)} className={`w-full rounded-lg border p-2 text-left text-xs ${selectedId === report.id ? "border-[#1e4ca1] bg-blue-50" : "border-slate-200 bg-white"}`}><strong className="block truncate">{report.sourceFileName}</strong><span className="text-slate-500">{report.totalTechnicalMinutes} min technical downtime</span></button>)}</div>}
           {selected ? <Card className="border-[#d5dff3] bg-white shadow-sm"><CardContent className="space-y-3 p-4"><div className="flex items-center justify-between gap-3"><Badge className="bg-blue-100 text-[#1e4ca1] hover:bg-blue-100">{shortDate(selected.reportDate)}</Badge><span className="text-[10px] font-bold text-slate-500">All rides</span></div><p className="truncate text-xs font-semibold text-slate-600">{selected.sourceFileName}</p><div className="grid grid-cols-3 gap-2 border-y border-slate-100 py-3 text-center"><div><p className="text-[10px] text-slate-500">Downtime</p><p className="mt-1 text-xs font-extrabold text-[#172c5b]">{selected.totalTechnicalMinutes} min</p></div><div><p className="text-[10px] text-slate-500">Availability</p><p className="mt-1 text-xs font-extrabold text-[#172c5b]">{Math.max(0, 100 - selected.totalNetworkPercentage).toFixed(2)}%</p></div><div><p className="text-[10px] text-slate-500">Events</p><p className="mt-1 text-xs font-extrabold text-[#172c5b]">Saved log</p></div></div><Button type="button" variant="outline" onClick={() => onDelete(selected.id)} disabled={deleting} className="h-9 w-full border-rose-300 text-rose-700 hover:bg-rose-50">{deleting ? "Deleting…" : "Delete saved log"}</Button></CardContent></Card> : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-center text-xs text-slate-500">Choose a marked date to manage its file.</div>}
           <Card className="border-[#d5dff3] bg-white shadow-sm"><CardContent className="p-4"><h3 className="text-sm font-extrabold text-[#172c5b]">Dark day management</h3><div className="mt-3 flex items-center gap-3"><CalendarDays className="h-4 w-4 text-[#1e4ca1]" /><span className="flex-1 text-xs font-semibold text-slate-700">Mark as dark day</span><Switch checked={isDarkDay} disabled={!selectedDate || updatingDarkDay} onCheckedChange={checked => selectedDate && onToggleDarkDay(selectedDate, checked)} aria-label="Mark selected date as dark day" /></div><div className="mt-3 border-t border-slate-100 pt-3"><p className="text-[10px] text-slate-500">Marked dark days</p><div className="mt-1.5 flex flex-wrap gap-1.5">{darkDays.length ? darkDays.slice(-5).map(key => <Badge key={key} className="bg-slate-600 text-white hover:bg-slate-600">{shortDate(key)}</Badge>) : <span className="text-[10px] text-slate-400">None marked</span>}</div></div></CardContent></Card>
-          <div className="flex gap-2 rounded-xl border border-sky-100 bg-sky-50 p-3 text-[11px] leading-5 text-sky-800"><Info className="mt-0.5 h-4 w-4 shrink-0" />Dark days sync across Date range, Downtime calendar, and saved-log selection.</div>
+          <div className="flex gap-2 rounded-xl border border-sky-100 bg-sky-50 p-3 text-[11px] leading-5 text-sky-800"><Info className="mt-0.5 h-4 w-4 shrink-0" />Dark days sync across Date range, KPI Calendar, and saved-log selection.</div>
         </div>
       </SheetContent>
     </Sheet>
   );
 }
 
-function CalendarPanel({
-  monthTrend = [],
-  selectedKeys = new Set(),
-  scope,
-  darkDays,
+// KPI Calendar component with multi-level heatmap coloring and tooltips
+function KpiCalendarPanel({
+  reports = [],
+  darkDays = [],
   monthDate,
+  scope,
 }: {
-  monthTrend: Array<{ dateKey: string; minutes: number }>;
-  selectedKeys: Set<string>;
-  scope: string;
+  reports: SavedReport[];
   darkDays: string[];
   monthDate?: Date;
+  scope: string;
 }) {
-  const datesBySeverity = useMemo(() => {
-    const categories: Record<string, Date[]> = { monitor: [], elevated: [], high: [], critical: [] };
-    monthTrend.forEach(point => categories[severityFor(point.minutes)].push(asDate(point.dateKey)));
-    return categories;
-  }, [monthTrend]);
+  const [currentMonth, setCurrentMonth] = useState<Date>(monthDate || new Date());
+
+  useEffect(() => {
+    if (monthDate) setCurrentMonth(monthDate);
+  }, [monthDate?.getTime()]);
+
+  // Memoized map of dateKey -> totalNetworkPercentage across ALL saved reports
+  const reportDowntimeMap = useMemo(() => {
+    const map = new Map<string, number>();
+    reports.forEach(r => {
+      map.set(r.reportDate, r.totalNetworkPercentage);
+    });
+    return map;
+  }, [reports]);
+
+  // Calculate days for current visible month to identify days with no log uploaded
+  const monthData = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth(); // 0-based
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const kpiWithin: Date[] = [];
+    const kpiLightRed: Date[] = [];
+    const kpiDarkRed: Date[] = [];
+    const kpiDeepRed: Date[] = [];
+    const noLogDates: Date[] = [];
+    const darkDayDates: Date[] = [];
+    const tooltipModifiers: Record<string, Date[]> = {};
+
+    const darkDaySet = new Set(darkDays);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKeyStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const d = asDate(dateKeyStr);
+
+      if (darkDaySet.has(dateKeyStr)) {
+        darkDayDates.push(d);
+        const tKey = `tooltip_${encodeURIComponent("Dark day")}`;
+        if (!tooltipModifiers[tKey]) tooltipModifiers[tKey] = [];
+        tooltipModifiers[tKey].push(d);
+        continue;
+      }
+
+      if (reportDowntimeMap.has(dateKeyStr)) {
+        const pct = reportDowntimeMap.get(dateKeyStr)!;
+        const rounded = pct.toFixed(2);
+        let tip = `${rounded}% downtime`;
+
+        if (pct < 1.0) {
+          kpiWithin.push(d);
+          tip = `${rounded}% • Within KPI`;
+        } else if (pct < 2.0) {
+          kpiLightRed.push(d);
+          tip = `${rounded}% • 1.00% – 1.99%`;
+        } else if (pct < 3.0) {
+          kpiDarkRed.push(d);
+          tip = `${rounded}% • 2.00% – 2.99%`;
+        } else {
+          kpiDeepRed.push(d);
+          tip = `${rounded}% • 3.00%+`;
+        }
+
+        const tKey = `tooltip_${encodeURIComponent(tip)}`;
+        if (!tooltipModifiers[tKey]) tooltipModifiers[tKey] = [];
+        tooltipModifiers[tKey].push(d);
+      } else {
+        noLogDates.push(d);
+        const tKey = `tooltip_${encodeURIComponent("No log detected")}`;
+        if (!tooltipModifiers[tKey]) tooltipModifiers[tKey] = [];
+        tooltipModifiers[tKey].push(d);
+      }
+    }
+
+    return {
+      kpiWithin,
+      kpiLightRed,
+      kpiDarkRed,
+      kpiDeepRed,
+      noLogDates,
+      darkDayDates,
+      tooltipModifiers,
+    };
+  }, [currentMonth, reportDowntimeMap, darkDays]);
+
   return (
-    <Card className={`${CARD_CLASS} h-full`}><CardContent className="p-5"><div className="flex items-start justify-between gap-3"><div><EditableText contentKey="overview_calendar_title" defaultText="Downtime calendar" as="h2" className="block text-lg font-extrabold tracking-tight text-[#172c5b]" /><EditableText contentKey="overview_calendar_desc" defaultText="Spot recurring high-downtime days across the active month." as="p" className="mt-1 block text-xs text-slate-500" /></div><CalendarDays className="h-5 w-5 text-[#1e4ca1]" /></div><div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[9px] font-semibold text-slate-500">{Object.values(STANDARD_SEVERITY).map(item => <span key={item.label} className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: item.color }} />{item.label}</span>)}</div><div className="mt-3 flex justify-center"><Calendar mode="multiple" defaultMonth={monthDate} selected={monthTrend.map(point => asDate(point.dateKey))} weekStartsOn={1} modifiers={{ monitor: datesBySeverity.monitor, elevated: datesBySeverity.elevated, high: datesBySeverity.high, critical: datesBySeverity.critical, darkDay: darkDays.map(asDate) }} className="w-full rounded-xl bg-[#f8faff] p-2" /></div><div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]"><Badge className="bg-blue-50 text-[#1e4ca1] hover:bg-blue-50">{scope}</Badge><span className="flex items-center gap-1 text-slate-400"><CalendarDays className="h-3 w-3" />Shows full month for active rides</span></div></CardContent></Card>
+    <Card className={`${CARD_CLASS} h-full`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <EditableText
+              contentKey="overview_calendar_title"
+              defaultText="KPI Calendar"
+              as="h2"
+              className="block text-lg font-extrabold tracking-tight text-[#172c5b]"
+            />
+            <EditableText
+              contentKey="overview_calendar_desc"
+              defaultText="Spot if everyday is within 1% KPI percentage."
+              as="p"
+              className="mt-1 block text-xs text-slate-500"
+            />
+          </div>
+          <CalendarDays className="h-5 w-5 text-[#1e4ca1]" />
+        </div>
+
+        {/* Heatmap Legend */}
+        <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 text-[9px] font-semibold text-slate-600">
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-[#5793f5]" />
+            0% – 0.99% (Within KPI)
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-[#ff7b89]" />
+            1.00% – 1.99%
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-[#e03a52]" />
+            2.00% – 2.99%
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-[#9e0c24]" />
+            3.00%+
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-slate-400 border border-slate-500" />
+            Dark day
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <i className="h-2.5 w-2.5 rounded-sm bg-slate-200 border border-slate-300" />
+            No log detected
+          </span>
+        </div>
+
+        <div className="mt-3 flex justify-center">
+          <Calendar
+            mode="single"
+            month={currentMonth}
+            onMonthChange={setCurrentMonth}
+            weekStartsOn={1}
+            modifiers={{
+              kpiWithin: monthData.kpiWithin,
+              kpiLightRed: monthData.kpiLightRed,
+              kpiDarkRed: monthData.kpiDarkRed,
+              kpiDeepRed: monthData.kpiDeepRed,
+              noLog: monthData.noLogDates,
+              darkDay: monthData.darkDayDates,
+              ...monthData.tooltipModifiers,
+            }}
+            className="w-full rounded-xl bg-[#f8faff] p-2"
+          />
+        </div>
+
+        <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]">
+          <Badge className="bg-blue-50 text-[#1e4ca1] hover:bg-blue-50">{scope}</Badge>
+          <span className="flex items-center gap-1 text-slate-400">
+            <CalendarDays className="h-3 w-3" />
+            Interactive heat map across all dates
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Split bar chart & Pie chart Tooltip in the exact format:
+// "ride • total time • number of incident • percentage of that particular ride"
+// e.g. "RTR • 12min • 1 inc • 2.5%"
+function RideDowntimeTooltip({ active, payload }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const item = payload[0];
+  const data = item.payload;
+  // Could be from single bar breakdown or pie slice
+  const rideCode = data.rideCode || item.name || "Ride";
+  const minutes = data.minutes !== undefined ? data.minutes : item.value || 0;
+  const events = data.events !== undefined ? data.events : (data.incidents || 1);
+  const percentage = data.percentage !== undefined ? Number(data.percentage).toFixed(1) : "0.0";
+
+  return (
+    <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl">
+      {rideCode} • {minutes}min • {events} inc • {percentage}%
+    </div>
   );
 }
 
 function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
-  const data = useMemo(() => rollingTrend(analysis.dailyTrend), [analysis.dailyTrend]);
-  const max = Math.max(150, ...data.map(point => point.minutes)) + 15;
-  const [chartType, setChartType] = useState<"bar" | "line">("bar");
-  const [activeIndex, setActiveIndex] = useState(Math.max(0, data.length - 1));
+  const [chartType, setChartType] = useState<"bar" | "line" | "pie">("bar");
+  const isSingleDay = analysis.selectedDayCount === 1;
+
+  // Single day breakdown (rides that experienced technical downtime)
+  const singleDayRides = useMemo(() => {
+    if (!isSingleDay) return [];
+    const day = analysis.dailyTrend[0];
+    if (day?.rideBreakdown && day.rideBreakdown.length > 0) {
+      return day.rideBreakdown;
+    }
+    // Fallback from topRides
+    return analysis.topRides
+      .filter(r => r.minutes > 0)
+      .map(r => ({
+        rideCode: r.rideCode,
+        attraction: r.attraction,
+        minutes: r.minutes,
+        events: r.events,
+        percentage: r.downtimePercentage,
+      }))
+      .sort((a, b) => a.minutes - b.minutes); // ascending (shortest on top, longest on bottom)
+  }, [isSingleDay, analysis]);
+
+  // Data for single day stacked bar chart: one bar split by rides
+  const singleBarData = useMemo(() => {
+    if (!isSingleDay || !singleDayRides.length) return [];
+    const dateLabel = analysis.dailyTrend[0]?.label || "Selected Day";
+    const barObj: any = { label: dateLabel };
+    singleDayRides.forEach(r => {
+      barObj[r.rideCode] = r.minutes;
+    });
+    return [barObj];
+  }, [isSingleDay, singleDayRides, analysis]);
+
+  // Data for multi-day rolling trend
+  const multiDayData = useMemo(() => {
+    return analysis.dailyTrend.map(d => ({
+      dateKey: d.dateKey,
+      label: d.label,
+      minutes: d.minutes,
+      percentage: d.percentage,
+    }));
+  }, [analysis.dailyTrend]);
+
+  // Pie chart data: rides breakdown
+  const pieData = useMemo(() => {
+    if (isSingleDay) {
+      return singleDayRides.map((r, idx) => ({
+        name: r.rideCode,
+        rideCode: r.rideCode,
+        attraction: r.attraction,
+        value: r.minutes,
+        minutes: r.minutes,
+        events: r.events,
+        percentage: r.percentage,
+        fill: rideColor(idx),
+      }));
+    }
+    return analysis.topRides
+      .filter(r => r.minutes > 0)
+      .map((r, idx) => ({
+        name: r.rideCode,
+        rideCode: r.rideCode,
+        attraction: r.attraction,
+        value: r.minutes,
+        minutes: r.minutes,
+        events: r.events,
+        percentage: r.downtimePercentage,
+        fill: rideColor(idx),
+      }));
+  }, [isSingleDay, singleDayRides, analysis.topRides]);
+
   return (
-    <Card className={CARD_CLASS}><CardContent className="p-5"><div className="flex items-start justify-between gap-3"><div><EditableText contentKey="overview_trend_title" defaultText="Technical downtime trend" as="h2" className="block text-lg font-extrabold tracking-tight text-[#172c5b]" /><p className="mt-1 text-xs text-slate-500">Daily Technical 11-1 downtime by severity.</p></div><div className="inline-flex rounded-lg bg-slate-100 p-0.5"><button type="button" onClick={() => setChartType("bar")} className={`rounded-md px-3 py-1 text-[10px] font-extrabold ${chartType === "bar" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500"}`}>Bar chart</button><button type="button" onClick={() => setChartType("line")} className={`rounded-md px-3 py-1 text-[10px] font-extrabold ${chartType === "line" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500"}`}>Line chart</button></div></div><div className="mt-3 flex flex-wrap gap-3 text-[10px] font-semibold text-slate-500">{Object.values(STANDARD_SEVERITY).map(item => <span key={item.label} className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: item.color }} />{item.label}</span>)}</div><div className="mt-3 h-[290px]" aria-label="Technical downtime trend chart">
-      <ResponsiveContainer width="100%" height="100%">{chartType === "bar" ? <BarChart data={data} margin={{ top: 8, right: 12, bottom: 2, left: -8 }} onMouseMove={(event: any) => typeof event.activeTooltipIndex === "number" && setActiveIndex(event.activeTooltipIndex)}><CartesianGrid vertical={false} stroke="#dbe3f4" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#5c6b88" }} /><YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} /><Tooltip content={<TrendTooltip />} cursor={{ fill: "#dce8fc", fillOpacity: 0.45 }} />{data[activeIndex] && <ReferenceLine x={data[activeIndex].label} stroke="#41547c" strokeDasharray="3 4" />}<Bar dataKey="minutes" radius={[6, 6, 0, 0]}>{data.map(point => <Cell key={point.dateKey} fill={STANDARD_SEVERITY[severityFor(point.minutes)].color} />)}</Bar></BarChart> : <LineChart data={data} margin={{ top: 8, right: 12, bottom: 2, left: -8 }}><ReferenceArea y1={0} y2={30} fill="#eaf2ff" fillOpacity={0.85} /><ReferenceArea y1={30} y2={60} fill="#fff7da" fillOpacity={0.85} /><ReferenceArea y1={60} y2={120} fill="#fff0de" fillOpacity={0.85} /><ReferenceArea y1={120} y2={max} fill="#ffe8ed" fillOpacity={0.85} /><CartesianGrid vertical={false} stroke="#dbe3f4" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#5c6b88" }} /><YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} /><Tooltip content={<TrendTooltip />} cursor={{ stroke: "#1e4ca1", strokeDasharray: "4 4", strokeWidth: 1.5 }} /><Line type="monotone" dataKey="minutes" stroke="#5793f5" strokeWidth={2.5} dot={{ r: 4, fill: "#5793f5", stroke: "#fff", strokeWidth: 2 }} activeDot={{ r: 6 }} /><Line type="monotone" dataKey="rolling" stroke="#71809e" strokeWidth={1.5} strokeDasharray="5 5" dot={false} /></LineChart>}</ResponsiveContainer>
-    </div></CardContent></Card>
+    <Card className={CARD_CLASS}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <EditableText
+              contentKey="overview_trend_title"
+              defaultText="Technical downtime trend"
+              as="h2"
+              className="block text-lg font-extrabold tracking-tight text-[#172c5b]"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {isSingleDay
+                ? "Attractions affected on selected date."
+                : "Daily Technical 11-1 downtime by severity and ride contribution."}
+            </p>
+          </div>
+
+          {/* 3 tabs: Bar chart, Line chart, Pie chart */}
+          <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+            <button
+              type="button"
+              onClick={() => setChartType("bar")}
+              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                chartType === "bar" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Bar chart
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartType("line")}
+              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                chartType === "line" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Line chart
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartType("pie")}
+              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                chartType === "pie" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Pie chart
+            </button>
+          </div>
+        </div>
+
+        {/* Legend / Info bar */}
+        {chartType === "pie" ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold text-slate-500">
+            {pieData.map(p => (
+              <span key={p.name} className="inline-flex items-center gap-1">
+                <i className="h-2 w-2 rounded-full" style={{ background: p.fill }} />
+                {p.name} ({p.minutes}m)
+              </span>
+            ))}
+          </div>
+        ) : isSingleDay && chartType === "bar" ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold text-slate-500">
+            <span className="text-slate-400">Longest at bottom, shortest on top:</span>
+            {singleDayRides.map((r, idx) => (
+              <span key={r.rideCode} className="inline-flex items-center gap-1">
+                <i className="h-2 w-2 rounded-full" style={{ background: rideColor(idx) }} />
+                {r.rideCode} ({r.minutes}m)
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-3 text-[10px] font-semibold text-slate-500">
+            <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[#5793f5]" />0–29 min</span>
+            <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-yellow-400" />30–59 min</span>
+            <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" />60–119 min</span>
+            <span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-rose-500" />120+ min</span>
+          </div>
+        )}
+
+        <div className="mt-3 h-[290px]" aria-label="Technical downtime trend chart">
+          <ResponsiveContainer width="100%" height="100%">
+            {chartType === "pie" ? (
+              <PieChart>
+                <Tooltip content={<RideDowntimeTooltip />} />
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={95}
+                  innerRadius={35}
+                  paddingAngle={2}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+              </PieChart>
+            ) : chartType === "bar" && isSingleDay ? (
+              /* Single day stacked bar chart split by affected rides with longest downtime at bottom */
+              <BarChart data={singleBarData} margin={{ top: 8, right: 12, bottom: 2, left: -8 }}>
+                <CartesianGrid vertical={false} stroke="#dbe3f4" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#5c6b88" }} />
+                <YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} unit="m" />
+                <Tooltip content={<RideDowntimeTooltip />} />
+                {singleDayRides.map((r, idx) => (
+                  <Bar
+                    key={r.rideCode}
+                    dataKey={r.rideCode}
+                    name={r.rideCode}
+                    stackId="rides"
+                    fill={rideColor(idx)}
+                    radius={idx === singleDayRides.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            ) : chartType === "bar" ? (
+              /* Multi-day bar chart */
+              <BarChart data={multiDayData} margin={{ top: 8, right: 12, bottom: 2, left: -8 }}>
+                <CartesianGrid vertical={false} stroke="#dbe3f4" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#5c6b88" }} />
+                <YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} unit="m" />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const item = payload[0].payload;
+                    return (
+                      <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl">
+                        {item.label || label} • {item.minutes}min • {Number(item.percentage).toFixed(1)}%
+                      </div>
+                    );
+                  }}
+                  cursor={{ fill: "#dce8fc", fillOpacity: 0.45 }}
+                />
+                <Bar dataKey="minutes" radius={[6, 6, 0, 0]}>
+                  {multiDayData.map(point => {
+                    const color = point.minutes < 30 ? "#5793f5" : point.minutes < 60 ? "#eab308" : point.minutes < 120 ? "#f97316" : "#ef4444";
+                    return <Cell key={point.dateKey} fill={color} />;
+                  })}
+                </Bar>
+              </BarChart>
+            ) : (
+              /* Line chart */
+              <LineChart data={multiDayData} margin={{ top: 8, right: 12, bottom: 2, left: -8 }}>
+                <CartesianGrid vertical={false} stroke="#dbe3f4" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#5c6b88" }} />
+                <YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} unit="m" />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const item = payload[0].payload;
+                    return (
+                      <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl">
+                        {item.label || label} • {item.minutes}min • {Number(item.percentage).toFixed(1)}%
+                      </div>
+                    );
+                  }}
+                  cursor={{ stroke: "#1e4ca1", strokeDasharray: "4 4", strokeWidth: 1.5 }}
+                />
+                <Line type="monotone" dataKey="minutes" stroke="#5793f5" strokeWidth={2.5} dot={{ r: 4, fill: "#5793f5", stroke: "#fff", strokeWidth: 2 }} activeDot={{ r: 6 }} />
+              </LineChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -451,12 +936,13 @@ function IncidentLogs({
               </Button>
             </Link>
           )}
-          <Button size="sm" onClick={onCopy} className="h-8 bg-emerald-700 text-xs font-bold hover:bg-emerald-800">
-            {copied ? <Check className="mr-1.5 h-3.5 w-3.5" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-            {copied ? "Copied for Excel" : "Copy for Excel"}
+          <Button size="sm" onClick={onCopy} className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs gap-1.5">
+            <Copy className="h-3.5 w-3.5" />
+            {copied ? "Copied!" : "Copy for Excel"}
           </Button>
         </div>
-        <div className="mt-3 max-h-[440px] overflow-y-auto rounded-xl border border-[#d9e1f0] bg-[#fbfcff] p-4 select-text">
+
+        <div className="mt-4 space-y-3">
           {analysis.rideIncidentGroups.length ? (
             <div className="space-y-4 divide-y divide-slate-200">
               {analysis.rideIncidentGroups.map(group => (
@@ -519,10 +1005,96 @@ function ScenarioCard({
   );
 }
 
-function CompareTrend({ title, analysis, tone }: { title: string; analysis?: AnalysisResult | null; tone: "blue" | "amber" }) {
-  const data = analysis?.dailyTrend ?? [];
+function CompareVisualTrend({
+  analysis,
+  chartType,
+  title,
+  tone,
+}: {
+  analysis?: AnalysisResult | null;
+  chartType: "bar" | "line" | "pie";
+  title: string;
+  tone: "blue" | "amber";
+}) {
   const stroke = tone === "blue" ? "#5793f5" : "#f4ba3c";
-  return <Card className={CARD_CLASS}><CardContent className="p-4"><h3 className="flex items-center gap-2 text-sm font-extrabold text-[#172c5b]"><i className={`h-2.5 w-2.5 rounded-full ${tone === "blue" ? "bg-[#5793f5]" : "bg-[#f4ba3c]"}`} />{title}</h3><div className="mt-2 h-[118px]">{analysis ? <ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 7, right: 4, bottom: 0, left: -18 }}><CartesianGrid vertical={false} stroke="#e1e7f4" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 8, fill: "#65738f" }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 8, fill: "#65738f" }} /><Tooltip content={<TrendTooltip tone={tone} />} cursor={{ stroke, strokeDasharray: "3 3" }} /><Line type="monotone" dataKey="minutes" stroke={stroke} strokeWidth={2.2} dot={{ r: 3, fill: stroke, stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} /></LineChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Start comparison to show the trend.</div>}</div></CardContent></Card>;
+  const data = analysis?.dailyTrend ?? [];
+
+  const pieData = useMemo(() => {
+    if (!analysis) return [];
+    return analysis.topRides
+      .filter(r => r.minutes > 0)
+      .map((r, idx) => ({
+        name: r.rideCode,
+        rideCode: r.rideCode,
+        attraction: r.attraction,
+        value: r.minutes,
+        minutes: r.minutes,
+        events: r.events,
+        percentage: r.downtimePercentage,
+        fill: rideColor(idx),
+      }));
+  }, [analysis]);
+  const rideBarData = useMemo(() => pieData.slice().sort((a, b) => b.minutes - a.minutes), [pieData]);
+
+  return (
+    <Card className={CARD_CLASS}>
+      <CardContent className="p-4">
+        <h3 className="flex items-center gap-2 text-sm font-extrabold text-[#172c5b]">
+          <i className={`h-2.5 w-2.5 rounded-full ${tone === "blue" ? "bg-[#5793f5]" : "bg-[#f4ba3c]"}`} />
+          {title}
+        </h3>
+        <div className="mt-2 h-[160px]">
+          {!analysis ? (
+            <div className="flex h-full items-center justify-center text-xs text-slate-400">
+              Start comparison to show the trend.
+            </div>
+          ) : chartType === "pie" ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Tooltip content={<RideDowntimeTooltip />} />
+                <Pie
+                  data={pieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={65}
+                  innerRadius={25}
+                  label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          ) : chartType === "bar" ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={rideBarData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <CartesianGrid vertical={false} stroke="#e1e7f4" />
+                <XAxis dataKey="rideCode" tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "#65738f" }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 9, fill: "#65738f" }} unit="m" />
+                <Tooltip content={<RideDowntimeTooltip />} />
+                <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
+                  {rideBarData.map((entry, index) => <Cell key={`${entry.rideCode}-${index}`} fill={entry.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 7, right: 4, bottom: 0, left: -18 }}>
+                <CartesianGrid vertical={false} stroke="#e1e7f4" />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 8, fill: "#65738f" }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 8, fill: "#65738f" }} unit="m" />
+                <Tooltip content={<RideDowntimeTooltip />} cursor={{ stroke, strokeDasharray: "3 3" }} />
+                <Line type="monotone" dataKey="minutes" stroke={stroke} strokeWidth={2.2} dot={{ r: 3, fill: stroke, stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 function OverlapTrend({ before, after }: { before?: AnalysisResult | null; after?: AnalysisResult | null }) {
@@ -532,7 +1104,7 @@ function OverlapTrend({ before, after }: { before?: AnalysisResult | null; after
     after?.dailyTrend.forEach(point => map.set(point.dateKey, { ...(map.get(point.dateKey) ?? {}), label: point.label, bMinutes: point.minutes, bPercentage: point.percentage }));
     return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, value]) => value);
   }, [before, after]);
-  return <Card className={`${CARD_CLASS} h-full`}><CardContent className="p-4"><div className="flex items-center justify-between"><h3 className="text-sm font-extrabold text-[#172c5b]">Overlap comparison trend</h3><div className="flex gap-3 text-[10px] font-semibold text-slate-500"><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[#5793f5]" />Scenario A</span><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[#f4ba3c]" />Scenario B</span></div></div><div className="mt-3 h-[278px]">{before || after ? <ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 8, right: 10, bottom: 4, left: -12 }}><CartesianGrid vertical={false} stroke="#e1e7f4" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#65738f" }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#65738f" }} /><Tooltip content={<OverlapTooltip />} cursor={{ stroke: "#4c618d", strokeDasharray: "4 4" }} /><Line type="monotone" dataKey="aMinutes" stroke="#5793f5" strokeWidth={2.5} dot={{ r: 3.5, fill: "#5793f5", stroke: "#fff", strokeWidth: 1.5 }} /><Line type="monotone" dataKey="bMinutes" stroke="#f4ba3c" strokeWidth={2.5} dot={{ r: 3.5, fill: "#f4ba3c", stroke: "#fff", strokeWidth: 1.5 }} /></LineChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Results will appear here after comparison starts.</div>}</div></CardContent></Card>;
+  return <Card className={`${CARD_CLASS} h-full`}><CardContent className="p-4"><div className="flex items-center justify-between"><h3 className="text-sm font-extrabold text-[#172c5b]">Overlap comparison trend</h3><div className="flex gap-3 text-[10px] font-semibold text-slate-500"><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[#5793f5]" />Scenario A</span><span className="inline-flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-[#f4ba3c]" />Scenario B</span></div></div><div className="mt-3 h-[278px]">{before || after ? <ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 8, right: 10, bottom: 4, left: -12 }}><CartesianGrid vertical={false} stroke="#e1e7f4" /><XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#65738f" }} /><YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#65738f" }} /><Tooltip content={({ active, payload, label }) => { if (!active || !payload?.length) return null; const item = payload[0]?.payload; if (!item) return null; return <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl"><p className="mb-1 text-[10px] uppercase text-blue-100">{item.label ?? label}</p>{item.aMinutes !== undefined && <p><span className="text-[#79a8ff]">A:</span> {Math.round(item.aMinutes)} min ({Number(item.aPercentage).toFixed(1)}%)</p>}{item.bMinutes !== undefined && <p className="mt-0.5"><span className="text-[#ffd05a]">B:</span> {Math.round(item.bMinutes)} min ({Number(item.bPercentage).toFixed(1)}%)</p>}</div>; }} cursor={{ stroke: "#4c618d", strokeDasharray: "4 4" }} /><Line type="monotone" dataKey="aMinutes" stroke="#5793f5" strokeWidth={2.5} dot={{ r: 3.5, fill: "#5793f5", stroke: "#fff", strokeWidth: 1.5 }} /><Line type="monotone" dataKey="bMinutes" stroke="#f4ba3c" strokeWidth={2.5} dot={{ r: 3.5, fill: "#f4ba3c", stroke: "#fff", strokeWidth: 1.5 }} /></LineChart></ResponsiveContainer> : <div className="flex h-full items-center justify-center text-xs text-slate-400">Results will appear here after comparison starts.</div>}</div></CardContent></Card>;
 }
 
 function PerformanceDifference({ before, after, afterName }: { before: AnalysisResult; after: AnalysisResult; afterName: string }) {
@@ -571,6 +1143,8 @@ function RideInsightPanels({ before, after }: { before: AnalysisResult; after: A
   return <div className="space-y-4"><Panel title="Largest improvement" items={improvements} tone="green" /><Panel title="Needs follow-up" items={followUps} tone="rose" /></div>;
 }
 
+const STORAGE_KEY_COMPARE_HISTORY = "skyworlds_compare_history_v139";
+
 function CompareTab({ reports }: { reports: SavedReport[] }) {
   const availableDateKeys = useMemo(() => Array.from(new Set(reports.map(report => report.reportDate))).sort(), [reports]);
   const [scenarios, setScenarios] = useState<Scenario[]>([
@@ -578,17 +1152,268 @@ function CompareTab({ reports }: { reports: SavedReport[] }) {
     { id: "B", name: "After maintenance", dateKeys: new Set(), rideCodes: [] },
   ]);
   const [started, setStarted] = useState(false);
-  const updateScenario = (next: Scenario) => { setScenarios(current => current.map(scenario => scenario.id === next.id ? next : scenario)); setStarted(false); };
+  // Default chart type in comparison: "bar" (1st), "line" (2nd), "pie" (3rd)
+  const [chartType, setChartType] = useState<"bar" | "line" | "pie">("bar");
+
+  // Comparison history stored in localStorage (max 5 items, newest on left)
+  const [historyList, setHistoryList] = useState<CompareHistoryItem[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_COMPARE_HISTORY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.slice(0, 5);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const utils = trpc.useUtils();
+  const serverHistoryQuery = trpc.comparisonHistory.list.useQuery();
+  const recordHistoryMutation = trpc.comparisonHistory.record.useMutation({
+    onSuccess: () => {
+      utils.comparisonHistory.list.invalidate();
+    },
+  });
+
+  useEffect(() => {
+    if (serverHistoryQuery.data && serverHistoryQuery.data.length > 0) {
+      const serverItems: CompareHistoryItem[] = serverHistoryQuery.data.map(item => {
+        try {
+          const parsed = JSON.parse(item.scenariosJson);
+          return {
+            id: String(item.id),
+            timestamp: new Date(item.createdAt).getTime(),
+            label: item.label,
+            scenarioA: parsed.scenarioA,
+            scenarioB: parsed.scenarioB,
+          };
+        } catch {
+          return null;
+        }
+      }).filter(Boolean) as CompareHistoryItem[];
+
+      if (serverItems.length) {
+        setHistoryList(serverItems.slice(0, 5));
+      }
+    }
+  }, [serverHistoryQuery.data]);
+
+  const saveHistory = (scenA: Scenario, scenB: Scenario) => {
+    const summaryA = scenarioHistorySummary(scenA.rideCodes, scenA.dateKeys);
+    const summaryB = scenarioHistorySummary(scenB.rideCodes, scenB.dateKeys);
+    const label = `${summaryA} vs ${summaryB}`;
+    const newItem: CompareHistoryItem = {
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: Date.now(),
+      label,
+      scenarioA: {
+        name: scenA.name,
+        dateKeys: Array.from(scenA.dateKeys),
+        rideCodes: scenA.rideCodes,
+      },
+      scenarioB: {
+        name: scenB.name,
+        dateKeys: Array.from(scenB.dateKeys),
+        rideCodes: scenB.rideCodes,
+      },
+    };
+
+    setHistoryList(prev => {
+      // Avoid duplicate top
+      const filtered = prev.filter(item => item.label !== label);
+      const next = [newItem, ...filtered].slice(0, 5);
+      try {
+        localStorage.setItem(STORAGE_KEY_COMPARE_HISTORY, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    recordHistoryMutation.mutate({
+      label,
+      scenariosJson: JSON.stringify({
+        scenarioA: newItem.scenarioA,
+        scenarioB: newItem.scenarioB,
+      }),
+    });
+  };
+
+  const applyHistory = (item: CompareHistoryItem) => {
+    setScenarios([
+      {
+        id: "A",
+        name: item.scenarioA.name,
+        dateKeys: new Set(item.scenarioA.dateKeys),
+        rideCodes: item.scenarioA.rideCodes,
+      },
+      {
+        id: "B",
+        name: item.scenarioB.name,
+        dateKeys: new Set(item.scenarioB.dateKeys),
+        rideCodes: item.scenarioB.rideCodes,
+      },
+    ]);
+    setStarted(false); // User must click "Start comparison" to run
+    toast.info(`Pre-filled comparison: ${item.label}. Click "Start comparison" to run.`);
+  };
+
+  const updateScenario = (next: Scenario) => {
+    setScenarios(current => current.map(scenario => scenario.id === next.id ? next : scenario));
+    setStarted(false);
+  };
+
   const reportIds = useMemo(() => scenarios.map(scenario => reports.filter(report => scenario.dateKeys.has(report.reportDate)).map(report => report.id)), [scenarios, reports]);
-  const first = scenarios[0]; const second = scenarios[1]; const third = scenarios[2];
+  const first = scenarios[0];
+  const second = scenarios[1];
+  const third = scenarios[2];
+
   const queryA = trpc.analysis.get.useQuery({ reportIds: reportIds[0] ?? [], rideCodes: first.rideCodes }, { enabled: started && (reportIds[0]?.length ?? 0) > 0 });
   const queryB = trpc.analysis.get.useQuery({ reportIds: reportIds[1] ?? [], rideCodes: second.rideCodes }, { enabled: started && (reportIds[1]?.length ?? 0) > 0 });
   const queryC = trpc.analysis.get.useQuery({ reportIds: reportIds[2] ?? [], rideCodes: third?.rideCodes ?? [] }, { enabled: started && Boolean(third) && (reportIds[2]?.length ?? 0) > 0 });
+
   const valid = Boolean(reportIds[0]?.length && reportIds[1]?.length);
   const calculating = queryA.isLoading || queryB.isLoading || queryC.isLoading;
-  const before = started ? queryA.data : null; const after = started ? queryB.data : null;
+  const before = started ? queryA.data : null;
+  const after = started ? queryB.data : null;
+
+  const handleStartComparison = () => {
+    setStarted(true);
+    saveHistory(first, second);
+  };
+
   const addThird = () => setScenarios(current => [...current, { id: "C", name: "Third scenario", dateKeys: new Set(), rideCodes: [] }]);
-  return <div className="space-y-5"><div className="flex flex-col gap-3 lg:flex-row lg:items-start"><div className="grid flex-1 gap-4 md:grid-cols-2">{scenarios.map(scenario => <ScenarioCard key={scenario.id} scenario={scenario} availableDateKeys={availableDateKeys} onChange={updateScenario} />)}</div>{!third && <Button variant="outline" onClick={addThird} className="h-11 shrink-0 border-[#cdd8ef] bg-white font-bold text-[#1e4ca1]"><Plus className="mr-1.5 h-4 w-4" />Add third scenario</Button>}</div><div className="flex flex-col items-center"><Button size="lg" onClick={() => setStarted(true)} disabled={!valid || calculating} className="h-11 min-w-56 bg-emerald-600 px-8 text-sm font-extrabold text-white hover:bg-emerald-700">{calculating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}{started ? "Recalculate comparison" : "Start comparison"}</Button><p className="mt-1.5 text-[11px] text-slate-500">{valid ? "Results calculate after Start comparison is pressed." : "Select valid date ranges for Scenario A and Scenario B."}</p></div>{(queryA.error || queryB.error || queryC.error) && <Card className="border-rose-200 bg-rose-50"><CardContent className="flex gap-3 p-4 text-xs text-rose-800"><AlertTriangle className="h-4 w-4 shrink-0" />{queryA.error?.message ?? queryB.error?.message ?? queryC.error?.message}</CardContent></Card>}{started && calculating && <Card className={CARD_CLASS}><CardContent className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Calculating comparison across saved source reports…</CardContent></Card>}{started && !calculating && before && after && <><div className="grid gap-4 xl:grid-cols-[0.85fr_1.25fr]"><div className="grid gap-4"><CompareTrend title="Scenario A trend" analysis={before} tone="blue" /><CompareTrend title="Scenario B trend" analysis={after} tone="amber" /></div><OverlapTrend before={before} after={after} /></div><PerformanceDifference before={before} after={after} afterName={second.name} /><div className="grid gap-4 xl:grid-cols-[1.75fr_0.75fr]"><ComparisonMetrics before={before} after={after} scenarioA={first} scenarioB={second} /><RideInsightPanels before={before} after={after} /></div></>}</div>;
+
+  return (
+    <div className="space-y-5">
+      {/* Comparison History Section (positioned before date selection, horizontal scroll, max 5, narrow) */}
+      {historyList.length > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/90 p-2.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 shrink-0 px-2 text-xs font-bold text-[#172c5b]">
+            <History className="h-4 w-4 text-[#1e4ca1]" />
+            <span>Recent</span>
+          </div>
+          <div className="flex flex-1 items-center gap-2 overflow-x-auto py-0.5 scrollbar-thin">
+            {historyList.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => applyHistory(item)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors hover:border-[#1e4ca1] hover:bg-blue-50 hover:text-[#1e4ca1]"
+                title="Click to pre-fill comparison parameters"
+              >
+                <span className="max-w-[240px] truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scenarios Date & Ride Selection */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+        <div className="grid flex-1 gap-4 md:grid-cols-2">
+          {scenarios.map(scenario => (
+            <ScenarioCard key={scenario.id} scenario={scenario} availableDateKeys={availableDateKeys} onChange={updateScenario} />
+          ))}
+        </div>
+        {!third && (
+          <Button variant="outline" onClick={addThird} className="h-11 shrink-0 border-[#cdd8ef] bg-white font-bold text-[#1e4ca1]">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add third scenario
+          </Button>
+        )}
+      </div>
+
+      {/* Start comparison button */}
+      <div className="flex flex-col items-center">
+        <Button
+          size="lg"
+          onClick={handleStartComparison}
+          disabled={!valid || calculating}
+          className="h-11 min-w-56 bg-emerald-600 px-8 text-sm font-extrabold text-white hover:bg-emerald-700"
+        >
+          {calculating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+          {started ? "Recalculate comparison" : "Start comparison"}
+        </Button>
+        <p className="mt-1.5 text-[11px] text-slate-500">
+          {valid ? "Results calculate after Start comparison is pressed." : "Select valid date ranges for Scenario A and Scenario B."}
+        </p>
+      </div>
+
+      {(queryA.error || queryB.error || queryC.error) && (
+        <Card className="border-rose-200 bg-rose-50">
+          <CardContent className="flex gap-3 p-4 text-xs text-rose-800">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            {queryA.error?.message ?? queryB.error?.message ?? queryC.error?.message}
+          </CardContent>
+        </Card>
+      )}
+
+      {started && calculating && (
+        <Card className={CARD_CLASS}>
+          <CardContent className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Calculating comparison across saved source reports…
+          </CardContent>
+        </Card>
+      )}
+
+      {started && !calculating && before && after && (
+        <>
+          {/* Comparison Trends with 3-tab chart switcher: Bar (default), Line, Pie */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-extrabold text-[#172c5b]">Comparative visualization</h2>
+            <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setChartType("bar")}
+                className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                  chartType === "bar" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Bar chart
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType("line")}
+                className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                  chartType === "line" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Line chart
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType("pie")}
+                className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
+                  chartType === "pie" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Pie chart
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[0.85fr_1.25fr]">
+            <div className="grid gap-4">
+              <CompareVisualTrend title="Scenario A trend" analysis={before} tone="blue" chartType={chartType} />
+              <CompareVisualTrend title="Scenario B trend" analysis={after} tone="amber" chartType={chartType} />
+            </div>
+            <OverlapTrend before={before} after={after} />
+          </div>
+
+          <PerformanceDifference before={before} after={after} afterName={second.name} />
+
+          <div className="grid gap-4 xl:grid-cols-[1.75fr_0.75fr]">
+            <ComparisonMetrics before={before} after={after} scenarioA={first} scenarioB={second} />
+            <RideInsightPanels before={before} after={after} />
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function AnalysisStudio() {
@@ -603,43 +1428,315 @@ export default function AnalysisStudio() {
   const { data: reports = [], isLoading: reportsLoading, error: reportsError } = trpc.savedReports.list.useQuery();
   const { data: darkDays = [] } = trpc.darkDays.list.useQuery();
   const availableDateKeys = useMemo(() => Array.from(new Set(reports.map(report => report.reportDate))).sort(), [reports]);
-  useEffect(() => { if (availableDateKeys.length && !selectedDateKeys.size) setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 1]])); }, [availableDateKeys]);
+
+  useEffect(() => {
+    if (availableDateKeys.length && !selectedDateKeys.size) {
+      setSelectedDateKeys(new Set([availableDateKeys[availableDateKeys.length - 1]]));
+    }
+  }, [availableDateKeys]);
+
   const selectedReports = useMemo(() => reports.filter(report => selectedDateKeys.has(report.reportDate)), [reports, selectedDateKeys]);
   const reportIds = useMemo(() => selectedReports.map(report => report.id), [selectedReports]);
   const analysisInput = useMemo(() => ({ reportIds, rideCodes: selectedRideCodes }), [reportIds.join(","), selectedRideCodes.join(",")]);
   const analysisQuery = trpc.analysis.get.useQuery(analysisInput, { enabled: tab === "overview" && reportIds.length > 0 });
 
-  // Requirement: Downtime calendar card always highlights the whole month of severity colors
-  // for the active month of the selected dates and active ride scope
   const activeMonthPrefix = useMemo(() => {
     const sorted = Array.from(selectedDateKeys).sort();
     if (sorted.length) {
-      return sorted[sorted.length - 1].slice(0, 7); // e.g. "2026-09"
+      return sorted[sorted.length - 1].slice(0, 7);
     }
     return availableDateKeys.length ? availableDateKeys[availableDateKeys.length - 1].slice(0, 7) : "";
   }, [selectedDateKeys, availableDateKeys]);
 
-  const monthReports = useMemo(() => {
-    if (!activeMonthPrefix) return reports;
-    return reports.filter(report => report.reportDate.startsWith(activeMonthPrefix));
-  }, [reports, activeMonthPrefix]);
+  const deleteMutation = trpc.savedReports.delete.useMutation({
+    onSuccess: async () => {
+      await utils.savedReports.list.invalidate();
+      setDeleteId(undefined);
+      toast.success("Saved source log deleted.");
+    },
+    onError: error => toast.error(error.message),
+  });
 
-  const monthReportIds = useMemo(() => monthReports.map(report => report.id), [monthReports]);
-  const monthAnalysisQuery = trpc.analysis.get.useQuery(
-    { reportIds: monthReportIds, rideCodes: selectedRideCodes },
-    { enabled: tab === "overview" && monthReportIds.length > 0 }
-  );
-  const deleteMutation = trpc.savedReports.delete.useMutation({ onSuccess: async () => { await utils.savedReports.list.invalidate(); setDeleteId(undefined); toast.success("Saved source log deleted."); }, onError: error => toast.error(error.message) });
-  const darkDayMutation = trpc.darkDays.set.useMutation({ onSuccess: async () => { await utils.darkDays.list.invalidate(); await utils.analysis.get.invalidate(); toast.success("Dark day status updated."); }, onError: error => toast.error(error.message) });
+  const darkDayMutation = trpc.darkDays.set.useMutation({
+    onSuccess: async () => {
+      await utils.darkDays.list.invalidate();
+      await utils.analysis.get.invalidate();
+      toast.success("Dark day status updated.");
+    },
+    onError: error => toast.error(error.message),
+  });
+
   const analysis = analysisQuery.data;
-  const setActiveTab = (next: Tab) => { setTab(next); window.history.replaceState(null, "", next === "compare" ? "/analysis?tab=compare" : "/analysis"); };
+  const setActiveTab = (next: Tab) => {
+    setTab(next);
+    window.history.replaceState(null, "", next === "compare" ? "/analysis?tab=compare" : "/analysis");
+  };
+
   const copyIncidentCards = async () => {
-    if (!analysis?.rideIncidentGroups.length) { toast.error("No incident logs to copy."); return; }
+    if (!analysis?.rideIncidentGroups.length) {
+      toast.error("No incident logs to copy.");
+      return;
+    }
     const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.6;">${analysis.rideIncidentGroups.map(group => `<div style="margin-top:12px;font-weight:bold;color:#1E293B;">${group.rideCode}: ${group.attraction}</div>${group.logs.map(log => { if (log.kind === "darkDay") return `<div>*${log.dateLabel}, <span style="color:#FF0000;font-weight:bold;">Dark day</span>.</div>`; if (log.kind === "weather") return `<div>*${log.dateLabel}, <span style="color:#FF0000;font-weight:bold;">${log.description}</span>, ${log.durationLabel} (${log.timeRange}), <span style="color:#FF0000;font-weight:bold;">Moderated</span>.</div>`; const evac = log.evacuationLabel && log.evacuationRange ? `, <span style="color:#FF0000;font-weight:bold;">${log.evacuationLabel}</span> (${log.evacuationRange})` : ""; return `<div>*${log.dateLabel}, <span style="color:#FF0000;font-weight:bold;">${log.description}</span>, ${log.durationLabel} (${log.timeRange})${evac}.</div>`; }).join("")}`).join("")}</div>`;
     const plain = analysis.rideIncidentGroups.map(group => `${group.rideCode}: ${group.attraction}\n${group.logs.map(log => `*${log.dateLabel}, ${log.description}${log.durationLabel ? `, ${log.durationLabel} (${log.timeRange})` : ""}.`).join("\n")}`).join("\n\n");
-    try { if (navigator.clipboard && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([plain], { type: "text/plain" }) })]); else await navigator.clipboard.writeText(plain); setCopied(true); setTimeout(() => setCopied(false), 2200); toast.success("Copied incident remarks for Excel."); } catch { toast.error("Clipboard access is unavailable. Select the remarks and copy them manually."); }
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([plain], { type: "text/plain" }) })]);
+      } else {
+        await navigator.clipboard.writeText(plain);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+      toast.success("Copied incident remarks for Excel.");
+    } catch {
+      toast.error("Clipboard access is unavailable. Select the remarks and copy them manually.");
+    }
   };
+
   const singleSelectedDate = selectedDateKeys.size === 1 ? Array.from(selectedDateKeys)[0] : undefined;
   const isAllRidesSelected = selectedRideCodes.length === 0;
-  return <DashboardLayout><div className="min-h-[calc(100vh-2rem)] text-slate-900"><header className="px-1 pt-1"><EditableText contentKey="analysis_page_title" defaultText="Downtime Analysis Studio" as="h1" className="block text-3xl font-extrabold tracking-[-0.04em] text-[#162b5b] sm:text-4xl" /><EditableText contentKey="analysis_page_subtitle" defaultText={tab === "overview" ? "Find patterns, prioritise risk, and act on technical downtime." : "Compare operating periods and ride groups side by side."} as="p" className="mt-1 block text-sm text-slate-600" /><div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-full bg-[#dce8fc] p-1"><button role="tab" aria-selected={tab === "overview"} onClick={() => setActiveTab("overview")} className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${tab === "overview" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"}`}>Overview</button><button role="tab" aria-selected={tab === "compare"} onClick={() => setActiveTab("compare")} className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${tab === "compare" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"}`}>Compare</button></div></header>{reportsLoading ? <Card className={`${CARD_CLASS} mt-6`}><CardContent className="flex items-center gap-3 p-7 text-sm text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Loading saved downtime reports…</CardContent></Card> : reportsError ? <Card className="mt-6 border-rose-200 bg-rose-50"><CardContent className="flex gap-3 p-6 text-sm text-rose-800"><AlertTriangle className="h-5 w-5" />Saved source reports could not be loaded. Please try again.</CardContent></Card> : !reports.length ? <Card className={`${CARD_CLASS} mt-6`}><CardContent className="flex gap-4 p-7"><FileText className="h-7 w-7 shrink-0 text-[#1e4ca1]" /><div><h2 className="text-lg font-extrabold text-[#172c5b]">No saved source reports</h2><p className="mt-1 text-sm text-slate-600">Build and save a downtime report in Report Studio to start your analysis.</p></div></CardContent></Card> : tab === "compare" ? <main className="mt-5"><CompareTab reports={reports as SavedReport[]} /></main> : <main className="mt-5 space-y-4"><Card className={`${CARD_CLASS} overflow-visible`}><CardContent className="flex flex-col p-0 sm:flex-row"><DateRangePicker availableDateKeys={availableDateKeys} selectedDateKeys={selectedDateKeys} onChange={setSelectedDateKeys} darkDays={darkDays} /><RideScopePicker value={selectedRideCodes} onChange={setSelectedRideCodes} /><Button variant="ghost" onClick={() => setSavedManagerOpen(true)} className="h-auto shrink-0 justify-center gap-2 border-t border-slate-100 px-5 py-3 text-xs font-extrabold text-[#1e4ca1] hover:bg-blue-50 sm:border-l sm:border-t-0"><FileText className="h-4 w-4" />View source reports ({reports.length})<ChevronRight className="h-4 w-4" /></Button></CardContent></Card>{analysisQuery.isLoading ? <Card className={CARD_CLASS}><CardContent className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Calculating selected reporting dates…</CardContent></Card> : analysisQuery.error ? <Card className="border-rose-200 bg-rose-50"><CardContent className="p-5 text-sm text-rose-800">{analysisQuery.error.message}</CardContent></Card> : analysis ? <><section className="grid gap-4 xl:grid-cols-[1.5fr_0.85fr]"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><MetricCard contentKey="overview_total_downtime" label="Total downtime" value={`${analysis.totalTechnicalMinutes.toLocaleString()} min`} detail={`${analysis.selectedDayCount} selected day${analysis.selectedDayCount === 1 ? "" : "s"}`} tone="blue" /><MetricCard contentKey="overview_availability" label="Availability" value={`${(100 - analysis.averageDowntimePercentage).toFixed(2)}%`} detail="Technical 11-1 availability" tone="mint" /><MetricCard contentKey="overview_incidents_per_day" label="Incidents per day" value={analysis.averageEventsPerDay.toFixed(1)} detail={`${analysis.affectedRideCount} rides affected`} tone="amber" /><MetricCard contentKey="overview_avg_interruption" label="Avg tech interruption" value={`${analysis.averageIncidentMinutes.toFixed(1)} min`} detail={analysis.totalEvents && analysis.maxIncidentMinutes !== undefined && analysis.minIncidentMinutes !== undefined ? `(Max ${analysis.maxIncidentMinutes} mins) (Min ${analysis.minIncidentMinutes} mins)` : "No incidents"} tone="blue" />{analysis.selectedDayCount > 1 ? <><MetricCard contentKey="overview_peak_day" label="Peak day" value={analysis.peakDay ? `${analysis.peakDay.minutes} min` : "—"} detail={analysis.peakDay ? dateWithWeekday(analysis.peakDay.dateKey) : "No technical events"} tone="rose" /><MetricCard contentKey="overview_quietest_day" label="Quietest day" value={analysis.dailyTrend.length ? `${Math.min(...analysis.dailyTrend.map(day => day.minutes))} min` : "—"} detail={analysis.dailyTrend.length ? dateWithWeekday([...analysis.dailyTrend].sort((a, b) => a.minutes - b.minutes)[0].dateKey) : "No operating days"} tone="mint" /></> : <><MetricCard contentKey="overview_worst_ride" label="Worst affected ride" value={analysis.topRides[0]?.rideCode ?? "—"} detail={analysis.topRides[0] ? `${analysis.topRides[0].minutes} min · ${analysis.topRides[0].availabilityPercentage.toFixed(1)}% availability` : "No ride impact"} tone="rose" /><MetricCard contentKey="overview_evacuations" label="Evacuations" value={`${analysis.totalEvacuationEvents}`} detail={`${analysis.totalEvacuationMinutes} min total evacuation time`} tone="amber" /></>}</div><RankingPanel analysis={analysis} /></section><section className="grid gap-4 xl:grid-cols-[1.55fr_0.85fr]"><TrendPanel analysis={analysis} /><CalendarPanel monthTrend={monthAnalysisQuery.data?.dailyTrend ?? analysis.dailyTrend} selectedKeys={selectedDateKeys} scope={scopeLabel(selectedRideCodes)} darkDays={darkDays} monthDate={activeMonthPrefix ? asDate(`${activeMonthPrefix}-01`) : undefined} /></section><IncidentLogs analysis={analysis} copied={copied} onCopy={copyIncidentCards} singleSelectedDate={singleSelectedDate} isAllRidesSelected={isAllRidesSelected} /></> : null}</main>}<SavedSourceManager open={savedManagerOpen} onOpenChange={setSavedManagerOpen} reports={reports as SavedReport[]} onDelete={setDeleteId} deleting={deleteMutation.isPending} darkDays={darkDays} onToggleDarkDay={(dateKey, isDarkDay) => darkDayMutation.mutate({ dateKey, isDarkDay })} updatingDarkDay={darkDayMutation.isPending} /><AlertDialog open={deleteId !== undefined} onOpenChange={open => !open && setDeleteId(undefined)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this saved log?</AlertDialogTitle><AlertDialogDescription>Deletion removes this saved source file and cannot be undone. Any active analysis depending on it will update after deletion.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })} disabled={deleteMutation.isPending} className="bg-rose-700 text-white hover:bg-rose-800">{deleteMutation.isPending ? "Deleting…" : "Delete saved log"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></DashboardLayout>;
+
+  return (
+    <DashboardLayout>
+      <div className="min-h-[calc(100vh-2rem)] text-slate-900">
+        <header className="px-1 pt-1">
+          <EditableText
+            contentKey="analysis_page_title"
+            defaultText="Downtime Analysis Studio"
+            as="h1"
+            className="block text-3xl font-extrabold tracking-[-0.04em] text-[#162b5b] sm:text-4xl"
+          />
+          <EditableText
+            contentKey="analysis_page_subtitle"
+            defaultText={tab === "overview" ? "Find patterns, prioritise risk, and act on technical downtime." : "Compare operating periods and ride groups side by side."}
+            as="p"
+            className="mt-1 block text-sm text-slate-600"
+          />
+          <div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-full bg-[#dce8fc] p-1">
+            <button
+              role="tab"
+              aria-selected={tab === "overview"}
+              onClick={() => setActiveTab("overview")}
+              className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${
+                tab === "overview" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              role="tab"
+              aria-selected={tab === "compare"}
+              onClick={() => setActiveTab("compare")}
+              className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${
+                tab === "compare" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"
+              }`}
+            >
+              Compare
+            </button>
+          </div>
+        </header>
+
+        {reportsLoading ? (
+          <Card className={`${CARD_CLASS} mt-6`}>
+            <CardContent className="flex items-center gap-3 p-7 text-sm text-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading saved downtime reports…
+            </CardContent>
+          </Card>
+        ) : reportsError ? (
+          <Card className="mt-6 border-rose-200 bg-rose-50">
+            <CardContent className="flex gap-3 p-6 text-sm text-rose-800">
+              <AlertTriangle className="h-5 w-5" />
+              Saved source reports could not be loaded. Please try again.
+            </CardContent>
+          </Card>
+        ) : !reports.length ? (
+          <Card className={`${CARD_CLASS} mt-6`}>
+            <CardContent className="flex gap-4 p-7">
+              <FileText className="h-7 w-7 shrink-0 text-[#1e4ca1]" />
+              <div>
+                <h2 className="text-lg font-extrabold text-[#172c5b]">No saved source reports</h2>
+                <p className="mt-1 text-sm text-slate-600">Build and save a downtime report in Report Studio to start your analysis.</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : tab === "compare" ? (
+          <main className="mt-5">
+            <CompareTab reports={reports as SavedReport[]} />
+          </main>
+        ) : (
+          <main className="mt-5 space-y-4">
+            <Card className={`${CARD_CLASS} overflow-visible`}>
+              <CardContent className="flex flex-col p-0 sm:flex-row">
+                <DateRangePicker
+                  availableDateKeys={availableDateKeys}
+                  selectedDateKeys={selectedDateKeys}
+                  onChange={setSelectedDateKeys}
+                  darkDays={darkDays}
+                />
+                <RideScopePicker value={selectedRideCodes} onChange={setSelectedRideCodes} />
+                <Button
+                  variant="ghost"
+                  onClick={() => setSavedManagerOpen(true)}
+                  className="h-auto shrink-0 justify-center gap-2 border-t border-slate-100 px-5 py-3 text-xs font-extrabold text-[#1e4ca1] hover:bg-blue-50 sm:border-l sm:border-t-0"
+                >
+                  <FileText className="h-4 w-4" />
+                  View source reports ({reports.length})
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+
+            {analysisQuery.isLoading ? (
+              <Card className={CARD_CLASS}>
+                <CardContent className="flex items-center justify-center gap-2 p-10 text-sm text-slate-500">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Calculating selected reporting dates…
+                </CardContent>
+              </Card>
+            ) : analysisQuery.error ? (
+              <Card className="border-rose-200 bg-rose-50">
+                <CardContent className="p-5 text-sm text-rose-800">
+                  {analysisQuery.error.message}
+                </CardContent>
+              </Card>
+            ) : analysis ? (
+              <>
+                <section className="grid gap-4 xl:grid-cols-[1.5fr_0.85fr]">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <MetricCard
+                      contentKey="overview_total_downtime"
+                      label="Total downtime"
+                      value={`${analysis.totalTechnicalMinutes.toLocaleString()} min`}
+                      detail={`${analysis.selectedDayCount} selected day${analysis.selectedDayCount === 1 ? "" : "s"}`}
+                      tone="blue"
+                    />
+                    <MetricCard
+                      contentKey="overview_availability"
+                      label="Availability"
+                      value={`${(100 - analysis.averageDowntimePercentage).toFixed(2)}%`}
+                      detail="Technical 11-1 availability"
+                      tone="mint"
+                    />
+                    <MetricCard
+                      contentKey="overview_incidents_per_day"
+                      label="Incidents per day"
+                      value={analysis.averageEventsPerDay.toFixed(1)}
+                      detail={`${analysis.affectedRideCount} rides affected`}
+                      tone="amber"
+                    />
+                    <MetricCard
+                      contentKey="overview_avg_interruption"
+                      label="Avg tech interruption"
+                      value={`${analysis.averageIncidentMinutes.toFixed(1)} min`}
+                      detail={
+                        analysis.totalEvents && analysis.maxIncidentMinutes !== undefined && analysis.minIncidentMinutes !== undefined
+                          ? `(Max ${analysis.maxIncidentMinutes} mins) (Min ${analysis.minIncidentMinutes} mins)`
+                          : "No incidents"
+                      }
+                      tone="blue"
+                    />
+                    {analysis.selectedDayCount > 1 ? (
+                      <>
+                        <MetricCard
+                          contentKey="overview_peak_day"
+                          label="Peak day"
+                          value={analysis.peakDay ? `${analysis.peakDay.minutes} min` : "—"}
+                          detail={analysis.peakDay ? dateWithWeekday(analysis.peakDay.dateKey) : "No technical events"}
+                          tone="rose"
+                        />
+                        <MetricCard
+                          contentKey="overview_quietest_day"
+                          label="Quietest day"
+                          value={analysis.dailyTrend.length ? `${Math.min(...analysis.dailyTrend.map(day => day.minutes))} min` : "—"}
+                          detail={
+                            analysis.dailyTrend.length
+                              ? dateWithWeekday([...analysis.dailyTrend].sort((a, b) => a.minutes - b.minutes)[0].dateKey)
+                              : "No operating days"
+                          }
+                          tone="mint"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <MetricCard
+                          contentKey="overview_worst_ride"
+                          label="Worst affected ride"
+                          value={analysis.topRides[0]?.rideCode ?? "—"}
+                          detail={
+                            analysis.topRides[0]
+                              ? `${analysis.topRides[0].minutes} min · ${analysis.topRides[0].availabilityPercentage.toFixed(1)}% availability`
+                              : "No ride impact"
+                          }
+                          tone="rose"
+                        />
+                        <MetricCard
+                          contentKey="overview_evacuations"
+                          label="Evacuations"
+                          value={`${analysis.totalEvacuationEvents}`}
+                          detail={`${analysis.totalEvacuationMinutes} min total evacuation time`}
+                          tone="amber"
+                        />
+                      </>
+                    )}
+                  </div>
+                  <RankingPanel analysis={analysis} />
+                </section>
+
+                <section className="grid gap-4 xl:grid-cols-[1.55fr_0.85fr]">
+                  <TrendPanel analysis={analysis} />
+                  <KpiCalendarPanel
+                    reports={reports as SavedReport[]}
+                    darkDays={darkDays}
+                    scope={scopeLabel(selectedRideCodes)}
+                    monthDate={activeMonthPrefix ? asDate(`${activeMonthPrefix}-01`) : undefined}
+                  />
+                </section>
+
+                <IncidentLogs
+                  analysis={analysis}
+                  copied={copied}
+                  onCopy={copyIncidentCards}
+                  singleSelectedDate={singleSelectedDate}
+                  isAllRidesSelected={isAllRidesSelected}
+                />
+              </>
+            ) : null}
+          </main>
+        )}
+
+        <SavedSourceManager
+          open={savedManagerOpen}
+          onOpenChange={setSavedManagerOpen}
+          reports={reports as SavedReport[]}
+          onDelete={setDeleteId}
+          deleting={deleteMutation.isPending}
+          darkDays={darkDays}
+          onToggleDarkDay={(dateKey, isDarkDay) => darkDayMutation.mutate({ dateKey, isDarkDay })}
+          updatingDarkDay={darkDayMutation.isPending}
+        />
+
+        <AlertDialog open={deleteId !== undefined} onOpenChange={open => !open && setDeleteId(undefined)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this saved log?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Deletion removes this saved source file and cannot be undone. Any active analysis depending on it will update after deletion.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+                disabled={deleteMutation.isPending}
+                className="bg-rose-700 text-white hover:bg-rose-800"
+              >
+                {deleteMutation.isPending ? "Deleting…" : "Delete saved log"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </DashboardLayout>
+  );
 }

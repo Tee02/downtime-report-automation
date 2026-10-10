@@ -68,28 +68,38 @@ type SummaryIncident = {
 };
 
 const ZONE_ASSIGNMENTS: Record<string, "Zone A" | "Zone B"> = {
+  // Zone A (12 attractions)
+  BWZ: "Zone A",
   AFP: "Zone A",
-  BCT: "Zone A",
-  "BCT (ZC)": "Zone A",
   ESD: "Zone A",
-  IA3: "Zone A",
   IDD: "Zone A",
-  MFZ: "Zone A",
-  NATM: "Zone A",
+  "BCT (EV)": "Zone A",
+  "BCT (RC)": "Zone A",
+  "BCT (UZ)": "Zone A",
+  "BCT (ZC)": "Zone A",
+  BCT: "Zone A", // alias fallback
+  NTM: "Zone A",
+  NATM: "Zone A", // alias fallback
   PTA: "Zone A",
-  RCC: "Zone A",
   RTR: "Zone A",
+  TTC: "Zone A",
+
+  // Zone B (9 attractions)
   ACR: "Zone B",
+  BSC: "Zone B",
+  EHF: "Zone B",
+  VTM: "Zone B",
+  ETI: "Zone B",
+  MFZ: "Zone B",
+  RCC: "Zone B",
+  SAG: "Zone B",
+  SRS: "Zone B",
   ALH: "Zone B",
   BOG: "Zone B",
-  BWZ: "Zone B",
   CDL: "Zone B",
   MTR: "Zone B",
   ROB: "Zone B",
-  SAG: "Zone B",
-  SRS: "Zone B",
-  TTC: "Zone B",
-  VTM: "Zone B",
+  IA3: "Zone A",
 };
 
 function normalizeZone(zone?: string | null): "Zone A" | "Zone B" {
@@ -477,11 +487,19 @@ export default function DowntimeSummary() {
   };
 
   const selectAllExport = () => {
-    setSelectedKeysForExport(new Set(incidents.map(i => i.incidentKey)));
+    setSelectedKeysForExport(prev => {
+      const next = new Set(prev);
+      filteredIncidents.forEach(i => next.add(i.incidentKey));
+      return next;
+    });
   };
 
   const deselectAllExport = () => {
-    setSelectedKeysForExport(new Set());
+    setSelectedKeysForExport(prev => {
+      const next = new Set(prev);
+      filteredIncidents.forEach(i => next.delete(i.incidentKey));
+      return next;
+    });
   };
 
   const saveMutation = trpc.downtimeSummary.save.useMutation({

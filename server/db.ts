@@ -1,6 +1,8 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  analysisComparisonHistories,
+  type InsertAnalysisComparisonHistory,
   InsertDowntimeSummary,
   InsertDowntimeSummaryEntry,
   InsertDowntimeSummaryImport,
@@ -165,6 +167,40 @@ export async function deleteSavedDowntimeReport(id: number) {
   const db = await getDb();
   if (!db) throw new Error("The report library is temporarily unavailable.");
   await db.delete(savedDowntimeReports).where(eq(savedDowntimeReports.id, id));
+}
+
+/**
+ * Stores the most recent comparison configurations centrally, rather than only
+ * in one browser. This lets the history survive a browser refresh/device change.
+ */
+export async function saveAnalysisComparisonHistory(history: InsertAnalysisComparisonHistory) {
+  const db = await getDb();
+  if (!db) throw new Error("The comparison history is temporarily unavailable.");
+
+  await db.insert(analysisComparisonHistories).values(history);
+
+  // Keep only the five most recent entries. Deleting by IDs avoids database-
+  // specific LIMIT syntax and works consistently with the current MySQL setup.
+  const staleRows = await db
+    .select({ id: analysisComparisonHistories.id })
+    .from(analysisComparisonHistories)
+    .orderBy(desc(analysisComparisonHistories.createdAt), desc(analysisComparisonHistories.id))
+    .limit(100)
+    .offset(5);
+
+  if (staleRows.length) {
+    await db.delete(analysisComparisonHistories).where(inArray(analysisComparisonHistories.id, staleRows.map(row => row.id)));
+  }
+}
+
+export async function listAnalysisComparisonHistories() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(analysisComparisonHistories)
+    .orderBy(desc(analysisComparisonHistories.createdAt), desc(analysisComparisonHistories.id))
+    .limit(5);
 }
 
 export async function listDarkDays(): Promise<string[]> {

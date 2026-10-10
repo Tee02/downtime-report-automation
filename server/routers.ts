@@ -13,6 +13,7 @@ import {
   listAllDowntimeSummaryDates,
   listAllSiteContent,
   listDarkDays,
+  listAnalysisComparisonHistories,
   listSavedDowntimeReports,
   recordDowntimeSummaryImport,
   saveDowntimeSummaryState,
@@ -21,6 +22,7 @@ import {
   deleteDowntimeSummaryDraft,
   setDarkDay,
   setSiteContent,
+  saveAnalysisComparisonHistory,
   upsertUser,
   listFaultpediaCards,
   createFaultpediaCard,
@@ -123,6 +125,21 @@ export const appRouter = router({
       await setDarkDay(input.dateKey, input.isDarkDay);
       return { success: true };
     }),
+  }),
+  comparisonHistory: router({
+    list: publicProcedure.query(() => listAnalysisComparisonHistories()),
+    record: publicProcedure
+      .input(z.object({
+        label: z.string().trim().min(3).max(1024),
+        scenariosJson: z.string().min(2).max(16000),
+      }))
+      .mutation(async ({ input }) => {
+        await saveAnalysisComparisonHistory({
+          label: input.label,
+          scenariosJson: input.scenariosJson,
+        });
+        return { success: true };
+      }),
   }),
   siteContent: router({
     list: publicProcedure.query(async () => {

@@ -195,8 +195,27 @@ function CalendarDayButton({
   const mappingOrderKey = Object.keys(modifiers).find(key => key.startsWith("mappingOrder") && modifiers[key]);
   const mappingOrder = mappingOrderKey?.replace("mappingOrder", "");
   const isSavedLog = Boolean(modifiers.savedLog);
+
+  // KPI Heatmap modifiers
+  const isKpiWithin = Boolean(modifiers.kpiWithin || modifiers.kpi_within);
+  const isKpiLightRed = Boolean(modifiers.kpiLightRed || modifiers.kpi_light_red);
+  const isKpiDarkRed = Boolean(modifiers.kpiDarkRed || modifiers.kpi_dark_red);
+  const isKpiDeepRed = Boolean(modifiers.kpiDeepRed || modifiers.kpi_deep_red);
+  const isNoLog = Boolean(modifiers.noLog || modifiers.nolog);
+
+  // Standard severity fallback (if used elsewhere)
   const severity = modifiers.critical ? "critical" : modifiers.high ? "high" : modifiers.elevated ? "elevated" : modifiers.monitor ? "monitor" : undefined;
   const severityClass = severity === "critical" ? "!bg-rose-400 !text-white hover:!bg-rose-500" : severity === "high" ? "!bg-amber-400 !text-slate-900 hover:!bg-amber-500" : severity === "elevated" ? "!bg-yellow-300 !text-slate-900 hover:!bg-yellow-400" : severity === "monitor" ? "!bg-blue-400 !text-white hover:!bg-blue-500" : "";
+
+  // Tooltip content extraction from modifier keys like tooltip_...
+  const tooltipKey = Object.keys(modifiers).find(key => key.startsWith("tooltip_") && modifiers[key]);
+  let tooltipText = tooltipKey ? decodeURIComponent(tooltipKey.replace("tooltip_", "")) : undefined;
+
+  if (isDarkDay && !tooltipText) {
+    tooltipText = "Dark day";
+  } else if (isNoLog && !tooltipText) {
+    tooltipText = "No log detected";
+  }
 
   const buttonElement = (
     <Button
@@ -220,7 +239,16 @@ function CalendarDayButton({
         isRangeEnd && "!bg-[#3D52A0] !text-white font-extrabold !rounded-r-lg !rounded-l-none shadow-sm z-10 hover:!bg-[#293252]",
         isRangeMiddle && "!bg-indigo-100/90 !text-[#293252] font-semibold !rounded-none hover:!bg-indigo-200",
         isRangePending && "!bg-amber-500 !text-white font-extrabold ring-2 ring-amber-400 ring-offset-1 !rounded-lg shadow-md animate-pulse",
+        // KPI Heatmap coloring (0%-0.99% blue, 1%-1.99% light red, 2%-2.99% darker red, >=3% deep red)
+        isKpiWithin && !isDarkDay && "!bg-[#5793f5] !text-white font-extrabold shadow-sm hover:!bg-[#3d7be0]",
+        isKpiLightRed && !isDarkDay && "!bg-[#ff7b89] !text-white font-extrabold shadow-sm hover:!bg-[#f06272]",
+        isKpiDarkRed && !isDarkDay && "!bg-[#e03a52] !text-white font-extrabold shadow-sm hover:!bg-[#c8253c]",
+        isKpiDeepRed && !isDarkDay && "!bg-[#9e0c24] !text-white font-extrabold shadow-sm hover:!bg-[#82071c]",
+        // No log detected (slightly lighter grey than dark day)
+        isNoLog && !isDarkDay && "!bg-slate-200 !text-slate-400 hover:!bg-slate-200 hover:!text-slate-500 border border-slate-300/60",
+        // Legacy severity
         severity && !isDarkDay && `!ring-2 !ring-blue-100 !ring-offset-1 font-extrabold shadow-sm ${severityClass}`,
+        // Dark day grey
         isDarkDay && "!bg-slate-400 !text-slate-900 hover:!bg-slate-400 hover:!text-slate-950 font-extrabold border border-slate-500 shadow-inner",
         defaultClassNames.day,
         className
@@ -242,15 +270,15 @@ function CalendarDayButton({
     </Button>
   );
 
-  if (isDarkDay) {
+  if (tooltipText) {
     return (
       <TooltipProvider delayDuration={50}>
         <Tooltip>
           <TooltipTrigger asChild>
             {buttonElement}
           </TooltipTrigger>
-          <TooltipContent side="top" className="bg-slate-900 text-white font-medium text-xs px-2.5 py-1 z-50 shadow-md">
-            Dark day
+          <TooltipContent side="top" className="bg-slate-900 text-white font-semibold text-xs px-2.5 py-1 z-50 shadow-md">
+            {tooltipText}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

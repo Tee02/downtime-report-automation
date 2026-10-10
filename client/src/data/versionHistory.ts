@@ -9,9 +9,33 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.38";
+export const CURRENT_VERSION = "v1.39";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.39",
+    commit: "pending",
+    date: "2026-10-10",
+    time: "14:49 GMT+8",
+    timestamp: "2026-10-10 14:49:18",
+    title: "KPI Calendar Heatmap, Split Ride Bar & Pie Charts, Comparison History & Official Zone Categorization",
+    tasks: [
+      "Renamed Downtime calendar to KPI Calendar and updated subtitle to 'Spot if everyday is within 1% KPI percentage.'",
+      "Implemented multi-level KPI percentage heat map coloring: 0%–0.99% blue (Within KPI), 1.00%–1.99% light red, 2.00%–2.99% darker red, and 3.00%+ deep red.",
+      "Added slightly lighter grey highlight for dates without uploaded logs, keeping dark days in standard dark day grey.",
+      "Added mouse-hover tooltips to all calendar dates: total downtime % for uploaded dates (e.g. '0.65% • Within KPI'), 'Dark day' for marked dark days, and 'No log detected' for unuploaded dates.",
+      "Enabled full historical heat map coverage across all previous uploaded dates without recalculating on month changes.",
+      "Upgraded Technical Downtime Trend: when a single date is selected, renders a stacked bar chart split by affected rides with longest downtime at bottom and shortest on top.",
+      "Formatted trend and pie tooltips strictly to '{ride} • {total time} • {number of incidents} inc • {percentage}%' (e.g. 'RTR • 12min • 1 inc • 2.5%') with distinct ride colors.",
+      "Added 3rd 'Pie chart' tab to Technical Downtime Trend displaying ride contributions with matching tooltip formatting.",
+      "Added 3-way chart switcher to Compare tab (Bar chart default, Line chart second, Pie chart third) displaying ride breakdowns with formatted tooltips.",
+      "Added horizontally scrollable narrow Comparison History section before date selection (latest on left, max 5 items, formatted as 'rides on day/month') with click-to-prefill and Start comparison execution.",
+      "Re-categorized Downtime Summary rides to the official specification: Zone A (BWZ, AFP, ESD, IDD, BCT EV/RC/UZ/ZC, NTM, PTA, RTR, TTC) and Zone B (ACR, BSC, EHF, VTM, ETI, MFZ, RCC, SAG, SRS).",
+      "Updated 'Tick All' and 'Untick All' buttons in Downtime Summary to selectively tick/untick only the active sub-tab (Zone A or Zone B), or all rides under ALL.",
+      "Added automated vitest coverage for ride breakdown calculations and passed the complete 41-test suite with a clean production build.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.38",
     commit: "pending",
@@ -31,7 +55,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Updated Daily Downtime Summary Report template v2 generation with 1 blank line break after the header on page 1 before Table 1, and 1 blank line break on page 2 before Preventive Action, strictly maintaining the Cambria font and 2-page pacing per incident.",
       "Added automated regression tests covering Faultpedia filters, all 21 attractions, category restrictions, DOCX line breaks, full test suite pass (40 tests), and clean production build.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.37",

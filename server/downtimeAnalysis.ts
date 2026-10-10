@@ -75,7 +75,22 @@ export type AnalysisResult = {
   selectedDayCount: number;
   selectedRideCount: number;
   topRides: RideAnalysis[];
-  dailyTrend: Array<{ dateKey: string; label: string; minutes: number; events: number; percentage: number; evacuationMinutes: number; evacuationEvents: number }>;
+  dailyTrend: Array<{
+    dateKey: string;
+    label: string;
+    minutes: number;
+    events: number;
+    percentage: number;
+    evacuationMinutes: number;
+    evacuationEvents: number;
+    rideBreakdown?: Array<{
+      rideCode: string;
+      attraction: string;
+      minutes: number;
+      events: number;
+      percentage: number;
+    }>;
+  }>;
   weekdayPattern: Array<{ weekday: string; minutes: number; events: number; days: number; averageMinutes: number; dates: string[] }>;
   peakDay?: { dateKey: string; label: string; minutes: number; events: number; percentage: number; evacuationMinutes: number; evacuationEvents: number };
   longestIncident?: DowntimeRecord;
@@ -146,16 +161,48 @@ export function buildAnalysis(reports: AnalysisSource[], selectedRideCodes: stri
   const records = sourceRecords.filter(record => record.rideCode && !record.isClosed && !record.isFireAlarm && (selectedCodes.size === 0 || selectedCodes.has(record.rideCode)));
   const fireAlarmRecords = sourceRecords.filter(record => record.rideCode && record.isFireAlarm && (selectedCodes.size === 0 || selectedCodes.has(record.rideCode)));
   const operatingRideCount = selectedCodes.size || FLEET_RIDE_COUNT;
+  const rideNames = new Map<string, string>(FLEET_RIDES.map(([rideCode, attraction]) => [rideCode, attraction]));
   const dailyTrend = selectedDates.map(dateKey => {
     const dailyRecords = records.filter(record => record.dateKey === dateKey);
     const minutes = dailyRecords.reduce((total, record) => total + record.technicalMinutes, 0);
     const evacuationMinutes = dailyRecords.reduce((total, record) => total + record.evacuationMinutes, 0);
     const evacuationEvents = dailyRecords.filter(record => record.evacuationEnd !== undefined).length;
-    return { dateKey, label: labelDate(dateKey), minutes, events: dailyRecords.length, percentage: (minutes / (DAILY_OPERATING_MINUTES * operatingRideCount)) * 100, evacuationMinutes, evacuationEvents };
+
+    // Per-ride breakdown for this day, sorted ascending by minutes so shortest is on top and longest at bottom
+    const dayRideMap = new Map<string, { rideCode: string; attraction: string; minutes: number; events: number }>();
+    dailyRecords.forEach(r => {
+      if (!r.rideCode) return;
+      const current = dayRideMap.get(r.rideCode) || {
+        rideCode: r.rideCode,
+        attraction: r.attraction || rideNames.get(r.rideCode) || r.rideCode,
+        minutes: 0,
+        events: 0,
+      };
+      current.minutes += r.technicalMinutes;
+      current.events += 1;
+      dayRideMap.set(r.rideCode, current);
+    });
+
+    const rideBreakdown = Array.from(dayRideMap.values())
+      .map(item => ({
+        ...item,
+        percentage: (item.minutes / DAILY_OPERATING_MINUTES) * 100,
+      }))
+      .sort((a, b) => a.minutes - b.minutes); // ascending (shortest on top, longest on bottom when stacked)
+
+    return {
+      dateKey,
+      label: labelDate(dateKey),
+      minutes,
+      events: dailyRecords.length,
+      percentage: (minutes / (DAILY_OPERATING_MINUTES * operatingRideCount)) * 100,
+      evacuationMinutes,
+      evacuationEvents,
+      rideBreakdown,
+    };
   });
 
   const rideTotals = new Map<string, RideAnalysis>();
-  const rideNames = new Map<string, string>(FLEET_RIDES.map(([rideCode, attraction]) => [rideCode, attraction]));
   for (const record of records) {
     const current = rideTotals.get(record.rideCode!) ?? { rideCode: record.rideCode!, attraction: record.attraction, minutes: 0, events: 0, downtimePercentage: 0, availabilityPercentage: 100, evacuationMinutes: 0, evacuationEvents: 0 };
     current.minutes += record.technicalMinutes;
