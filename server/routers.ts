@@ -28,9 +28,14 @@ import {
   createFaultpediaCard,
   updateFaultpediaCard,
   deleteFaultpediaCard,
+  listPmTrackerLogs,
+  createPmTrackerLog,
+  updatePmTrackerLog,
+  deletePmTrackerLog,
 } from "./db";
 import { buildAnalysis, exportCompiledDowntimeLog, loadSavedDowntimeReports } from "./downtimeAnalysis";
 import { buildDowntimeSummaryDocx, type SummaryEntryData } from "./downtimeSummaryDocx";
+import { buildPmTrackerWorkbook, EXCEL_CONTENT_TYPE } from "./pmTrackerExcel";
 import { storagePut } from "./storage";
 
 const analysisInput = z.object({
@@ -360,6 +365,103 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ input }) => {
         return deleteFaultpediaCard(input.id);
+      }),
+  }),
+  pmTracker: router({
+    list: publicProcedure.query(async () => {
+      return listPmTrackerLogs();
+    }),
+    create: publicProcedure
+      .input(
+        z.object({
+          logDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+          zone: z.enum(["Zone A", "Zone B"]),
+          rideCode: z.string().min(1),
+          rideName: z.string().min(1),
+          status: z.enum(["Completed", "Pending", "In Progress"]).default("Completed"),
+          workType: z.enum([
+            "Opening startup",
+            "Closing inspection",
+            "Morning OT",
+            "Night OT",
+            "Darkday work",
+            "Rehab work",
+            "Weekly PM",
+            "Monthly PM",
+            "Unscheduled repair",
+          ]),
+          technician: z.string().default(""),
+          summary: z.string().default(""),
+          message: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        return createPmTrackerLog(input);
+      }),
+    update: publicProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          logDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          zone: z.enum(["Zone A", "Zone B"]).optional(),
+          rideCode: z.string().optional(),
+          rideName: z.string().optional(),
+          status: z.enum(["Completed", "Pending", "In Progress"]).optional(),
+          workType: z.enum([
+            "Opening startup",
+            "Closing inspection",
+            "Morning OT",
+            "Night OT",
+            "Darkday work",
+            "Rehab work",
+            "Weekly PM",
+            "Monthly PM",
+            "Unscheduled repair",
+          ]).optional(),
+          technician: z.string().optional(),
+          summary: z.string().optional(),
+          message: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updatePmTrackerLog(id, data);
+      }),
+    delete: publicProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        return deletePmTrackerLog(input.id);
+      }),
+    exportExcel: publicProcedure
+      .input(
+        z.object({
+          zone: z.enum(["Zone A", "Zone B"]),
+          rideCode: z.string().optional(),
+          status: z.enum(["Completed", "Pending", "In Progress"]).optional(),
+          query: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const keyword = input.query?.trim().toLowerCase();
+        const logs = (await listPmTrackerLogs()).filter((log) => {
+          if (log.zone !== input.zone) return false;
+          if (input.rideCode && log.rideCode !== input.rideCode) return false;
+          if (input.status && log.status !== input.status) return false;
+          if (!keyword) return true;
+          return [log.rideCode, log.rideName, log.workType, log.technician, log.summary, log.message]
+            .join(" ")
+            .toLowerCase()
+            .includes(keyword);
+        });
+
+        const outputBuffer = await buildPmTrackerWorkbook(logs);
+        const fileName = `PM_Tracker_${input.zone.replace(" ", "_")}_${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.xlsx`;
+        const stored = await storagePut(
+          `pm-tracker-exports/${crypto.randomUUID()}/${fileName}`,
+          outputBuffer,
+          EXCEL_CONTENT_TYPE
+        );
+        return { fileName, downloadUrl: stored.url, logCount: logs.length };
       }),
   }),
 });

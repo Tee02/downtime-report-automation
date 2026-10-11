@@ -9,9 +9,29 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.39";
+export const CURRENT_VERSION = "v1.40";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.40",
+    commit: "pending",
+    date: "2026-10-11",
+    time: "23:50 GMT+8",
+    timestamp: "2026-10-11 23:50:17",
+    title: "PM Tracker Digital Ride Logbook, Zone Calendar, KPI Markers & Backend Excel Export",
+    tasks: [
+      "Added PM Tracker below Faultpedia in the persistent sidebar navigation with a dedicated /pm-tracker workspace.",
+      "Created a persistent digital logbook for daily opening startup, closing inspection, morning/night OT, dark-day, rehabilitation, weekly/monthly PM, unscheduled repair, and planned-not-done activity.",
+      "Added a supervisor-message entry modal that captures the selected ride, date, auto-assigned Zone A/B, work type, job status, technician in charge, concise calendar summary, and full pasted WhatsApp/logbook message.",
+      "Built a Zone A/Zone B monthly calendar switcher using the official 21-attraction allocation; each calendar cell presents concise ride-log snippets and opens the selected date's complete details panel.",
+      "Synced Dark Day marking into PM Tracker calendar cells and added a small top-left 1% KPI downtime marker sourced from the same saved-report percentage data as Analysis Studio (blue within KPI; graduated red when exceeded).",
+      "Added global ride, status, and free-text issue/technician/work-note filters so supervisors can trace a ride, concern, or assigned staff member quickly.",
+      "Added detailed pop-up viewing and deletion for individual digital logs, preserving raw supervisor messages alongside searchable summaries.",
+      "Added a real backend-generated, formatted PM Tracker .xlsx workbook export stored in project storage, with frozen headings, status styling, all selected log details, and full message history.",
+      "Added pmTrackerLogs database persistence, migration 0010, tRPC create/list/update/delete/export procedures, 5 dedicated PM Tracker regression tests, full 46-test suite validation, production build, browser workflow verification, and console check.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.39",
     commit: "pending",
@@ -34,7 +54,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Updated 'Tick All' and 'Untick All' buttons in Downtime Summary to selectively tick/untick only the active sub-tab (Zone A or Zone B), or all rides under ALL.",
       "Added automated vitest coverage for ride breakdown calculations and passed the complete 41-test suite with a clean production build.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.38",

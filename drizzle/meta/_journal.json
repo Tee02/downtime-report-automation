@@ -71,6 +71,13 @@
       "when": 1791477383494,
       "tag": "0009_premium_the_twelve",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1791733056578,
+      "tag": "0010_smart_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

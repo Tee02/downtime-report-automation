@@ -22,7 +22,7 @@ import {
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import DotField from "@/components/DotField";
-import { BarChart3, BookOpenCheck, FileSpreadsheet, KeyRound, Lock, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
+import { BarChart3, BookOpenCheck, ClipboardList, FileSpreadsheet, KeyRound, Lock, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -37,6 +37,7 @@ const menuItems = [
   { icon: FileSpreadsheet, label: "Report studio", path: "/" },
   { icon: BarChart3, label: "Analysis studio", path: "/analysis" },
   { icon: BookOpenCheck, label: "Faultpedia", path: "/troubleshoot-wiki" },
+  { icon: ClipboardList, label: "PM Tracker", path: "/pm-tracker" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import AnalysisStudio from "./pages/AnalysisStudio";
 import DowntimeSummary from "./pages/DowntimeSummary";
 import TroubleshootWiki from "./pages/TroubleshootWiki";
+import PmTracker from "./pages/PmTracker";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -18,6 +19,7 @@ function Router() {
       <Route path={"/analysis"} component={AnalysisStudio} />
       <Route path={"/summary"} component={DowntimeSummary} />
       <Route path={"/troubleshoot-wiki"} component={TroubleshootWiki} />
+      <Route path={"/pm-tracker"} component={PmTracker} />
       <Route path={"/comparison"}>
         <Redirect to="/analysis?tab=compare" />
       </Route>

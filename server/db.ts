@@ -20,6 +20,9 @@ import {
   faultpediaCards,
   type FaultpediaCard,
   type InsertFaultpediaCard,
+  pmTrackerLogs,
+  type PmTrackerLog,
+  type InsertPmTrackerLog,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -389,5 +392,35 @@ export async function deleteFaultpediaCard(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   await db.delete(faultpediaCards).where(eq(faultpediaCards.id, id));
+  return { success: true };
+}
+
+export async function listPmTrackerLogs() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pmTrackerLogs).orderBy(desc(pmTrackerLogs.logDate), desc(pmTrackerLogs.id));
+}
+
+export async function createPmTrackerLog(log: InsertPmTrackerLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const result = await db.insert(pmTrackerLogs).values(log);
+  const insertId = Number((result as any)[0]?.insertId || (result as any).insertId);
+  const created = await db.select().from(pmTrackerLogs).where(eq(pmTrackerLogs.id, insertId)).limit(1);
+  return created[0];
+}
+
+export async function updatePmTrackerLog(id: number, log: Partial<InsertPmTrackerLog>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(pmTrackerLogs).set(log).where(eq(pmTrackerLogs.id, id));
+  const updated = await db.select().from(pmTrackerLogs).where(eq(pmTrackerLogs.id, id)).limit(1);
+  return updated[0];
+}
+
+export async function deletePmTrackerLog(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.delete(pmTrackerLogs).where(eq(pmTrackerLogs.id, id));
   return { success: true };
 }

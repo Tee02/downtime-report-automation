@@ -206,3 +206,26 @@ export const analysisComparisonHistories = mysqlTable("analysisComparisonHistori
 
 export type AnalysisComparisonHistory = typeof analysisComparisonHistories.$inferSelect;
 export type InsertAnalysisComparisonHistory = typeof analysisComparisonHistories.$inferInsert;
+
+/**
+ * Digital ride logbook for opening, closing, overtime, dark-day, rehabilitation,
+ * and preventive-maintenance activity. Raw supervisor messages are retained with
+ * an optional concise summary for fast calendar scanning and Excel export.
+ */
+export const pmTrackerLogs = mysqlTable("pmTrackerLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  logDate: varchar("logDate", { length: 10 }).notNull(),
+  zone: varchar("zone", { length: 16 }).notNull(),
+  rideCode: varchar("rideCode", { length: 32 }).notNull(),
+  rideName: varchar("rideName", { length: 512 }).notNull(),
+  status: varchar("status", { length: 16 }).notNull().default("Completed"),
+  workType: varchar("workType", { length: 64 }).notNull(),
+  technician: varchar("technician", { length: 255 }).notNull().default(""),
+  summary: varchar("summary", { length: 512 }).notNull().default(""),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PmTrackerLog = typeof pmTrackerLogs.$inferSelect;
+export type InsertPmTrackerLog = typeof pmTrackerLogs.$inferInsert;
