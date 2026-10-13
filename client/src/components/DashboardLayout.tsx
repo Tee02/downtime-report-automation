@@ -162,10 +162,10 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r border-[#cad3e0] bg-[#edf1f6] text-slate-800 shadow-[8px_0_24px_rgba(31,41,55,0.05)]"
+          className="border-r border-[#cbd5f2] bg-[#edf0ff]/90 text-slate-800 shadow-[8px_0_24px_rgba(79,72,147,0.09)] backdrop-blur-sm"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-20 justify-center border-b border-[#cad3e0] overflow-hidden">
+          <SidebarHeader className="h-20 justify-center border-b border-[#cbd5f2] overflow-hidden">
             <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3 px-2"} transition-all w-full overflow-hidden`}>
               <button
                 onClick={toggleSidebar}
@@ -339,7 +339,7 @@ function DashboardLayoutContent({
       <SidebarInset className="relative min-h-screen overflow-hidden bg-[#f4f6f8]">
         <div className="absolute inset-0 bg-[#f4f6f8]" />
         {isMobile && (
-          <div className="relative z-10 sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#cad3e0] bg-[#f4f6f8] px-2 text-slate-800">
+          <div className="relative z-10 sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#cbd5f2] bg-[#f3f4ff]/90 px-2 text-slate-800 backdrop-blur-sm">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">

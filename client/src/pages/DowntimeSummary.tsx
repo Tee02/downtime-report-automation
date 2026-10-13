@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { getSummaryCompletion } from "@/lib/summaryCompletion";
+import { resolveSummarySourceReportId, shouldUsePersistedSummary } from "@/lib/summaryPersistence";
 import { toast } from "sonner";
 
 type SummaryTab = "editor" | "archive";
@@ -295,19 +296,24 @@ export default function DowntimeSummary() {
     return savedReports.find(report => report.reportDate === dateKey);
   }, [savedReports, dateKey]);
 
-  // Read analysis data for active editor date
-  const analysisQuery = trpc.analysis.get.useQuery(
-    {
-      reportIds: currentSavedReport ? [currentSavedReport.id] : [],
-      rideCodes: [],
-    },
-    { enabled: Boolean(currentSavedReport) }
-  );
-
-  // Read saved summary state for active editor date
+  // Database-backed summary data is the source of truth for a completed day.
+  // Read it before analysis so an already-saved summary remains viewable even if
+  // the source-log reference is refreshed or the analysis request is delayed.
   const summaryQuery = trpc.downtimeSummary.getByDate.useQuery(
     { dateKey },
     { enabled: Boolean(dateKey) }
+  );
+  const effectiveSourceReportId = resolveSummarySourceReportId(
+    currentSavedReport?.id,
+    summaryQuery.data?.summary?.sourceReportId
+  );
+
+  const analysisQuery = trpc.analysis.get.useQuery(
+    {
+      reportIds: effectiveSourceReportId ? [effectiveSourceReportId] : [],
+      rideCodes: [],
+    },
+    { enabled: Boolean(effectiveSourceReportId) }
   );
 
   // Read target report for archive tab date
@@ -331,53 +337,49 @@ export default function DowntimeSummary() {
   const datesWithDataQuery = trpc.downtimeSummary.listDatesWithData.useQuery();
   const datesWithData = datesWithDataQuery.data || [];
 
-  const sessionDraftKey = useMemo(() => (dateKey ? `downtime-summary-draft-v36-${dateKey}` : ""), [dateKey]);
+  const sessionDraftKey = useMemo(() => (dateKey ? `downtime-summary-draft-v42-${dateKey}` : ""), [dateKey]);
+  const selectedKeysSourceRef = useRef<string>("");
 
   useEffect(() => {
-    if (!analysisQuery.data) return;
-
-    const technicalIncidents = analysisQuery.data.incidentLogs.filter(
-      l => l.kind === "technical" && l.rideCode
-    );
-
     const savedState = summaryQuery.data;
+    const persistedEntries = savedState?.entries || [];
+    const hasPersistedSummary = shouldUsePersistedSummary(persistedEntries.length);
 
+    // A browser draft is only a short-lived safety net. Older v36 drafts must
+    // never mask information that was explicitly saved to website memory.
     let sessionDraft: any = null;
     if (sessionDraftKey && typeof window !== "undefined") {
       try {
         const raw = sessionStorage.getItem(sessionDraftKey);
         if (raw) sessionDraft = JSON.parse(raw);
       } catch {
-        // ignore
+        // Ignore malformed browser-only drafts.
       }
     }
 
-    if (sessionDraft?.amExecutive !== undefined) {
+    // A stored website summary is deliberately authoritative.  Session storage
+    // only protects unsaved work on a brand-new daily form; it must never
+    // override a summary that was previously saved to the shared system.
+    const useSessionDraft = !hasPersistedSummary;
+
+    if (!hasPersistedSummary && !analysisQuery.data) return;
+
+    if (useSessionDraft && sessionDraft?.amExecutive !== undefined) {
       setAmExecutive(sessionDraft.amExecutive);
-    } else if (savedState?.summary?.amExecutive) {
-      setAmExecutive(savedState.summary.amExecutive);
+      setPmExecutive(sessionDraft.pmExecutive || "");
+      setZoneBAmExecutive(sessionDraft.zoneBAmExecutive || "");
+      setZoneBPmExecutive(sessionDraft.zoneBPmExecutive || "");
+    } else if (savedState?.summary) {
+      setAmExecutive(savedState.summary.amExecutive || "");
+      setPmExecutive(savedState.summary.pmExecutive || "");
+      setZoneBAmExecutive((savedState.summary as any).zoneBAmExecutive || "");
+      setZoneBPmExecutive((savedState.summary as any).zoneBPmExecutive || "");
     }
 
-    if (sessionDraft?.pmExecutive !== undefined) {
-      setPmExecutive(sessionDraft.pmExecutive);
-    } else if (savedState?.summary?.pmExecutive) {
-      setPmExecutive(savedState.summary.pmExecutive);
-    }
-
-    if (sessionDraft?.zoneBAmExecutive !== undefined) {
-      setZoneBAmExecutive(sessionDraft.zoneBAmExecutive);
-    } else if ((savedState?.summary as any)?.zoneBAmExecutive) {
-      setZoneBAmExecutive((savedState?.summary as any).zoneBAmExecutive);
-    }
-
-    if (sessionDraft?.zoneBPmExecutive !== undefined) {
-      setZoneBPmExecutive(sessionDraft.zoneBPmExecutive);
-    } else if ((savedState?.summary as any)?.zoneBPmExecutive) {
-      setZoneBPmExecutive((savedState?.summary as any).zoneBPmExecutive);
-    }
-
-    const savedMap = new Map((savedState?.entries || []).map(e => [e.incidentKey, e]));
-    const sessionMap = new Map((sessionDraft?.entries || []).map((e: any) => [e.incidentKey, e]));
+    const savedMap = new Map(persistedEntries.map(entry => [entry.incidentKey, entry]));
+    const sessionMap = new Map(
+      useSessionDraft ? (sessionDraft?.entries || []).map((entry: any) => [entry.incidentKey, entry]) : []
+    );
 
     let importedMatches: any[] = [];
     const latestImport = savedState?.imports?.[0];
@@ -385,65 +387,105 @@ export default function DowntimeSummary() {
       try {
         importedMatches = JSON.parse(latestImport.matchedEntries);
       } catch {
-        // ignore
+        // Ignore malformed imported metadata.
       }
     }
 
-    const merged: SummaryIncident[] = technicalIncidents.map((item, index) => {
-      const key = item.id || `inc-${item.dateKey}-${item.rideCode}-${index}`;
-      const saved = savedMap.get(key) as any;
-      const draft = sessionMap.get(key) as any;
-      const times = (item.timeRange || "").split("-");
-      const startTime = times[0] || "";
-      const endTime = times[1] || "";
-      const duration = parseDurationMinutes(item.durationLabel, startTime, endTime);
-      const shift = parseShift(startTime);
-      const defaultZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
-
-      const match = importedMatches.find(m => matchesImportedIncident(m, {
-        rideCode: item.rideCode || "",
-        description: item.description,
-        downtimeStart: startTime,
+    let merged: SummaryIncident[];
+    if (hasPersistedSummary) {
+      // Render the persisted entry values directly. This works in any browser
+      // session and continues to work if a source report was later replaced.
+      merged = persistedEntries.map(entry => ({
+        incidentKey: entry.incidentKey,
+        zone: normalizeZone(entry.zone),
+        rideCode: entry.rideCode,
+        attraction: entry.attraction,
+        description: entry.description,
+        downtimeStart: entry.downtimeStart,
+        downtimeEnd: entry.downtimeEnd,
+        durationMinutes: entry.durationMinutes,
+        shift: entry.shift === "PM" ? "PM" : "AM",
+        recurringDowntime: entry.recurringDowntime === "Yes" ? "Yes" : "No",
+        recurringDowntimeDays: entry.recurringDowntimeDays || "N/A",
+        incident: entry.incident === "Yes" ? "Yes" : "No",
+        rootCause: entry.rootCause || "",
+        correctiveAction: entry.correctiveAction || "",
+        preventiveAction: entry.preventiveAction || "",
+        partsReplaced: entry.partsReplaced || "N/A",
+        followUpAction: entry.followUpAction || "N/A",
+        anrNo: entry.anrNo || "N/A",
+        supportInfo: entry.supportInfo || "",
+        supportPhotoUrl: entry.supportPhotoUrl || null,
+        supportPhotoName: entry.supportPhotoName || null,
+        status: entry.status === "Closed" || entry.status === "Pending Parts" ? entry.status : "Monitoring",
       }));
+    } else {
+      const technicalIncidents = analysisQuery.data?.incidentLogs.filter(
+        log => log.kind === "technical" && log.rideCode
+      ) || [];
 
-      return {
-        incidentKey: key,
-        zone: draft?.zone ? normalizeZone(draft.zone) : (saved?.zone ? normalizeZone(saved.zone) : defaultZone),
-        rideCode: item.rideCode || "",
-        attraction: item.attraction || item.rideCode || "",
-        description: item.description,
-        downtimeStart: startTime,
-        downtimeEnd: endTime,
-        durationMinutes: duration,
-        shift,
-        recurringDowntime: draft?.recurringDowntime ?? (saved?.recurringDowntime ?? (match?.recurringDowntime || "No")),
-        recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved?.recurringDowntimeDays ?? (match?.recurringDowntimeDays || "N/A")),
-        incident: draft?.incident ?? (saved?.incident ?? (match?.incident || "No")),
-        rootCause: draft?.rootCause ?? (saved?.rootCause ?? (match?.rootCause || "")),
-        correctiveAction: draft?.correctiveAction ?? (saved?.correctiveAction ?? (match?.correctiveAction || "")),
-        preventiveAction: draft?.preventiveAction ?? (saved?.preventiveAction ?? (match?.preventiveAction || "")),
-        partsReplaced: draft?.partsReplaced ?? (saved?.partsReplaced ?? "N/A"),
-        followUpAction: draft?.followUpAction ?? (saved?.followUpAction ?? (match?.followUpAction || "N/A")),
-        anrNo: draft?.anrNo ?? (saved?.anrNo ?? "N/A"),
-        supportInfo: draft?.supportInfo ?? (saved?.supportInfo ?? ""),
-        supportPhotoUrl: draft?.supportPhotoUrl ?? (saved?.supportPhotoUrl ?? null),
-        supportPhotoName: draft?.supportPhotoName ?? (saved?.supportPhotoName ?? null),
-        status: "Monitoring",
-      };
-    });
+      merged = technicalIncidents.map((item, index) => {
+        const key = item.id || `inc-${item.dateKey}-${item.rideCode}-${index}`;
+        const saved = savedMap.get(key) as any;
+        const draft = sessionMap.get(key) as any;
+        const times = (item.timeRange || "").split("-");
+        const startTime = times[0] || "";
+        const endTime = times[1] || "";
+        const duration = parseDurationMinutes(item.durationLabel, startTime, endTime);
+        const shift = parseShift(startTime);
+        const defaultZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
+        const match = importedMatches.find(matchItem => matchesImportedIncident(matchItem, {
+          rideCode: item.rideCode || "",
+          description: item.description,
+          downtimeStart: startTime,
+        }));
+
+        return {
+          incidentKey: key,
+          zone: draft?.zone ? normalizeZone(draft.zone) : (saved?.zone ? normalizeZone(saved.zone) : defaultZone),
+          rideCode: item.rideCode || "",
+          attraction: item.attraction || item.rideCode || "",
+          description: item.description,
+          downtimeStart: startTime,
+          downtimeEnd: endTime,
+          durationMinutes: duration,
+          shift,
+          recurringDowntime: draft?.recurringDowntime ?? (saved?.recurringDowntime ?? (match?.recurringDowntime || "No")),
+          recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved?.recurringDowntimeDays ?? (match?.recurringDowntimeDays || "N/A")),
+          incident: draft?.incident ?? (saved?.incident ?? (match?.incident || "No")),
+          rootCause: draft?.rootCause ?? (saved?.rootCause ?? (match?.rootCause || "")),
+          correctiveAction: draft?.correctiveAction ?? (saved?.correctiveAction ?? (match?.correctiveAction || "")),
+          preventiveAction: draft?.preventiveAction ?? (saved?.preventiveAction ?? (match?.preventiveAction || "")),
+          partsReplaced: draft?.partsReplaced ?? (saved?.partsReplaced ?? "N/A"),
+          followUpAction: draft?.followUpAction ?? (saved?.followUpAction ?? (match?.followUpAction || "N/A")),
+          anrNo: draft?.anrNo ?? (saved?.anrNo ?? "N/A"),
+          supportInfo: draft?.supportInfo ?? (saved?.supportInfo ?? ""),
+          supportPhotoUrl: draft?.supportPhotoUrl ?? (saved?.supportPhotoUrl ?? null),
+          supportPhotoName: draft?.supportPhotoName ?? (saved?.supportPhotoName ?? null),
+          status: "Monitoring" as const,
+        };
+      });
+    }
 
     setIncidents(merged);
-    if (!selectedIncidentKey && merged.length > 0) {
-      setSelectedIncidentKey(merged[0].incidentKey);
+    setSelectedIncidentKey(current => merged.some(item => item.incidentKey === current) ? current : (merged[0]?.incidentKey || ""));
+
+    // Each persisted daily report should open ready to export every stored ride.
+    const selectionSignature = `${dateKey}:${hasPersistedSummary ? "saved" : "derived"}:${merged.map(item => item.incidentKey).join("|")}`;
+    if (selectedKeysSourceRef.current !== selectionSignature) {
+      selectedKeysSourceRef.current = selectionSignature;
+      setSelectedKeysForExport(new Set(merged.map(item => item.incidentKey)));
     }
-    if (merged.length > 0 && selectedKeysForExport.size === 0) {
-      setSelectedKeysForExport(new Set(merged.map(i => i.incidentKey)));
-    }
-  }, [analysisQuery.data, summaryQuery.data, sessionDraftKey]);
+  }, [analysisQuery.data, summaryQuery.data, sessionDraftKey, dateKey]);
 
   useEffect(() => {
     if (!sessionDraftKey || incidents.length === 0 || typeof window === "undefined") return;
+    if (summaryQuery.isLoading || shouldUsePersistedSummary(summaryQuery.data?.entries?.length)) {
+      sessionStorage.removeItem(sessionDraftKey);
+      return;
+    }
     const payload = {
+      savedAt: Date.now(),
       amExecutive,
       pmExecutive,
       zoneBAmExecutive,
@@ -453,9 +495,9 @@ export default function DowntimeSummary() {
     try {
       sessionStorage.setItem(sessionDraftKey, JSON.stringify(payload));
     } catch {
-      // ignore
+      // Browser storage is optional; database memory remains the durable source.
     }
-  }, [sessionDraftKey, amExecutive, pmExecutive, zoneBAmExecutive, zoneBPmExecutive, incidents]);
+  }, [sessionDraftKey, amExecutive, pmExecutive, zoneBAmExecutive, zoneBPmExecutive, incidents, summaryQuery.data?.entries?.length]);
 
   const filteredIncidents = useMemo(() => {
     if (zoneFilter === "ALL") return incidents;
@@ -528,6 +570,7 @@ export default function DowntimeSummary() {
 
   const saveMutation = trpc.downtimeSummary.save.useMutation({
     onSuccess: () => {
+      if (sessionDraftKey && typeof window !== "undefined") sessionStorage.removeItem(sessionDraftKey);
       toast.success("Downtime summary saved to website memory.");
       utils.downtimeSummary.getByDate.invalidate({ dateKey });
       utils.downtimeSummary.listDatesWithData.invalidate();
@@ -539,6 +582,7 @@ export default function DowntimeSummary() {
 
   const generateDocxMutation = trpc.downtimeSummary.generateDocx.useMutation({
     onSuccess: data => {
+      if (sessionDraftKey && typeof window !== "undefined") sessionStorage.removeItem(sessionDraftKey);
       toast.success("DOCX generated successfully. Download started.");
       utils.downtimeSummary.getByDate.invalidate({ dateKey });
       utils.downtimeSummary.listDatesWithData.invalidate();
@@ -678,13 +722,13 @@ export default function DowntimeSummary() {
   };
 
   const handleSave = () => {
-    if (!currentSavedReport) {
+    if (!effectiveSourceReportId) {
       toast.error("Source report ID is not available.");
       return;
     }
     saveMutation.mutate({
       reportDate: dateKey,
-      sourceReportId: currentSavedReport.id,
+      sourceReportId: effectiveSourceReportId,
       amExecutive,
       pmExecutive,
       zoneBAmExecutive,
@@ -694,7 +738,7 @@ export default function DowntimeSummary() {
   };
 
   const handleDownload = () => {
-    if (!currentSavedReport) {
+    if (!effectiveSourceReportId) {
       toast.error("Source report ID is not available.");
       return;
     }
@@ -709,7 +753,7 @@ export default function DowntimeSummary() {
     }
     generateDocxMutation.mutate({
       reportDate: dateKey,
-      sourceReportId: currentSavedReport.id,
+      sourceReportId: effectiveSourceReportId,
       amExecutive,
       pmExecutive,
       zoneBAmExecutive,
@@ -896,7 +940,7 @@ export default function DowntimeSummary() {
 
   return (
     <DashboardLayout>
-      <div className="min-h-screen bg-[#f3f5f9] p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-transparent p-4 sm:p-6 lg:p-8">
         {/* Top Header */}
         <header className="flex flex-col gap-4 border-b border-[#adbBda]/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div>

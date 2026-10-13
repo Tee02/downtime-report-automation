@@ -9,9 +9,27 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.41";
+export const CURRENT_VERSION = "v1.42";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.42",
+    commit: "pending",
+    date: "2026-10-13",
+    time: "11:25 GMT+8",
+    timestamp: "2026-10-13 11:25:00",
+    title: "Saved Summary Session Recovery, Stacked Trend Tooltips, Concise KPI Hover & Lavender Depth",
+    tasks: [
+      "Resolved an issue where older browser drafts could prevent saved Downtime Summary text from appearing in normal browsing sessions, making database records the authoritative source across incognito and standard browsers.",
+      "Retained the stored summary source-report reference so replaced daily source logs continue to display their saved narrative and export directly across all rides.",
+      "Reversed single-day stacked downtime bar ordering so the longest ride downtime segment is laid at the bottom and the shortest is at the top.",
+      "Added individual segment hover tooltips for the single-day downtime bar chart, reporting ride code, minutes, incident count, and percentage.",
+      "Simplified KPI calendar hover tooltips to show the total downtime percentage only (e.g. 3.40%), omitting the redundant percentage-range label.",
+      "Restored the lavender radial-gradient and light-blue theme depth across the main dashboard canvas, sidebar, and summary workspace.",
+      "Added regression test coverage for summary persistence priority, passing all 51 tests with clean TypeScript compilation and a verified production build.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.41",
     commit: "pending",
@@ -28,7 +46,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Restricted DOCX summary export to export-ready selected events, preventing accidental generation of blank narrative cards and clearly reporting excluded incomplete entries.",
       "Added unit test coverage for narrative completeness logic and verified all 49 regression tests pass with clean TypeScript compilation.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.40",

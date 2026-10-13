@@ -538,20 +538,17 @@ function KpiCalendarPanel({
       if (reportDowntimeMap.has(dateKeyStr)) {
         const pct = reportDowntimeMap.get(dateKeyStr)!;
         const rounded = pct.toFixed(2);
-        let tip = `${rounded}% downtime`;
+        // Keep the hover label concise: the cell color already conveys KPI severity.
+        const tip = `${rounded}%`;
 
         if (pct < 1.0) {
           kpiWithin.push(d);
-          tip = `${rounded}% • Within KPI`;
         } else if (pct < 2.0) {
           kpiLightRed.push(d);
-          tip = `${rounded}% • 1.00% – 1.99%`;
         } else if (pct < 3.0) {
           kpiDarkRed.push(d);
-          tip = `${rounded}% • 2.00% – 2.99%`;
         } else {
           kpiDeepRed.push(d);
-          tip = `${rounded}% • 3.00%+`;
         }
 
         const tKey = `tooltip_${encodeURIComponent(tip)}`;
@@ -726,13 +723,15 @@ function KpiCalendarPanel({
 // e.g. "RTR • 12min • 1 inc • 2.5%"
 function RideDowntimeTooltip({ active, payload }: any) {
   if (!active || !payload || !payload.length) return null;
-  const item = payload[0];
-  const data = item.payload;
-  // Could be from single bar breakdown or pie slice
-  const rideCode = data.rideCode || item.name || "Ride";
-  const minutes = data.minutes !== undefined ? data.minutes : item.value || 0;
-  const events = data.events !== undefined ? data.events : (data.incidents || 1);
-  const percentage = data.percentage !== undefined ? Number(data.percentage).toFixed(1) : "0.0";
+  // With stacked bars, shared=false sends the exact segment under the cursor.
+  const item = payload.find((entry: any) => Number(entry?.value) > 0) || payload[0];
+  const data = item?.payload || {};
+  const rideCode = data.rideCode || item?.dataKey || item?.name || "Ride";
+  const metadata = data.rideMeta?.[rideCode] || data;
+  const minutes = metadata.minutes ?? item?.value ?? 0;
+  const events = metadata.events ?? data.events ?? data.incidents ?? 1;
+  const percentageValue = metadata.percentage ?? data.percentage ?? 0;
+  const percentage = Number(percentageValue).toFixed(1);
 
   return (
     <div className="rounded-lg bg-[#18366e] px-3 py-2 text-xs font-bold text-white shadow-xl">
@@ -765,16 +764,29 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
       .sort((a, b) => a.minutes - b.minutes); // ascending (shortest on top, longest on bottom)
   }, [isSingleDay, analysis]);
 
-  // Data for single day stacked bar chart: one bar split by rides
+  // Recharts lays the first stacked Bar at the bottom. Render the longest ride
+  // first so the thickest segment sits on the baseline and the shortest sits on top.
+  const stackedRides = useMemo(
+    () => [...singleDayRides].sort((a, b) => b.minutes - a.minutes),
+    [singleDayRides]
+  );
+  const rideFillByCode = useMemo(
+    () => new Map([...singleDayRides].sort((a, b) => a.minutes - b.minutes).map((ride, index) => [ride.rideCode, rideColor(index)])),
+    [singleDayRides]
+  );
+
+  // Data for a single stacked daily bar. Ride metadata lets the hover tooltip
+  // report the exact hovered segment rather than the aggregate stack.
   const singleBarData = useMemo(() => {
-    if (!isSingleDay || !singleDayRides.length) return [];
+    if (!isSingleDay || !stackedRides.length) return [];
     const dateLabel = analysis.dailyTrend[0]?.label || "Selected Day";
-    const barObj: any = { label: dateLabel };
-    singleDayRides.forEach(r => {
-      barObj[r.rideCode] = r.minutes;
+    const barObj: any = { label: dateLabel, rideMeta: {} };
+    stackedRides.forEach(ride => {
+      barObj[ride.rideCode] = ride.minutes;
+      barObj.rideMeta[ride.rideCode] = ride;
     });
     return [barObj];
-  }, [isSingleDay, singleDayRides, analysis]);
+  }, [isSingleDay, stackedRides, analysis]);
 
   // Data for multi-day rolling trend
   const multiDayData = useMemo(() => {
@@ -877,9 +889,9 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
         ) : isSingleDay && chartType === "bar" ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold text-slate-500">
             <span className="text-slate-400">Longest at bottom, shortest on top:</span>
-            {singleDayRides.map((r, idx) => (
+            {singleDayRides.map(r => (
               <span key={r.rideCode} className="inline-flex items-center gap-1">
-                <i className="h-2 w-2 rounded-full" style={{ background: rideColor(idx) }} />
+                <i className="h-2 w-2 rounded-full" style={{ background: rideFillByCode.get(r.rideCode) }} />
                 {r.rideCode} ({r.minutes}m)
               </span>
             ))}
@@ -920,15 +932,16 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
                 <CartesianGrid vertical={false} stroke="#dbe3f4" />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#5c6b88" }} />
                 <YAxis tickLine={false} axisLine={false} width={42} tick={{ fontSize: 10, fill: "#5c6b88" }} unit="m" />
-                <Tooltip content={<RideDowntimeTooltip />} />
-                {singleDayRides.map((r, idx) => (
+                <Tooltip content={<RideDowntimeTooltip />} shared={false} cursor={{ fill: "#c7d2fe", fillOpacity: 0.34 }} wrapperStyle={{ zIndex: 20, pointerEvents: "none" }} />
+                {stackedRides.map((ride, index) => (
                   <Bar
-                    key={r.rideCode}
-                    dataKey={r.rideCode}
-                    name={r.rideCode}
+                    key={ride.rideCode}
+                    dataKey={ride.rideCode}
+                    name={ride.rideCode}
                     stackId="rides"
-                    fill={rideColor(idx)}
-                    radius={idx === singleDayRides.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                    fill={rideFillByCode.get(ride.rideCode)}
+                    activeBar={{ stroke: "#172c5b", strokeWidth: 1.5 }}
+                    radius={index === stackedRides.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
                   />
                 ))}
               </BarChart>

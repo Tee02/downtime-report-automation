@@ -44,52 +44,56 @@
 
 :root,
 .dark {
-  /* Calm operations canvas: navy carries brand/selection; semantic colors only carry status. */
+  /* Light-blue operations theme with restrained lavender depth. */
   --radius: 0.75rem;
-  --background: #f4f6f8;
-  --foreground: #1f2937;
+  --background: #f3f4ff;
+  --foreground: #1f2a4a;
   --card: #ffffff;
-  --card-foreground: #1f2937;
+  --card-foreground: #1f2a4a;
   --popover: #ffffff;
-  --popover-foreground: #1f2937;
-  --primary: #243b6b;
+  --popover-foreground: #1f2a4a;
+  --primary: #3d52a0;
   --primary-foreground: #ffffff;
-  --secondary: #e8edf5;
-  --secondary-foreground: #243b6b;
-  --muted: #eef1f5;
-  --muted-foreground: #526074;
-  --accent: #dfe8f7;
-  --accent-foreground: #243b6b;
+  --secondary: #e9edff;
+  --secondary-foreground: #29386f;
+  --muted: #eef1fb;
+  --muted-foreground: #596783;
+  --accent: #dee6ff;
+  --accent-foreground: #2f438c;
   --destructive: #b4233b;
   --destructive-foreground: #ffffff;
-  --border: #cfd7e3;
-  --input: #cbd5e1;
-  --ring: #315a9d;
-  --sidebar: #edf1f6;
-  --sidebar-foreground: #22304a;
-  --sidebar-primary: #243b6b;
+  --border: #cbd5f2;
+  --input: #c9d4ee;
+  --ring: #5979da;
+  --sidebar: #edf0ff;
+  --sidebar-foreground: #28375e;
+  --sidebar-primary: #3d52a0;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #dfe8f7;
-  --sidebar-accent-foreground: #243b6b;
-  --sidebar-border: #cad3e0;
-  --sidebar-ring: #315a9d;
-  --chart-1: #315a9d;
-  --chart-2: #16876d;
-  --chart-3: #c27a18;
-  --chart-4: #b4233b;
-  --chart-5: #6b5aa6;
+  --sidebar-accent: #dfe7ff;
+  --sidebar-accent-foreground: #2f438c;
+  --sidebar-border: #cbd5f2;
+  --sidebar-ring: #5979da;
+  --chart-1: #4d7fe5;
+  --chart-2: #1f9a78;
+  --chart-3: #d8891e;
+  --chart-4: #d93457;
+  --chart-5: #7b4fe0;
 }
 
 @layer base {
   * { @apply border-border outline-ring/50; }
-  html { background: var(--background); }
+  html { background: #f3f4ff; }
   body {
     @apply bg-background text-foreground;
+    background:
+      radial-gradient(950px 620px at -8% -12%, rgb(196 186 255 / 0.62), transparent 62%),
+      radial-gradient(860px 520px at 105% 2%, rgb(174 216 255 / 0.62), transparent 59%),
+      linear-gradient(145deg, #f5f3ff 0%, #edf3ff 46%, #f6f8ff 100%);
     font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
   }
-  ::selection { background: #cbdaf2; color: #172a4d; }
-  :focus-visible { outline: 2px solid #315a9d; outline-offset: 2px; }
+  ::selection { background: #ced7ff; color: #24356f; }
+  :focus-visible { outline: 2px solid #5979da; outline-offset: 2px; }
   button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), [type="reset"]:not(:disabled), a[href], select:not(:disabled), input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled) { @apply cursor-pointer; }
   * { scrollbar-color: #aebacd transparent; scrollbar-width: thin; }
   *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -101,13 +105,19 @@
   .container { width: 100%; margin-inline: auto; padding-inline: 1rem; }
   .flex { min-height: 0; min-width: 0; }
   .operations-surface {
-    border: 1px solid #d6dee9;
-    background: #ffffff;
-    box-shadow: 0 10px 26px rgb(31 41 55 / 0.05);
+    border: 1px solid rgb(202 213 242 / 0.94);
+    background: rgb(255 255 255 / 0.9);
+    box-shadow: 0 14px 30px rgb(75 72 145 / 0.1), 0 2px 7px rgb(44 73 147 / 0.05);
   }
   .operations-context-bar {
-    border: 1px solid #d6dee9;
-    background: #f8fafc;
+    border: 1px solid rgb(202 213 242 / 0.94);
+    background: rgb(248 250 255 / 0.84);
+  }
+  .studio-canvas {
+    background:
+      radial-gradient(920px 600px at -9% -10%, rgb(198 184 255 / 0.54), transparent 62%),
+      radial-gradient(860px 520px at 104% 4%, rgb(181 221 255 / 0.58), transparent 59%),
+      linear-gradient(145deg, #f4f2ff 0%, #edf4ff 47%, #f6f8ff 100%);
   }
   @media (min-width: 640px) { .container { padding-inline: 1.5rem; } }
   @media (min-width: 1024px) { .container { max-width: 1280px; padding-inline: 2rem; } }
@@ -115,5 +125,5 @@
 
 @layer utilities {
   .font-mono-report { font-family: "DM Mono", ui-monospace, monospace; }
-  .paper-grid { background-image: linear-gradient(to right, rgb(49 90 157 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgb(49 90 157 / 0.06) 1px, transparent 1px); background-size: 26px 26px; }
+  .paper-grid { background-image: linear-gradient(to right, rgb(89 121 218 / 0.06) 1px, transparent 1px), linear-gradient(to bottom, rgb(89 121 218 / 0.06) 1px, transparent 1px); background-size: 26px 26px; }
 }
