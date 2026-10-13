@@ -38,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { getSummaryCompletion } from "@/lib/summaryCompletion";
 import { toast } from "sonner";
 
 type SummaryTab = "editor" | "archive";
@@ -465,6 +466,29 @@ export default function DowntimeSummary() {
     return incidents.find(i => i.incidentKey === selectedIncidentKey) || filteredIncidents[0] || null;
   }, [incidents, filteredIncidents, selectedIncidentKey]);
 
+  const completionByIncidentKey = useMemo(
+    () => new Map(incidents.map(incident => [incident.incidentKey, getSummaryCompletion(incident)])),
+    [incidents]
+  );
+
+  const selectedReadyCount = useMemo(
+    () => incidents.filter(incident => selectedKeysForExport.has(incident.incidentKey) && completionByIncidentKey.get(incident.incidentKey)?.isReady).length,
+    [incidents, selectedKeysForExport, completionByIncidentKey]
+  );
+
+  const selectedIncompleteCount = Math.max(0, selectedKeysForExport.size - selectedReadyCount);
+
+  const jumpToNextIncomplete = () => {
+    const incomplete = filteredIncidents.filter(incident => !completionByIncidentKey.get(incident.incidentKey)?.isReady);
+    if (!incomplete.length) {
+      toast.success("All visible incidents are ready to export.");
+      return;
+    }
+    const activeIndex = incomplete.findIndex(incident => incident.incidentKey === activeIncident?.incidentKey);
+    const next = incomplete[(activeIndex + 1 + incomplete.length) % incomplete.length];
+    setSelectedIncidentKey(next.incidentKey);
+  };
+
   const updateActiveField = (field: keyof SummaryIncident, value: any) => {
     if (!activeIncident) return;
     setIncidents(curr =>
@@ -674,10 +698,14 @@ export default function DowntimeSummary() {
       toast.error("Source report ID is not available.");
       return;
     }
-    const exportEntries = incidents.filter(i => selectedKeysForExport.has(i.incidentKey));
+    const selectedEntries = incidents.filter(i => selectedKeysForExport.has(i.incidentKey));
+    const exportEntries = selectedEntries.filter(i => completionByIncidentKey.get(i.incidentKey)?.isReady);
     if (!exportEntries.length) {
-      toast.error("Please tick at least one downtime event to export.");
+      toast.error("Complete root cause, corrective action, and preventive action for at least one selected event before export.");
       return;
+    }
+    if (selectedEntries.length > exportEntries.length) {
+      toast.info(`${selectedEntries.length - exportEntries.length} incomplete selected event${selectedEntries.length - exportEntries.length === 1 ? " was" : "s were"} excluded from this export.`);
     }
     generateDocxMutation.mutate({
       reportDate: dateKey,
@@ -937,7 +965,7 @@ export default function DowntimeSummary() {
               <Button
                 size="sm"
                 onClick={handleDownload}
-                disabled={generateDocxMutation.isPending || selectedKeysForExport.size === 0}
+                disabled={generateDocxMutation.isPending || selectedReadyCount === 0}
                 className="h-8 gap-1.5 bg-[#1e4ca1] hover:bg-[#162b5b] font-bold text-white shadow-xs"
               >
                 {generateDocxMutation.isPending ? (
@@ -945,7 +973,7 @@ export default function DowntimeSummary() {
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
-                Download Summary Report (DOCX) ({selectedKeysForExport.size} ticked)
+                Download Summary Report (DOCX) ({selectedReadyCount} ready)
               </Button>
             </div>
           )}
@@ -1107,14 +1135,26 @@ export default function DowntimeSummary() {
                     <div>
                       <h3 className="text-sm font-extrabold text-[#162b5b]">Today&apos;s Downtime</h3>
                       <p className="text-[11px] text-slate-500">
-                        {filteredIncidents.length} technical events • {selectedKeysForExport.size} ticked for export
+                        {filteredIncidents.length} technical events • {selectedReadyCount} ready for export
                       </p>
                     </div>
                     <Layers className="h-4 w-4 text-[#1e4ca1]" />
                   </div>
 
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-700">Export readiness</span>
+                      <Badge className={selectedIncompleteCount ? "bg-amber-100 text-amber-900 hover:bg-amber-100" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"}>
+                        {selectedIncompleteCount ? `${selectedIncompleteCount} need attention` : "All selected ready"}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[10px] leading-snug text-slate-500">
+                      Export includes selected events with root cause, corrective action, and preventive action recorded.
+                    </p>
+                  </div>
+
                   <div className="flex items-center justify-between gap-2 border-y border-slate-100 py-1.5 text-[11px]">
-                    <span className="font-semibold text-slate-600">Export Selection:</span>
+                    <span className="font-semibold text-slate-600">Export selection</span>
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -1151,10 +1191,21 @@ export default function DowntimeSummary() {
                     ))}
                   </div>
 
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={jumpToNextIncomplete}
+                    className="h-9 w-full justify-between border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900 hover:bg-amber-100"
+                  >
+                    <span>Next incomplete incident</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+
                   <div className="space-y-1.5 max-h-[540px] overflow-y-auto pr-1">
                     {filteredIncidents.map(inc => {
                       const isSelected = inc.incidentKey === activeIncident?.incidentKey;
                       const isTicked = selectedKeysForExport.has(inc.incidentKey);
+                      const completion = completionByIncidentKey.get(inc.incidentKey)!;
 
                       return (
                         <div
@@ -1182,9 +1233,14 @@ export default function DowntimeSummary() {
                               <span className="font-mono text-sm font-black tracking-wide text-[#1e4ca1]">
                                 {inc.rideCode}
                               </span>
-                              <Badge variant="outline" className="text-[9px] border-slate-300">
-                                {inc.zone} • {inc.shift}
-                              </Badge>
+                              <div className="flex items-center gap-1">
+                                <Badge variant="outline" className="text-[9px] border-slate-300">
+                                  {inc.zone} • {inc.shift}
+                                </Badge>
+                                <Badge className={completion.isReady ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-900 hover:bg-amber-100"}>
+                                  {completion.isReady ? "Ready" : `Needs ${completion.missing.length}`}
+                                </Badge>
+                              </div>
                             </div>
                             <p className="mt-1 text-xs font-semibold text-slate-800 line-clamp-1">
                               {inc.description}
@@ -1195,6 +1251,9 @@ export default function DowntimeSummary() {
                               </span>
                               <span className="font-bold text-rose-700">{inc.durationMinutes} min</span>
                             </div>
+                            {!completion.isReady && (
+                              <p className="mt-1.5 text-[10px] leading-snug text-amber-800">{completion.detail}</p>
+                            )}
                           </div>
                         </div>
                       );
@@ -1222,6 +1281,15 @@ export default function DowntimeSummary() {
                         <Badge className="bg-amber-100 text-amber-900 font-bold">
                           Shift: {activeIncident.shift} ({activeExecutiveInCharge})
                         </Badge>
+                        {completionByIncidentKey.get(activeIncident.incidentKey)?.isReady ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                            Ready to export
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100">
+                            {completionByIncidentKey.get(activeIncident.incidentKey)?.label}
+                          </Badge>
+                        )}
                       </div>
                     </div>
 

@@ -333,6 +333,22 @@ export default function PmTracker() {
     return logsByDate.get(selectedCalendarDate) || [];
   }, [logsByDate, selectedCalendarDate]);
 
+  const mobileAgendaDays = useMemo(() => {
+    const prefix = format(currentMonth, "yyyy-MM");
+    const days = new Set<string>([
+      ...Array.from(logsByDate.keys()).filter(day => day.startsWith(prefix)),
+      ...Array.from(darkDaySet).filter(day => day.startsWith(prefix)),
+    ]);
+
+    return Array.from(days)
+      .sort((a, b) => b.localeCompare(a))
+      .map(dateStr => ({
+        dateStr,
+        logs: logsByDate.get(dateStr) || [],
+        isDarkDay: darkDaySet.has(dateStr),
+      }));
+  }, [currentMonth, logsByDate, darkDaySet]);
+
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-[1600px] space-y-5 pb-12">
@@ -514,7 +530,7 @@ export default function PmTracker() {
                   variant="outline"
                   size="sm"
                   onClick={prevMonth}
-                  className="h-8 w-8 p-0 border-slate-200"
+                  className="h-11 w-11 p-0 border-slate-300 bg-white"
                   aria-label="Previous month"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -523,7 +539,7 @@ export default function PmTracker() {
                   variant="outline"
                   size="sm"
                   onClick={goToToday}
-                  className="h-8 px-2.5 text-xs font-bold border-slate-200"
+                  className="h-11 px-4 text-xs font-bold border-slate-300 bg-white"
                 >
                   Today
                 </Button>
@@ -531,7 +547,7 @@ export default function PmTracker() {
                   variant="outline"
                   size="sm"
                   onClick={nextMonth}
-                  className="h-8 w-8 p-0 border-slate-200"
+                  className="h-11 w-11 p-0 border-slate-300 bg-white"
                   aria-label="Next month"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -539,8 +555,50 @@ export default function PmTracker() {
               </div>
             </div>
 
-            {/* Weekday headers (Monday to Sunday) */}
-            <div className="grid grid-cols-7 gap-1 border-b border-slate-200 pb-2 text-center text-xs font-black uppercase tracking-wider text-slate-500">
+            <div className="space-y-2 md:hidden" aria-label="PM Tracker monthly agenda">
+              {mobileAgendaDays.length ? mobileAgendaDays.map(day => {
+                const isSelected = selectedCalendarDate === day.dateStr;
+                const downtime = reportDowntimeMap.get(day.dateStr);
+                return (
+                  <button
+                    type="button"
+                    key={day.dateStr}
+                    onClick={() => setSelectedCalendarDate(day.dateStr)}
+                    className={`flex min-h-14 w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                      isSelected ? "border-indigo-600 bg-indigo-50" : day.isDarkDay ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="w-[66px] shrink-0">
+                      <p className="text-sm font-black text-slate-800">{format(parseISO(day.dateStr), "dd MMM")}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{format(parseISO(day.dateStr), "EEE")}</p>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {day.isDarkDay ? (
+                        <Badge className="bg-slate-200 text-slate-800 hover:bg-slate-200">Dark day</Badge>
+                      ) : (
+                        <p className="truncate text-xs font-bold text-slate-800">
+                          {day.logs.length ? `${day.logs.length} PM log${day.logs.length === 1 ? "" : "s"} · ${day.logs[0].rideCode}` : "No PM log"}
+                        </p>
+                      )}
+                      {day.logs.length > 0 && <p className="mt-0.5 truncate text-[11px] text-slate-500">{day.logs[0].summary || day.logs[0].message}</p>}
+                    </div>
+                    {downtime && (
+                      <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-extrabold ${downtime.isWithinKpi ? "bg-blue-100 text-blue-800" : "bg-rose-100 text-rose-800"}`}>
+                        {downtime.totalDowntimePct.toFixed(2)}%
+                      </span>
+                    )}
+                  </button>
+                );
+              }) : (
+                <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+                  <p className="text-sm font-bold text-slate-700">No PM logs in this month</p>
+                  <p className="mt-1 text-xs text-slate-500">Use Paste supervisor message to begin the digital logbook.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop month grid (Monday to Sunday) */}
+            <div className="hidden grid-cols-7 gap-1 border-b border-slate-200 pb-2 text-center text-xs font-black uppercase tracking-wider text-slate-500 md:grid">
               <span>Mon</span>
               <span>Tue</span>
               <span>Wed</span>
@@ -551,7 +609,7 @@ export default function PmTracker() {
             </div>
 
             {/* Calendar Month Grid */}
-            <div className="mt-2 grid grid-cols-7 gap-1.5">
+            <div className="mt-2 hidden grid-cols-7 gap-1.5 md:grid">
               {calendarDays.map((day) => {
                 const dayLogs = logsByDate.get(day.dateStr) || [];
                 const isSelected = selectedCalendarDate === day.dateStr;

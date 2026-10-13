@@ -461,6 +461,25 @@ function SavedSourceManager({
   );
 }
 
+type KpiAgendaStatus = {
+  label: string;
+  badgeClass: string;
+  detail: string;
+};
+
+function getKpiAgendaStatus(percentage: number): KpiAgendaStatus {
+  if (percentage < 1) {
+    return { label: "Within KPI", badgeClass: "bg-blue-100 text-blue-800", detail: "Within 1% KPI" };
+  }
+  if (percentage < 2) {
+    return { label: "Monitor", badgeClass: "bg-rose-100 text-rose-800", detail: "1.00% – 1.99% downtime" };
+  }
+  if (percentage < 3) {
+    return { label: "Escalate", badgeClass: "bg-rose-200 text-rose-900", detail: "2.00% – 2.99% downtime" };
+  }
+  return { label: "Critical", badgeClass: "bg-rose-800 text-white", detail: "3.00%+ downtime" };
+}
+
 // KPI Calendar component with multi-level heatmap coloring and tooltips
 function KpiCalendarPanel({
   reports = [],
@@ -557,6 +576,25 @@ function KpiCalendarPanel({
     };
   }, [currentMonth, reportDowntimeMap, darkDays]);
 
+  const mobileAgendaRows = useMemo(() => {
+    const prefix = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}`;
+    const darkDaySet = new Set(darkDays);
+    const rows = new Set<string>([
+      ...reports.filter(report => report.reportDate.startsWith(prefix)).map(report => report.reportDate),
+      ...darkDays.filter(day => day.startsWith(prefix)),
+    ]);
+
+    return Array.from(rows)
+      .sort()
+      .map(dateKey => {
+        if (darkDaySet.has(dateKey)) {
+          return { dateKey, kind: "dark" as const, percentage: null, status: null };
+        }
+        const percentage = reportDowntimeMap.get(dateKey) ?? 0;
+        return { dateKey, kind: "report" as const, percentage, status: getKpiAgendaStatus(percentage) };
+      });
+  }, [currentMonth, reports, darkDays, reportDowntimeMap]);
+
   return (
     <Card className={`${CARD_CLASS} h-full`}>
       <CardContent className="p-5">
@@ -606,7 +644,53 @@ function KpiCalendarPanel({
           </span>
         </div>
 
-        <div className="mt-3 flex justify-center">
+        <div className="mt-4 flex items-center justify-between gap-2 md:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentMonth(value => new Date(value.getFullYear(), value.getMonth() - 1, 1))}
+            className="h-11 w-11 shrink-0 border-slate-300 bg-white p-0"
+            aria-label="Previous KPI month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <p className="min-w-0 flex-1 text-center text-sm font-extrabold text-slate-800">
+            {currentMonth.toLocaleDateString("en-GB", { month: "long", year: "numeric" })}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentMonth(value => new Date(value.getFullYear(), value.getMonth() + 1, 1))}
+            className="h-11 w-11 shrink-0 border-slate-300 bg-white p-0"
+            aria-label="Next KPI month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="mt-3 space-y-2 md:hidden" aria-label="KPI reporting day agenda">
+          {mobileAgendaRows.length ? mobileAgendaRows.map(row => (
+            <div key={row.dateKey} className="flex min-h-12 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <div className="w-20 shrink-0">
+                <p className="text-xs font-extrabold text-slate-800">{dateWithWeekday(row.dateKey)}</p>
+              </div>
+              {row.kind === "dark" ? (
+                <Badge className="bg-slate-200 text-slate-800 hover:bg-slate-200">Dark day</Badge>
+              ) : (
+                <>
+                  <Badge className={row.status!.badgeClass}>{row.status!.label}</Badge>
+                  <span className="ml-auto text-right text-xs font-extrabold text-slate-800">{row.percentage!.toFixed(2)}%</span>
+                </>
+              )}
+            </div>
+          )) : (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center text-xs text-slate-500">
+              No saved log or dark day is recorded in this month.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-3 hidden justify-center md:flex">
           <Calendar
             mode="single"
             month={currentMonth}
@@ -625,7 +709,7 @@ function KpiCalendarPanel({
           />
         </div>
 
-        <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px]">
+        <div className="mt-2 hidden items-center justify-between border-t border-slate-100 pt-3 text-[10px] md:flex">
           <Badge className="bg-blue-50 text-[#1e4ca1] hover:bg-blue-50">{scope}</Badge>
           <span className="flex items-center gap-1 text-slate-400">
             <CalendarDays className="h-3 w-3" />
@@ -753,8 +837,8 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
             <button
               type="button"
               onClick={() => setChartType("bar")}
-              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
-                chartType === "bar" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              className={`min-h-11 rounded-md px-3 text-[10px] font-extrabold transition-all ${
+                chartType === "bar" ? "bg-[#243b6b] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Bar chart
@@ -762,8 +846,8 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
             <button
               type="button"
               onClick={() => setChartType("line")}
-              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
-                chartType === "line" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              className={`min-h-11 rounded-md px-3 text-[10px] font-extrabold transition-all ${
+                chartType === "line" ? "bg-[#243b6b] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Line chart
@@ -771,8 +855,8 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
             <button
               type="button"
               onClick={() => setChartType("pie")}
-              className={`rounded-md px-3 py-1 text-[10px] font-extrabold transition-all ${
-                chartType === "pie" ? "bg-[#5793f5] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+              className={`min-h-11 rounded-md px-3 text-[10px] font-extrabold transition-all ${
+                chartType === "pie" ? "bg-[#243b6b] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               Pie chart
@@ -1512,13 +1596,13 @@ export default function AnalysisStudio() {
             as="p"
             className="mt-1 block text-sm text-slate-600"
           />
-          <div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-full bg-[#dce8fc] p-1">
+          <div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-lg bg-slate-200 p-1">
             <button
               role="tab"
               aria-selected={tab === "overview"}
               onClick={() => setActiveTab("overview")}
-              className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${
-                tab === "overview" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"
+              className={`min-h-11 rounded-md px-5 text-xs font-extrabold transition-colors ${
+                tab === "overview" ? "bg-[#243b6b] text-white shadow-sm" : "text-slate-600 hover:bg-white"
               }`}
             >
               Overview
@@ -1527,8 +1611,8 @@ export default function AnalysisStudio() {
               role="tab"
               aria-selected={tab === "compare"}
               onClick={() => setActiveTab("compare")}
-              className={`rounded-full px-6 py-1.5 text-xs font-extrabold transition-colors ${
-                tab === "compare" ? "bg-[#5793f5] text-white shadow-sm" : "text-[#41547c] hover:bg-white/60"
+              className={`min-h-11 rounded-md px-5 text-xs font-extrabold transition-colors ${
+                tab === "compare" ? "bg-[#243b6b] text-white shadow-sm" : "text-slate-600 hover:bg-white"
               }`}
             >
               Compare

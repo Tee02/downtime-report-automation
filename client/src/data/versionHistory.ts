@@ -9,9 +9,27 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.40";
+export const CURRENT_VERSION = "v1.41";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.41",
+    commit: "pending",
+    date: "2026-10-13",
+    time: "01:35 GMT+8",
+    timestamp: "2026-10-13 01:35:30",
+    title: "Operations-First UI Polish (Semantic Palette, Mobile Agendas, Summary Readiness)",
+    tasks: [
+      "Replaced decorative lavender radial gradients, dot fields, and global !important token overrides with a calm, high-contrast Slate/Zinc operational canvas where semantic colors carry status only.",
+      "Added a dedicated mobile KPI agenda list to Analysis Studio that presents reporting days, dark days, and 1% KPI compliance with 44px+ touch targets while preserving the desktop heat map.",
+      "Added a mobile monthly agenda list to PM Tracker with 44px+ month navigation buttons, making log summaries and dark days easy to review on handheld devices while retaining the desktop grid.",
+      "Enlarged Analysis Studio tab triggers and chart mode chips to 44px minimum heights to eliminate touch-target strain on touchscreens.",
+      "Introduced per-incident narrative completion badges ('Ready to export' vs 'Needs root cause / actions') in Downtime Summary with an explicit 'Next incomplete incident' jump button.",
+      "Restricted DOCX summary export to export-ready selected events, preventing accidental generation of blank narrative cards and clearly reporting excluded incomplete entries.",
+      "Added unit test coverage for narrative completeness logic and verified all 49 regression tests pass with clean TypeScript compilation.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.40",
     commit: "pending",
@@ -30,7 +48,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Added a real backend-generated, formatted PM Tracker .xlsx workbook export stored in project storage, with frozen headings, status styling, all selected log details, and full message history.",
       "Added pmTrackerLogs database persistence, migration 0010, tRPC create/list/update/delete/export procedures, 5 dedicated PM Tracker regression tests, full 46-test suite validation, production build, browser workflow verification, and console check.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.39",

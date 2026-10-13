@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import DotField from "@/components/DotField";
 import { BarChart3, BookOpenCheck, ClipboardList, FileSpreadsheet, KeyRound, Lock, LogOut, PanelLeft, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -163,10 +162,10 @@ function DashboardLayoutContent({
       <div className="relative" ref={sidebarRef}>
         <Sidebar
           collapsible="icon"
-          className="border-r border-[#adbBda]/70 bg-[#ede8f5] text-slate-800 shadow-[10px_0_35px_rgba(61,82,160,0.08)]"
+          className="border-r border-[#cad3e0] bg-[#edf1f6] text-slate-800 shadow-[8px_0_24px_rgba(31,41,55,0.05)]"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-20 justify-center border-b border-[#adbBda]/70 overflow-hidden">
+          <SidebarHeader className="h-20 justify-center border-b border-[#cad3e0] overflow-hidden">
             <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3 px-2"} transition-all w-full overflow-hidden`}>
               <button
                 onClick={toggleSidebar}
@@ -337,11 +336,10 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#ede8f5]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(112,145,230,0.44),transparent_30%),radial-gradient(circle_at_92%_84%,rgba(61,82,160,0.22),transparent_38%),linear-gradient(135deg,#ede8f5_0%,#dce2f5_48%,#bfcceb_100%)]" />
-        <DotField className="pointer-events-none absolute inset-0 opacity-45" />
+      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#f4f6f8]">
+        <div className="absolute inset-0 bg-[#f4f6f8]" />
         {isMobile && (
-          <div className="relative z-10 flex h-14 items-center justify-between border-b border-[#adbBda]/70 bg-[#ede8f5]/95 px-2 text-slate-800 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="relative z-10 sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#cad3e0] bg-[#f4f6f8] px-2 text-slate-800">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
               <div className="flex items-center gap-3">
@@ -354,7 +352,7 @@ function DashboardLayoutContent({
             </div>
           </div>
         )}
-        <main className="skyworlds-workspace relative z-10 flex-1 p-4">{children}</main>
+        <main className="operations-workspace relative z-10 flex-1 p-4">{children}</main>
       </SidebarInset>
     </>
   );
