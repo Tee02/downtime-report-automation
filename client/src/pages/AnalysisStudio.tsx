@@ -116,27 +116,30 @@ type SavedReport = {
   createdAt: string | Date;
 };
 
+// Calendar widgets provide local browser dates. Keep all picker conversions in
+// local calendar time so clicking the 8th never serializes as the 7th in UTC.
 function asDate(dateKey: string): Date {
-  return new Date(`${dateKey}T00:00:00Z`);
+  return new Date(`${dateKey}T12:00:00`);
 }
 
 function dateKey(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function shortDate(dateKey: string): string {
-  const date = asDate(dateKey);
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  return asDate(dateKey).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 function dateWithWeekday(dateKey: string): string {
-  const date = asDate(dateKey);
-  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return asDate(dateKey).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
 function formatDayMonth(dateKey: string): string {
   const date = asDate(dateKey);
-  return `${date.getUTCDate()}/${date.getUTCMonth() + 1}`;
+  return `${date.getDate()}/${date.getMonth() + 1}`;
 }
 
 function scenarioHistorySummary(rideCodes: string[], dateKeys: Set<string> | string[]): string {
@@ -493,6 +496,8 @@ function KpiCalendarPanel({
   scope: string;
 }) {
   const [currentMonth, setCurrentMonth] = useState<Date>(monthDate || new Date());
+  // Calendar is the field default on handheld screens; Agenda is optional.
+  const [mobileView, setMobileView] = useState<"calendar" | "agenda">("calendar");
 
   useEffect(() => {
     if (monthDate) setCurrentMonth(monthDate);
@@ -665,7 +670,15 @@ function KpiCalendarPanel({
           </Button>
         </div>
 
-        <div className="mt-3 space-y-2 md:hidden" aria-label="KPI reporting day agenda">
+        <div className="mt-2 flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 md:hidden" aria-label="KPI display mode">
+          {(["calendar", "agenda"] as const).map(view => (
+            <button key={view} type="button" onClick={() => setMobileView(view)} className={`min-h-10 flex-1 rounded-md px-3 text-xs font-bold capitalize transition-colors ${mobileView === view ? "bg-white text-[#1e4ca1] shadow-sm" : "text-slate-600"}`}>
+              {view}
+            </button>
+          ))}
+        </div>
+
+        <div className={`${mobileView === "agenda" ? "" : "hidden"} mt-3 space-y-2 md:hidden`} aria-label="KPI reporting day agenda">
           {mobileAgendaRows.length ? mobileAgendaRows.map(row => (
             <div key={row.dateKey} className="flex min-h-12 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
               <div className="w-20 shrink-0">
@@ -685,6 +698,25 @@ function KpiCalendarPanel({
               No saved log or dark day is recorded in this month.
             </div>
           )}
+        </div>
+
+        <div className={`${mobileView === "calendar" ? "flex" : "hidden"} mt-3 justify-center md:hidden`}>
+          <Calendar
+            mode="single"
+            month={currentMonth}
+            onMonthChange={setCurrentMonth}
+            weekStartsOn={1}
+            modifiers={{
+              kpiWithin: monthData.kpiWithin,
+              kpiLightRed: monthData.kpiLightRed,
+              kpiDarkRed: monthData.kpiDarkRed,
+              kpiDeepRed: monthData.kpiDeepRed,
+              noLog: monthData.noLogDates,
+              darkDay: monthData.darkDayDates,
+              ...monthData.tooltipModifiers,
+            }}
+            className="w-full rounded-xl bg-[#f8faff] p-2"
+          />
         </div>
 
         <div className="mt-3 hidden justify-center md:flex">
@@ -1000,7 +1032,7 @@ function TrendPanel({ analysis }: { analysis: AnalysisResult }) {
 
 function RankingPanel({ analysis }: { analysis: AnalysisResult }) {
   return (
-    <Card className={`${CARD_CLASS} h-full`}><CardContent className="p-5"><div className="flex items-center justify-between"><EditableText contentKey="overview_ranking_title" defaultText="Ride ranking" as="h2" className="block text-lg font-extrabold tracking-tight text-[#172c5b]" /><Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100">Lowest availability first</Badge></div><div className="mt-3 max-h-[184px] overflow-y-scroll rounded-lg border border-[#e1e7f4]"><table className="w-full min-w-[500px] text-left text-xs"><thead className="sticky top-0 bg-[#f3f6fd] text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Rank</th><th className="px-3 py-2">Ride</th><th className="px-3 py-2">%</th><th className="px-3 py-2">Availability</th><th className="px-3 py-2">Downtime</th><th className="px-3 py-2">Events</th></tr></thead><tbody className="divide-y divide-slate-100">{analysis.topRides.map((ride, index) => <tr key={ride.rideCode}><td className="px-3 py-2.5 font-extrabold text-[#1e4ca1]">{index + 1}</td><td className="px-3 py-2.5 font-mono font-extrabold text-[#172c5b]">{ride.rideCode}</td><td className="px-3 py-2.5 text-slate-600">{ride.downtimePercentage.toFixed(2)}%</td><td className="px-3 py-2.5 font-bold text-[#172c5b]">{ride.availabilityPercentage.toFixed(2)}%</td><td className="px-3 py-2.5 text-slate-700">{ride.minutes} min</td><td className="px-3 py-2.5"><Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">{ride.events}</Badge></td></tr>)}</tbody></table></div></CardContent></Card>
+    <Card className={`${CARD_CLASS} h-full`}><CardContent className="p-5"><div className="flex items-center justify-between"><EditableText contentKey="overview_ranking_title" defaultText="Ride ranking" as="h2" className="block text-lg font-extrabold tracking-tight text-[#172c5b]" /><Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100">Lowest availability first</Badge></div><div className="mt-3 max-h-[230px] overflow-y-scroll rounded-lg border border-[#e1e7f4]"><table className="w-full min-w-[500px] text-left text-xs"><thead className="sticky top-0 bg-[#f3f6fd] text-[10px] uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Rank</th><th className="px-3 py-2">Ride</th><th className="px-3 py-2">%</th><th className="px-3 py-2">Availability</th><th className="px-3 py-2">Downtime</th><th className="px-3 py-2">Events</th></tr></thead><tbody className="divide-y divide-slate-100">{analysis.topRides.map((ride, index) => <tr key={ride.rideCode}><td className="px-3 py-2.5 font-extrabold text-[#1e4ca1]">{index + 1}</td><td className="px-3 py-2.5 font-mono font-extrabold text-[#172c5b]">{ride.rideCode}</td><td className="px-3 py-2.5 text-slate-600">{ride.downtimePercentage.toFixed(2)}%</td><td className="px-3 py-2.5 font-bold text-[#172c5b]">{ride.availabilityPercentage.toFixed(2)}%</td><td className="px-3 py-2.5 text-slate-700">{ride.minutes} min</td><td className="px-3 py-2.5"><Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">{ride.events}</Badge></td></tr>)}</tbody></table></div></CardContent></Card>
   );
 }
 

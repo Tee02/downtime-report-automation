@@ -222,10 +222,23 @@ export const appRouter = router({
           zoneBAmExecutive: z.string().default(""),
           zoneBPmExecutive: z.string().default(""),
           entries: z.array(summaryEntryInput),
+          // Entries remain the full daily form.  The selected keys control only
+          // which ready records are rendered into this particular DOCX export.
+          exportEntryKeys: z.array(z.string()).optional(),
         })
       )
       .mutation(async ({ input }) => {
-        const docxBuffer = await buildDowntimeSummaryDocx(input as any);
+        const selectedKeys = new Set(input.exportEntryKeys || []);
+        const entriesToExport = selectedKeys.size
+          ? input.entries.filter(entry => selectedKeys.has(entry.incidentKey))
+          : input.entries;
+        if (!entriesToExport.length) {
+          throw new Error("Select at least one completed downtime event before exporting.");
+        }
+        const docxBuffer = await buildDowntimeSummaryDocx({
+          ...input,
+          entries: entriesToExport,
+        } as any);
         const datePart = input.reportDate.replace(/-/g, "");
         const fileName = `DailyDowntimeSummaryReport-${datePart}.docx`;
         const stored = await storagePut(
@@ -234,6 +247,8 @@ export const appRouter = router({
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
 
+        // Persist every card in the daily workspace, including intentionally
+        // unticked or incomplete cards, so a download can never make them vanish.
         await saveDowntimeSummaryState({
           ...input,
           generatedFileName: fileName,

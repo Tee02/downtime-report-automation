@@ -514,10 +514,10 @@ export default function ComparisonStudio() {
               </div>
 
               {/* Section 1: Overview & Availability */}
-              <SectionHeader contentKey="sec_overview" title="OVERVIEW & FLEET AVAILABILITY" tone="blue" />
+              <SectionHeader contentKey="sec_overview" title="OVERVIEW & RIDES AVAILABILITY" tone="blue" />
               <SpecRow
                 contentKey="fleet_avail"
-                label="Fleet Availability"
+                label="Rides Availability"
                 detail="Mean operational uptime"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
@@ -575,7 +575,7 @@ export default function ComparisonStudio() {
               <SpecRow
                 contentKey="rides_scope"
                 label="Rides in Scope"
-                detail="Operating fleet count"
+                detail="Operating rides count"
                 columnCount={columnCount}
                 values={activeResults.map((r, i) =>
                   activeSlots[i].dateKeys.size === 0 ? "—" : r ? `${r.selectedRideCount} rides` : "—"

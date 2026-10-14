@@ -87,6 +87,8 @@ export default function PmTracker() {
 
   // Calendar month state
   const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
+  // Keep the calendar as the default on phones; agenda is available on demand.
+  const [mobileView, setMobileView] = useState<"calendar" | "agenda">("calendar");
 
   // Selected date for day details drawer/panel
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string>(
@@ -423,7 +425,7 @@ export default function PmTracker() {
               className="h-9 gap-1.5 bg-indigo-700 px-4 text-xs font-bold text-white shadow-md shadow-indigo-900/15 hover:bg-indigo-800"
             >
               <Plus className="h-4 w-4" />
-              Paste supervisor message
+              Add log
             </Button>
           </div>
         </header>
@@ -555,7 +557,15 @@ export default function PmTracker() {
               </div>
             </div>
 
-            <div className="space-y-2 md:hidden" aria-label="PM Tracker monthly agenda">
+            <div className="mt-2 flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 md:hidden" aria-label="PM Tracker display mode">
+              {(["calendar", "agenda"] as const).map(view => (
+                <button key={view} type="button" onClick={() => setMobileView(view)} className={`min-h-10 flex-1 rounded-md px-3 text-xs font-bold capitalize transition-colors ${mobileView === view ? "bg-white text-indigo-700 shadow-sm" : "text-slate-600"}`}>
+                  {view}
+                </button>
+              ))}
+            </div>
+
+            <div className={`${mobileView === "agenda" ? "" : "hidden"} space-y-2 md:hidden`} aria-label="PM Tracker monthly agenda">
               {mobileAgendaDays.length ? mobileAgendaDays.map(day => {
                 const isSelected = selectedCalendarDate === day.dateStr;
                 const downtime = reportDowntimeMap.get(day.dateStr);
@@ -592,13 +602,13 @@ export default function PmTracker() {
               }) : (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
                   <p className="text-sm font-bold text-slate-700">No PM logs in this month</p>
-                  <p className="mt-1 text-xs text-slate-500">Use Paste supervisor message to begin the digital logbook.</p>
+                  <p className="mt-1 text-xs text-slate-500">Use Add log to begin the digital logbook.</p>
                 </div>
               )}
             </div>
 
             {/* Desktop month grid (Monday to Sunday) */}
-            <div className="hidden grid-cols-7 gap-1 border-b border-slate-200 pb-2 text-center text-xs font-black uppercase tracking-wider text-slate-500 md:grid">
+            <div className={`${mobileView === "calendar" ? "grid" : "hidden"} grid-cols-7 gap-1 border-b border-slate-200 pb-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-500 md:grid md:text-xs`}>
               <span>Mon</span>
               <span>Tue</span>
               <span>Wed</span>
@@ -609,7 +619,7 @@ export default function PmTracker() {
             </div>
 
             {/* Calendar Month Grid */}
-            <div className="mt-2 hidden grid-cols-7 gap-1.5 md:grid">
+            <div className={`${mobileView === "calendar" ? "grid" : "hidden"} mt-2 grid-cols-7 gap-1 md:grid md:gap-1.5`}>
               {calendarDays.map((day) => {
                 const dayLogs = logsByDate.get(day.dateStr) || [];
                 const isSelected = selectedCalendarDate === day.dateStr;
@@ -641,7 +651,7 @@ export default function PmTracker() {
                     key={day.dateStr}
                     type="button"
                     onClick={() => setSelectedCalendarDate(day.dateStr)}
-                    className={`group relative flex min-h-[96px] sm:min-h-[110px] flex-col rounded-xl border p-1.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                    className={`group relative flex min-h-[64px] md:min-h-[96px] lg:min-h-[110px] flex-col rounded-xl border p-1.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
                       isSelected
                         ? "border-indigo-600 bg-indigo-50/70 shadow-md ring-2 ring-indigo-500/30"
                         : day.isCurrentMonth
@@ -690,7 +700,7 @@ export default function PmTracker() {
                     </div>
 
                     {/* Summarized entries snippet on calendar cell */}
-                    <div className="mt-1 flex-1 space-y-1 overflow-hidden">
+                    <div className="mt-1 hidden flex-1 space-y-1 overflow-hidden md:block">
                       {dayLogs.slice(0, 2).map((item) => (
                         <div
                           key={item.id}
@@ -756,7 +766,7 @@ export default function PmTracker() {
               {reportDowntimeMap.has(selectedCalendarDate) && (
                 <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/70 p-2.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-extrabold text-slate-700">1% Fleet KPI Downtime:</span>
+                    <span className="font-extrabold text-slate-700">1% Rides KPI Downtime:</span>
                     <span
                       className={`font-mono font-black ${
                         reportDowntimeMap.get(selectedCalendarDate)!.isWithinKpi
@@ -788,7 +798,7 @@ export default function PmTracker() {
                       No PM logs recorded for this day
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-400">
-                      Click "Add log" or "Paste supervisor message" to insert.
+                      Click "Add log" or "Add log" to insert.
                     </p>
                   </div>
                 ) : (
@@ -861,7 +871,7 @@ export default function PmTracker() {
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-xl font-black text-[#24325e]">
-                  Paste Supervisor Message / Record PM Log
+                  Add PM Tracker Log
                 </DialogTitle>
                 <DialogDescription id="pm-create-dialog-desc" className="mt-1 text-xs text-slate-500">
                   Record opening startup, closing inspection, OT, dark-day, rehab, or PM activity into the digital logbook.

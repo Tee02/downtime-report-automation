@@ -8,6 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -90,6 +100,8 @@ export default function TroubleshootWiki() {
   // Detail Pop-Up Dialog
   const [activeFault, setActiveFault] = useState<TroubleFault | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [faultToDelete, setFaultToDelete] = useState<TroubleFault | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
 
   const rideScrollerRef = useRef<HTMLDivElement>(null);
 
@@ -109,6 +121,22 @@ export default function TroubleshootWiki() {
       toast.error(err.message || "Failed to save card.");
     },
   });
+
+  const deleteMutation = trpc.faultpedia.delete.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.faultpedia.list.invalidate();
+      setFaultToDelete(null);
+      setDeleteStep(1);
+      toast.success("Faultpedia card deleted.");
+    },
+    onError: (err) => toast.error(err.message || "Unable to delete this card."),
+  });
+
+  const requestFaultDeletion = (fault: TroubleFault) => {
+    if (!fault.dbId) return;
+    setFaultToDelete(fault);
+    setDeleteStep(1);
+  };
 
   // Combine DB cards with initial reference cards if none exist in DB
   const allFaults: TroubleFault[] = useMemo(() => {
@@ -422,10 +450,13 @@ export default function TroubleshootWiki() {
               ) : displayedFaults.length ? (
                 <div className="divide-y divide-slate-100 p-2 sm:p-4">
                   {displayedFaults.map((fault) => (
-                    <button
+                    <div
                       key={fault.id}
+                      className="group flex items-center gap-1 rounded-xl transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-emerald-500"
+                    >
+                    <button
                       onClick={() => openFaultDetail(fault)}
-                      className="group flex w-full items-center justify-between gap-3 rounded-xl p-3.5 text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      className="flex w-full min-w-0 flex-1 items-center justify-between gap-3 rounded-xl p-3.5 text-left transition focus:outline-none"
                     >
                       <div className="flex min-w-0 flex-1 items-start gap-3">
                         <RideGlyph rideCode={fault.rideCode} />
@@ -460,6 +491,20 @@ export default function TroubleshootWiki() {
                         </span>
                       </div>
                     </button>
+                    {fault.dbId && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => requestFaultDeletion(fault)}
+                        aria-label={`Delete ${fault.title}`}
+                        title="Delete saved card"
+                        className="mr-2 h-9 w-9 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -643,7 +688,20 @@ export default function TroubleshootWiki() {
                 </div>
               </div>
 
-              <DialogFooter className="border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+              <DialogFooter className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+                {activeFault.dbId ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setDetailModalOpen(false);
+                      requestFaultDeletion(activeFault);
+                    }}
+                    className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                  >
+                    <Trash2 className="mr-1.5 h-4 w-4" />
+                    Delete card
+                  </Button>
+                ) : <span />}
                 <Button onClick={() => setDetailModalOpen(false)} className="bg-slate-700 text-white hover:bg-slate-800">
                   Close window
                 </Button>
@@ -652,6 +710,38 @@ export default function TroubleshootWiki() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(faultToDelete)} onOpenChange={open => {
+        if (!open && !deleteMutation.isPending) {
+          setFaultToDelete(null);
+          setDeleteStep(1);
+        }
+      }}>
+        <AlertDialogContent className="max-w-md rounded-2xl border border-rose-100 bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteStep === 1 ? "Delete this Faultpedia card?" : "Final confirmation"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteStep === 1
+                ? `The card “${faultToDelete?.title || ""}” will be removed from the shared Faultpedia library. Continue only if this is the intended card.`
+                : `This permanently removes “${faultToDelete?.title || ""}” from the website library. This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending} onClick={() => { setFaultToDelete(null); setDeleteStep(1); }}>
+              Cancel
+            </AlertDialogCancel>
+            {deleteStep === 1 ? (
+              <AlertDialogAction className="bg-rose-700 text-white hover:bg-rose-800" onClick={event => { event.preventDefault(); setDeleteStep(2); }}>
+                Continue
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction className="bg-rose-700 text-white hover:bg-rose-800" onClick={() => faultToDelete?.dbId && deleteMutation.mutate({ id: faultToDelete.dbId })}>
+                {deleteMutation.isPending ? "Deleting…" : "Yes, delete card"}
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* CREATE TROUBLESHOOTING CARD MODAL */}
       <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>

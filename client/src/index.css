@@ -104,6 +104,9 @@
 @layer components {
   .container { width: 100%; margin-inline: auto; padding-inline: 1rem; }
   .flex { min-height: 0; min-width: 0; }
+  .operations-workspace {
+    isolation: isolate;
+  }
   .operations-surface {
     border: 1px solid rgb(202 213 242 / 0.94);
     background: rgb(255 255 255 / 0.9);

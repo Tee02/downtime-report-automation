@@ -758,7 +758,10 @@ export default function DowntimeSummary() {
       pmExecutive,
       zoneBAmExecutive,
       zoneBPmExecutive,
-      entries: exportEntries,
+      // Save the complete daily workspace. The server uses these keys only for
+      // DOCX rendering, leaving unticked cards in the visible summary form.
+      entries: incidents,
+      exportEntryKeys: exportEntries.map(entry => entry.incidentKey),
     });
   };
 

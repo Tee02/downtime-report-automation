@@ -336,8 +336,15 @@ function DashboardLayoutContent({
         />
       </div>
 
-      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#f4f6f8]">
-        <div className="absolute inset-0 bg-[#f4f6f8]" />
+      <SidebarInset className="relative min-h-screen overflow-hidden bg-[#dcecff]">
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: "linear-gradient(96deg, rgba(221, 231, 255, 0.86) 0%, rgba(213, 230, 255, 0.78) 47%, rgba(220, 238, 255, 0.5) 100%), url('/manus-storage/menu-bg_3905aa2f.jpg')",
+            backgroundAttachment: "fixed",
+          }}
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(760px_520px_at_-8%_-12%,rgba(202,187,255,0.36),transparent_62%),radial-gradient(700px_460px_at_105%_10%,rgba(158,214,255,0.2),transparent_60%)]" />
         {isMobile && (
           <div className="relative z-10 sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[#cbd5f2] bg-[#f3f4ff]/90 px-2 text-slate-800 backdrop-blur-sm">
             <div className="flex items-center gap-2">

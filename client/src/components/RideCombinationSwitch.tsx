@@ -91,7 +91,7 @@ export function RideCombinationSwitch({
           <div>
             <EditableText
               contentKey="fleet_section_step"
-              defaultText="02 · Focus the fleet"
+              defaultText="02 · Focus the rides"
               as="p"
               className="font-mono-report text-[11px] font-medium uppercase tracking-[0.16em] text-[#3D52A0]"
             />
@@ -151,7 +151,7 @@ export function RideCombinationSwitch({
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 text-xs text-slate-600">
               <EditableText
                 contentKey="fleet_all_heading"
-                defaultText="Full fleet analysis active:"
+                defaultText="Full rides analysis active:"
                 as="p"
                 className="font-semibold text-slate-800 block"
               />
@@ -174,7 +174,7 @@ export function RideCombinationSwitch({
                     <span className="flex items-center gap-2 truncate">
                       <Filter className="h-3.5 w-3.5 text-[#3D52A0] shrink-0" />
                       {selectedRideCodes.length === 0 ? (
-                        <span className="text-slate-400">Click to choose rides from fleet...</span>
+                        <span className="text-slate-400">Click to choose rides...</span>
                       ) : (
                         <span className="font-bold text-slate-800 truncate">
                           {selectedRideCodes.length} ride{selectedRideCodes.length === 1 ? "" : "s"} selected ({selectedRideCodes.slice(0, 3).join(", ")}{selectedRideCodes.length > 3 ? "..." : ""})
@@ -191,7 +191,7 @@ export function RideCombinationSwitch({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
                       <span className="text-xs font-extrabold text-slate-900">
-                        Select Fleet Rides
+                        Select rides
                       </span>
                       <div className="flex items-center gap-1.5">
                         <Button

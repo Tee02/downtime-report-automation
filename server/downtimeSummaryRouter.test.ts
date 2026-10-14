@@ -109,13 +109,26 @@ describe("downtimeSummary router", () => {
   it("generates and archives a DOCX report after saving the same daily state", async () => {
     mocks.storagePut.mockResolvedValue({ url: "/manus-storage/downtime-summaries/report.docx" });
     mocks.saveDowntimeSummaryState.mockResolvedValue({ summary: { id: 5 }, entries: [entry] });
+    const untickedEntry = {
+      ...entry,
+      incidentKey: "technical-2026-10-01-13-BWZ",
+      rideCode: "BWZ",
+      attraction: "Big Weld's Zeppelin",
+      downtimeStart: "13:10",
+      downtimeEnd: "13:16",
+      durationMinutes: 6,
+      rootCause: "",
+      correctiveAction: "",
+      preventiveAction: "",
+    };
 
     const result = await caller.downtimeSummary.generateDocx({
       reportDate: "2026-10-01",
       sourceReportId: 88,
       amExecutive: "Firdaus, Adam",
       pmExecutive: "Yik Seng",
-      entries: [entry],
+      entries: [entry, untickedEntry],
+      exportEntryKeys: [entry.incidentKey],
     });
 
     expect(result.fileName).toBe("DailyDowntimeSummaryReport-20261001.docx");
@@ -128,6 +141,7 @@ describe("downtimeSummary router", () => {
     expect(mocks.saveDowntimeSummaryState).toHaveBeenCalledWith(expect.objectContaining({
       generatedFileName: "DailyDowntimeSummaryReport-20261001.docx",
       generatedFileUrl: "/manus-storage/downtime-summaries/report.docx",
+      entries: [entry, untickedEntry],
     }));
   });
 

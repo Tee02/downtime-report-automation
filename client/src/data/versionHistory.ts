@@ -9,9 +9,28 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.42";
+export const CURRENT_VERSION = "v1.43";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.43",
+    commit: "pending",
+    date: "2026-10-14",
+    time: "23:12 GMT+8",
+    timestamp: "2026-10-14 23:12:33",
+    title: "Reliable Summary Export, Exact Calendar Dates, Faultpedia Deletion & Park-Map Workspace",
+    tasks: [
+      "Corrected Daily Downtime Summary DOCX export persistence: all daily downtime cards and entered content now remain in the workspace after download, while only ticked ready entries are included in the generated report.",
+      "Corrected Analysis Studio and integrated Compare calendar serialization to use the clicked local calendar date, preventing the one-day-back selection error (for example, clicking 8 October now selects 8 October).",
+      "Added visible delete controls for saved Faultpedia cards, protected by two consecutive confirmation steps before a shared card is permanently removed.",
+      "Renamed PM Tracker's supervisor-message action to 'Add log' and standardized visible product language from 'fleet' to 'rides'.",
+      "Restored calendar as the default mobile view for KPI Calendar and PM Tracker, with an on-demand Agenda switch retained for compact field review.",
+      "Expanded the desktop Ride Ranking viewport to five immediate rows with internal scrolling for the remaining rides.",
+      "Applied the supplied SkyWorlds park-map artwork as a fixed, light-blue and lavender layered workspace background behind cards across all dashboard pages.",
+      "Verified exact calendar selections in both Analysis and Compare browser workflows, passed TypeScript checks and all 51 active regression tests, and completed a production build.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.42",
     commit: "pending",
@@ -28,7 +47,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Restored the lavender radial-gradient and light-blue theme depth across the main dashboard canvas, sidebar, and summary workspace.",
       "Added regression test coverage for summary persistence priority, passing all 51 tests with clean TypeScript compilation and a verified production build.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.41",
