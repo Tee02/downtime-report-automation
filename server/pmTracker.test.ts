@@ -96,6 +96,29 @@ describe("PM Tracker router and zone models", () => {
     expect(mocks.createPmTrackerLog).toHaveBeenCalledWith(input);
   });
 
+  it("updates an existing saved digital log", async () => {
+    const input = {
+      id: 2,
+      logDate: "2026-10-11",
+      zone: "Zone B" as const,
+      rideCode: "ACR",
+      rideName: "Acorn Adventure",
+      status: "Completed" as const,
+      workType: "Weekly PM" as const,
+      technician: "Adam",
+      summary: "Replacement bolt installed",
+      message: "Weekly PM completed: replacement bolt installed and verified.",
+    };
+    mocks.updatePmTrackerLog.mockResolvedValue(input);
+
+    const updated = await caller.pmTracker.update(input);
+    expect(updated).toEqual(input);
+    expect(mocks.updatePmTrackerLog).toHaveBeenCalledWith(input.id, expect.objectContaining({
+      status: "Completed",
+      summary: "Replacement bolt installed",
+    }));
+  });
+
   it("deletes a digital log by id", async () => {
     mocks.deletePmTrackerLog.mockResolvedValue({ success: true });
     const res = await caller.pmTracker.delete({ id: 2 });
@@ -130,9 +153,12 @@ describe("PM Tracker router and zone models", () => {
     expect(sheet?.getCell("C5").value).toBe("BWZ");
     expect(sheet?.getCell("I5").value).toContain("platform gate bolt");
 
-    mocks.listPmTrackerLogs.mockResolvedValue([log]);
+    mocks.listPmTrackerLogs.mockResolvedValue([
+      log,
+      { ...log, id: 4, logDate: "2026-11-01", summary: "November work", message: "November work" },
+    ]);
     mocks.storagePut.mockResolvedValue({ url: "/manus-storage/pm-tracker-export.xlsx" });
-    const result = await caller.pmTracker.exportExcel({ zone: "Zone A" });
+    const result = await caller.pmTracker.exportExcel({ zone: "Zone A", monthKey: "2026-10" });
 
     expect(result).toEqual({
       fileName: expect.stringMatching(/^PM_Tracker_Zone_A_\d{8}\.xlsx$/),

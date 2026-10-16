@@ -99,6 +99,7 @@ export default function PmTracker() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [draft, setDraft] = useState<LogDraft>(blankLogDraft);
   const [activeDetailLog, setActiveDetailLog] = useState<any | null>(null);
+  const [editingLog, setEditingLog] = useState<any | null>(null);
 
   // tRPC utilities and queries
   const trpcUtils = trpc.useUtils();
@@ -107,16 +108,31 @@ export default function PmTracker() {
   const { data: savedReports = [] } = trpc.savedReports.list.useQuery();
 
   // Create mutation
+  const clearLogEditor = () => {
+    setCreateModalOpen(false);
+    setEditingLog(null);
+    setDraft(blankLogDraft);
+  };
+
   const createMutation = trpc.pmTracker.create.useMutation({
     onSuccess: async () => {
       await trpcUtils.pmTracker.list.invalidate();
       toast.success("PM log entry recorded successfully.");
-      setCreateModalOpen(false);
-      setDraft(blankLogDraft);
+      clearLogEditor();
     },
     onError: (err) => {
       toast.error(err.message || "Failed to record log entry.");
     },
+  });
+
+  const updateMutation = trpc.pmTracker.update.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.pmTracker.list.invalidate();
+      toast.success("PM log entry updated.");
+      clearLogEditor();
+      setActiveDetailLog(null);
+    },
+    onError: (err) => toast.error(err.message || "Failed to update this PM log."),
   });
 
   // Delete mutation
@@ -298,11 +314,8 @@ export default function PmTracker() {
     }
 
     const rideName = getRideFullName(draft.rideCode);
-    const summary =
-      draft.summary.trim() ||
-      draft.message.trim().slice(0, 120).replace(/\s+/g, " ");
-
-    createMutation.mutate({
+    const summary = draft.summary.trim() || draft.message.trim().slice(0, 120).replace(/\s+/g, " ");
+    const payload = {
       logDate: draft.logDate,
       zone: draft.zone,
       rideCode: draft.rideCode,
@@ -312,7 +325,29 @@ export default function PmTracker() {
       technician: draft.technician.trim(),
       summary,
       message: draft.message.trim(),
+    };
+
+    if (editingLog?.id) {
+      updateMutation.mutate({ id: editingLog.id, ...payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  const openLogEditor = (log: any) => {
+    setEditingLog(log);
+    setDraft({
+      logDate: log.logDate,
+      rideCode: log.rideCode,
+      zone: getRideZone(log.rideCode),
+      status: log.status as PmStatus,
+      workType: log.workType as PmWorkType,
+      technician: log.technician || "",
+      summary: log.summary || "",
+      message: log.message || "",
     });
+    setActiveDetailLog(null);
+    setCreateModalOpen(true);
   };
 
   // Export current filtered logs through the backend as a formatted .xlsx workbook.
@@ -327,6 +362,7 @@ export default function PmTracker() {
       rideCode: selectedRideFilter === "ALL" ? undefined : selectedRideFilter,
       status: statusFilter === "ALL" ? undefined : (statusFilter as PmStatus),
       query: searchQuery.trim() || undefined,
+      monthKey: format(currentMonth, "yyyy-MM"),
     });
   };
 
@@ -399,34 +435,6 @@ export default function PmTracker() {
               })}
             </div>
 
-            {/* Export to Excel */}
-            <Button
-              variant="outline"
-              onClick={handleExportExcel}
-              disabled={exportMutation.isPending}
-              className="h-9 gap-1.5 border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
-              {exportMutation.isPending ? "Building Excel..." : "Export Excel"}
-            </Button>
-
-            {/* Paste Message / Add Log Button */}
-            <Button
-              onClick={() => {
-                const defaultRide = activeZone === "Zone A" ? "BWZ" : "ACR";
-                setDraft({
-                  ...blankLogDraft,
-                  logDate: selectedCalendarDate || format(new Date(), "yyyy-MM-dd"),
-                  zone: activeZone,
-                  rideCode: defaultRide,
-                });
-                setCreateModalOpen(true);
-              }}
-              className="h-9 gap-1.5 bg-indigo-700 px-4 text-xs font-bold text-white shadow-md shadow-indigo-900/15 hover:bg-indigo-800"
-            >
-              <Plus className="h-4 w-4" />
-              Add log
-            </Button>
           </div>
         </header>
 
@@ -490,6 +498,16 @@ export default function PmTracker() {
                   <SelectItem value="In Progress" className="text-xs text-blue-700 font-bold">In Progress</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant="outline"
+                onClick={handleExportExcel}
+                disabled={exportMutation.isPending}
+                className="h-9 gap-1.5 border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50"
+                title={`Export ${format(currentMonth, "MMMM yyyy")} using the current filters`}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+                {exportMutation.isPending ? "Building Excel..." : "Export Excel"}
+              </Button>
             </div>
 
             {/* Reset filters */}
@@ -798,7 +816,7 @@ export default function PmTracker() {
                       No PM logs recorded for this day
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-400">
-                      Click "Add log" or "Add log" to insert.
+                      Use Add log to record an opening, OT, dark-day, rehab, or preventive-maintenance update.
                     </p>
                   </div>
                 ) : (
@@ -861,7 +879,7 @@ export default function PmTracker() {
       </div>
 
       {/* CREATE LOG / PASTE MESSAGE MODAL */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+      <Dialog open={createModalOpen} onOpenChange={(open) => { if (!open && !createMutation.isPending && !updateMutation.isPending) clearLogEditor(); else setCreateModalOpen(open); }}>
         <DialogContent
           showCloseButton={false}
           className="max-h-[92vh] max-w-2xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl"
@@ -871,14 +889,14 @@ export default function PmTracker() {
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-xl font-black text-[#24325e]">
-                  Add PM Tracker Log
+                  {editingLog ? "Edit PM Tracker Log" : "Add PM Tracker Log"}
                 </DialogTitle>
                 <DialogDescription id="pm-create-dialog-desc" className="mt-1 text-xs text-slate-500">
-                  Record opening startup, closing inspection, OT, dark-day, rehab, or PM activity into the digital logbook.
+                  {editingLog ? "Update the saved digital logbook record." : "Record opening startup, closing inspection, OT, dark-day, rehab, or PM activity into the digital logbook."}
                 </DialogDescription>
               </div>
               <button
-                onClick={() => setCreateModalOpen(false)}
+                onClick={clearLogEditor}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 <X className="h-5 w-5" />
@@ -1021,17 +1039,17 @@ export default function PmTracker() {
           <DialogFooter className="border-t border-slate-200 bg-slate-50 px-6 py-4">
             <Button
               variant="outline"
-              onClick={() => setCreateModalOpen(false)}
+              onClick={clearLogEditor}
               className="bg-white text-xs"
             >
               Cancel
             </Button>
             <Button
               onClick={handleSaveLog}
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending}
               className="bg-indigo-700 text-xs font-bold text-white hover:bg-indigo-800"
             >
-              {createMutation.isPending ? "Saving..." : "Save digital log"}
+              {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingLog ? "Save changes" : "Save digital log"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1108,25 +1126,12 @@ export default function PmTracker() {
                 </div>
               </div>
 
-              <DialogFooter className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteMutation.mutate({ id: activeDetailLog.id })}
-                  disabled={deleteMutation.isPending}
-                  className="gap-1.5 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete log
-                </Button>
-
-                <Button
-                  size="sm"
-                  onClick={() => setActiveDetailLog(null)}
-                  className="bg-slate-700 text-white hover:bg-slate-800 text-xs"
-                >
-                  Close
-                </Button>
+              <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => openLogEditor(activeDetailLog)} className="gap-1.5 border-indigo-200 bg-white text-xs text-indigo-700 hover:bg-indigo-50"><Wrench className="h-3.5 w-3.5" />Edit log</Button>
+                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate({ id: activeDetailLog.id })} disabled={deleteMutation.isPending} className="gap-1.5 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-3.5 w-3.5" />Delete log</Button>
+                </div>
+                <Button size="sm" onClick={() => setActiveDetailLog(null)} className="bg-slate-700 text-white hover:bg-slate-800 text-xs">Close</Button>
               </DialogFooter>
             </div>
           )}

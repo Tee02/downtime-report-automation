@@ -391,81 +391,100 @@ export default function DowntimeSummary() {
       }
     }
 
-    let merged: SummaryIncident[];
-    if (hasPersistedSummary) {
-      // Render the persisted entry values directly. This works in any browser
-      // session and continues to work if a source report was later replaced.
-      merged = persistedEntries.map(entry => ({
-        incidentKey: entry.incidentKey,
-        zone: normalizeZone(entry.zone),
-        rideCode: entry.rideCode,
-        attraction: entry.attraction,
-        description: entry.description,
-        downtimeStart: entry.downtimeStart,
-        downtimeEnd: entry.downtimeEnd,
-        durationMinutes: entry.durationMinutes,
-        shift: entry.shift === "PM" ? "PM" : "AM",
-        recurringDowntime: entry.recurringDowntime === "Yes" ? "Yes" : "No",
-        recurringDowntimeDays: entry.recurringDowntimeDays || "N/A",
-        incident: entry.incident === "Yes" ? "Yes" : "No",
-        rootCause: entry.rootCause || "",
-        correctiveAction: entry.correctiveAction || "",
-        preventiveAction: entry.preventiveAction || "",
-        partsReplaced: entry.partsReplaced || "N/A",
-        followUpAction: entry.followUpAction || "N/A",
-        anrNo: entry.anrNo || "N/A",
-        supportInfo: entry.supportInfo || "",
-        supportPhotoUrl: entry.supportPhotoUrl || null,
-        supportPhotoName: entry.supportPhotoName || null,
-        status: entry.status === "Closed" || entry.status === "Pending Parts" ? entry.status : "Monitoring",
+    const toSummaryIncident = (entry: any): SummaryIncident => ({
+      incidentKey: entry.incidentKey,
+      // The operational ride allocation is authoritative. This repairs historical
+      // saves that may have stored an attraction under the opposite zone.
+      zone: ZONE_ASSIGNMENTS[entry.rideCode] || normalizeZone(entry.zone),
+      rideCode: entry.rideCode,
+      attraction: entry.attraction,
+      description: entry.description,
+      downtimeStart: entry.downtimeStart,
+      downtimeEnd: entry.downtimeEnd,
+      durationMinutes: entry.durationMinutes,
+      shift: entry.shift === "PM" ? "PM" : "AM",
+      recurringDowntime: entry.recurringDowntime === "Yes" ? "Yes" : "No",
+      recurringDowntimeDays: entry.recurringDowntimeDays || "N/A",
+      incident: entry.incident === "Yes" ? "Yes" : "No",
+      rootCause: entry.rootCause || "",
+      correctiveAction: entry.correctiveAction || "",
+      preventiveAction: entry.preventiveAction || "",
+      partsReplaced: entry.partsReplaced || "N/A",
+      followUpAction: entry.followUpAction || "N/A",
+      anrNo: entry.anrNo || "N/A",
+      supportInfo: entry.supportInfo || "",
+      supportPhotoUrl: entry.supportPhotoUrl || null,
+      supportPhotoName: entry.supportPhotoName || null,
+      status: entry.status === "Closed" || entry.status === "Pending Parts" ? entry.status : "Monitoring",
+    });
+
+    const technicalIncidents = analysisQuery.data?.incidentLogs.filter(
+      log => log.kind === "technical" && log.rideCode
+    ) || [];
+
+    // Always build the visible day from the source log when it is available, then
+    // layer saved form values over matching records. This preserves every incident
+    // after an export while retaining entered summary details in all browsers.
+    const liveIncidentKeys = new Set<string>();
+    const mergedFromLive = technicalIncidents.map((item, index) => {
+      const key = item.id || `inc-${item.dateKey}-${item.rideCode}-${index}`;
+      liveIncidentKeys.add(key);
+      const saved = savedMap.get(key) as any;
+      const draft = sessionMap.get(key) as any;
+      const times = (item.timeRange || "").split("-");
+      const startTime = times[0] || "";
+      const endTime = times[1] || "";
+      const duration = parseDurationMinutes(item.durationLabel, startTime, endTime);
+      const shift = parseShift(startTime);
+      const assignedZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
+      const match = importedMatches.find(matchItem => matchesImportedIncident(matchItem, {
+        rideCode: item.rideCode || "",
+        description: item.description,
+        downtimeStart: startTime,
       }));
-    } else {
-      const technicalIncidents = analysisQuery.data?.incidentLogs.filter(
-        log => log.kind === "technical" && log.rideCode
-      ) || [];
 
-      merged = technicalIncidents.map((item, index) => {
-        const key = item.id || `inc-${item.dateKey}-${item.rideCode}-${index}`;
-        const saved = savedMap.get(key) as any;
-        const draft = sessionMap.get(key) as any;
-        const times = (item.timeRange || "").split("-");
-        const startTime = times[0] || "";
-        const endTime = times[1] || "";
-        const duration = parseDurationMinutes(item.durationLabel, startTime, endTime);
-        const shift = parseShift(startTime);
-        const defaultZone = ZONE_ASSIGNMENTS[item.rideCode || ""] || "Zone A";
-        const match = importedMatches.find(matchItem => matchesImportedIncident(matchItem, {
-          rideCode: item.rideCode || "",
-          description: item.description,
-          downtimeStart: startTime,
-        }));
+      return {
+        incidentKey: key,
+        zone: assignedZone,
+        rideCode: item.rideCode || "",
+        attraction: item.attraction || item.rideCode || "",
+        description: item.description,
+        downtimeStart: startTime,
+        downtimeEnd: endTime,
+        durationMinutes: duration,
+        shift,
+        recurringDowntime: draft?.recurringDowntime ?? (saved?.recurringDowntime ?? (match?.recurringDowntime || "No")),
+        recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved?.recurringDowntimeDays ?? (match?.recurringDowntimeDays || "N/A")),
+        incident: draft?.incident ?? (saved?.incident ?? (match?.incident || "No")),
+        rootCause: draft?.rootCause ?? (saved?.rootCause ?? (match?.rootCause || "")),
+        correctiveAction: draft?.correctiveAction ?? (saved?.correctiveAction ?? (match?.correctiveAction || "")),
+        preventiveAction: draft?.preventiveAction ?? (saved?.preventiveAction ?? (match?.preventiveAction || "")),
+        partsReplaced: draft?.partsReplaced ?? (saved?.partsReplaced ?? "N/A"),
+        followUpAction: draft?.followUpAction ?? (saved?.followUpAction ?? (match?.followUpAction || "N/A")),
+        anrNo: draft?.anrNo ?? (saved?.anrNo ?? "N/A"),
+        supportInfo: draft?.supportInfo ?? (saved?.supportInfo ?? ""),
+        supportPhotoUrl: draft?.supportPhotoUrl ?? (saved?.supportPhotoUrl ?? null),
+        supportPhotoName: draft?.supportPhotoName ?? (saved?.supportPhotoName ?? null),
+        status: "Monitoring" as const,
+      } satisfies SummaryIncident;
+    });
 
-        return {
-          incidentKey: key,
-          zone: draft?.zone ? normalizeZone(draft.zone) : (saved?.zone ? normalizeZone(saved.zone) : defaultZone),
-          rideCode: item.rideCode || "",
-          attraction: item.attraction || item.rideCode || "",
-          description: item.description,
-          downtimeStart: startTime,
-          downtimeEnd: endTime,
-          durationMinutes: duration,
-          shift,
-          recurringDowntime: draft?.recurringDowntime ?? (saved?.recurringDowntime ?? (match?.recurringDowntime || "No")),
-          recurringDowntimeDays: draft?.recurringDowntimeDays ?? (saved?.recurringDowntimeDays ?? (match?.recurringDowntimeDays || "N/A")),
-          incident: draft?.incident ?? (saved?.incident ?? (match?.incident || "No")),
-          rootCause: draft?.rootCause ?? (saved?.rootCause ?? (match?.rootCause || "")),
-          correctiveAction: draft?.correctiveAction ?? (saved?.correctiveAction ?? (match?.correctiveAction || "")),
-          preventiveAction: draft?.preventiveAction ?? (saved?.preventiveAction ?? (match?.preventiveAction || "")),
-          partsReplaced: draft?.partsReplaced ?? (saved?.partsReplaced ?? "N/A"),
-          followUpAction: draft?.followUpAction ?? (saved?.followUpAction ?? (match?.followUpAction || "N/A")),
-          anrNo: draft?.anrNo ?? (saved?.anrNo ?? "N/A"),
-          supportInfo: draft?.supportInfo ?? (saved?.supportInfo ?? ""),
-          supportPhotoUrl: draft?.supportPhotoUrl ?? (saved?.supportPhotoUrl ?? null),
-          supportPhotoName: draft?.supportPhotoName ?? (saved?.supportPhotoName ?? null),
-          status: "Monitoring" as const,
+    // Retain any legacy/manual record that is no longer present in a replacement
+    // source file, rather than silently deleting it from the workspace.
+    const unmatchedPersisted = persistedEntries
+      .filter(entry => !liveIncidentKeys.has(entry.incidentKey))
+      .map(toSummaryIncident);
+    const merged = (technicalIncidents.length ? [...mergedFromLive, ...unmatchedPersisted] : persistedEntries.map(toSummaryIncident))
+      .sort((a, b) => {
+        const timeToMinutes = (value: string) => {
+          const digits = value.replace(/[^0-9]/g, "");
+          const numeric = Number(digits);
+          return Number.isFinite(numeric) ? Math.floor(numeric / 100) * 60 + (numeric % 100) : Number.MAX_SAFE_INTEGER;
         };
+        return timeToMinutes(a.downtimeStart) - timeToMinutes(b.downtimeStart)
+          || a.rideCode.localeCompare(b.rideCode)
+          || a.incidentKey.localeCompare(b.incidentKey);
       });
-    }
 
     setIncidents(merged);
     setSelectedIncidentKey(current => merged.some(item => item.incidentKey === current) ? current : (merged[0]?.incidentKey || ""));
@@ -1020,7 +1039,7 @@ export default function DowntimeSummary() {
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
-                Download Summary Report (DOCX) ({selectedReadyCount} ready)
+                Download Report ({selectedReadyCount} ready)
               </Button>
             </div>
           )}
@@ -1028,103 +1047,6 @@ export default function DowntimeSummary() {
 
         {activeTab === "editor" && (
           <div className="mt-5 space-y-5">
-            {/* Executive in Charge section: Collapsible panel */}
-            <Card className="border-[#adbBda]/70 bg-white/95 shadow-sm">
-              <CardContent className="p-3 sm:p-4">
-                <button
-                  type="button"
-                  onClick={() => setIsExecutivePanelOpen(prev => !prev)}
-                  className="flex w-full items-center justify-between text-left transition-colors hover:opacity-90"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <ShieldAlert className="h-4 w-4 text-[#1e4ca1]" />
-                    <span className="text-xs font-extrabold text-[#162b5b]">
-                      Executives In Charge (Zone A &amp; Zone B)
-                    </span>
-                    <span className="text-[11px] text-slate-500 hidden sm:inline">
-                      • AM / PM assignments for {formatDisplayDate(dateKey)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-[#1e4ca1]">
-                      {isExecutivePanelOpen ? "Collapse" : "Edit Executives"}
-                    </span>
-                    {isExecutivePanelOpen ? (
-                      <ChevronDown className="h-4 w-4 text-[#1e4ca1]" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-[#1e4ca1]" />
-                    )}
-                  </div>
-                </button>
-
-                {isExecutivePanelOpen && (
-                  <div className="mt-4 border-t border-slate-100 pt-4 space-y-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Badge className="bg-blue-100 text-[#1e4ca1] font-bold text-[10px]">Zone A Executive</Badge>
-                        <span className="text-[11px] text-slate-500">Applies to Zone A technical incidents</span>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700">
-                            Zone A – AM Executive (Before 2:00 PM)
-                          </label>
-                          <Input
-                            placeholder="e.g. Firdaus, Adam"
-                            value={amExecutive}
-                            onChange={e => setAmExecutive(e.target.value)}
-                            className="mt-1 h-8 text-xs bg-[#fbfdff]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700">
-                            Zone A – PM Executive (2:00 PM onwards)
-                          </label>
-                          <Input
-                            placeholder="e.g. Yik Seng"
-                            value={pmExecutive}
-                            onChange={e => setPmExecutive(e.target.value)}
-                            className="mt-1 h-8 text-xs bg-[#fbfdff]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-3">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <Badge className="bg-amber-100 text-amber-900 font-bold text-[10px]">Zone B Executive</Badge>
-                        <span className="text-[11px] text-slate-500">Applies to Zone B technical incidents (falls back to Zone A if blank)</span>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700">
-                            Zone B – AM Executive (Before 2:00 PM)
-                          </label>
-                          <Input
-                            placeholder="e.g. Zone B AM Officer"
-                            value={zoneBAmExecutive}
-                            onChange={e => setZoneBAmExecutive(e.target.value)}
-                            className="mt-1 h-8 text-xs bg-[#fbfdff]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-slate-700">
-                            Zone B – PM Executive (2:00 PM onwards)
-                          </label>
-                          <Input
-                            placeholder="e.g. Zone B PM Officer"
-                            value={zoneBPmExecutive}
-                            onChange={e => setZoneBPmExecutive(e.target.value)}
-                            className="mt-1 h-8 text-xs bg-[#fbfdff]"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Handover Drafts Bar in Active Summary Form */}
             {activeEditorDrafts.length > 0 && (
               <Card className="border-amber-300 bg-amber-50/60 shadow-xs">
@@ -1236,6 +1158,45 @@ export default function DowntimeSummary() {
                         {z}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/55 p-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsExecutivePanelOpen(prev => !prev)}
+                      className="flex w-full items-center justify-between gap-2 text-left"
+                    >
+                      <span className="flex items-center gap-1.5 text-[11px] font-extrabold text-[#162b5b]">
+                        <ShieldAlert className="h-3.5 w-3.5 text-[#1e4ca1]" />
+                        Executive in charge · {zoneFilter === "ALL" ? "All zones" : zoneFilter}
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-[#1e4ca1]">
+                        {isExecutivePanelOpen ? "Hide" : "Assign"}
+                        {isExecutivePanelOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                    {isExecutivePanelOpen && (
+                      <div className="mt-2.5 space-y-3 border-t border-indigo-100 pt-2.5">
+                        {zoneFilter !== "Zone B" && (
+                          <div>
+                            <p className="mb-1.5 text-[10px] font-bold text-slate-600">Zone A executives</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Input placeholder="Zone A AM executive" value={amExecutive} onChange={e => setAmExecutive(e.target.value)} className="h-8 bg-white text-xs" />
+                              <Input placeholder="Zone A PM executive" value={pmExecutive} onChange={e => setPmExecutive(e.target.value)} className="h-8 bg-white text-xs" />
+                            </div>
+                          </div>
+                        )}
+                        {zoneFilter !== "Zone A" && (
+                          <div className={zoneFilter === "ALL" ? "border-t border-indigo-100 pt-2.5" : ""}>
+                            <p className="mb-1.5 text-[10px] font-bold text-slate-600">Zone B executives</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <Input placeholder="Zone B AM executive" value={zoneBAmExecutive} onChange={e => setZoneBAmExecutive(e.target.value)} className="h-8 bg-white text-xs" />
+                              <Input placeholder="Zone B PM executive" value={zoneBPmExecutive} onChange={e => setZoneBPmExecutive(e.target.value)} className="h-8 bg-white text-xs" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <Button

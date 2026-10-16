@@ -39,7 +39,10 @@ import {
   Gauge,
   ImagePlus,
   Layers3,
+  LayoutList,
   LockKeyhole,
+  PanelsTopLeft,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -52,7 +55,6 @@ import { toast } from "sonner";
 import {
   FaultCategory,
   filterWikiFaults,
-  INITIAL_TROUBLE_FAULTS,
   TroubleFault,
   WIKI_CATEGORIES,
   WIKI_RIDES,
@@ -96,6 +98,8 @@ export default function TroubleshootWiki() {
   const [manualUpload, setManualUpload] = useState<UploadedFileState | null>(null);
   const [photoUpload, setPhotoUpload] = useState<UploadedFileState | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [editingFault, setEditingFault] = useState<TroubleFault | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "cards">("list");
 
   // Detail Pop-Up Dialog
   const [activeFault, setActiveFault] = useState<TroubleFault | null>(null);
@@ -108,18 +112,32 @@ export default function TroubleshootWiki() {
   // DB queries and mutations
   const trpcUtils = trpc.useUtils();
   const { data: dbCards, isLoading } = trpc.faultpedia.list.useQuery();
+  const clearCardEditor = () => {
+    setCreateModalOpen(false);
+    setEditingFault(null);
+    setDraft(blankDraft);
+    setManualUpload(null);
+    setPhotoUpload(null);
+  };
+
   const createMutation = trpc.faultpedia.create.useMutation({
     onSuccess: async () => {
       await trpcUtils.faultpedia.list.invalidate();
       toast.success("Faultpedia card saved to the website system.");
-      setCreateModalOpen(false);
-      setDraft(blankDraft);
-      setManualUpload(null);
-      setPhotoUpload(null);
+      clearCardEditor();
     },
     onError: (err) => {
       toast.error(err.message || "Failed to save card.");
     },
+  });
+
+  const updateMutation = trpc.faultpedia.update.useMutation({
+    onSuccess: async () => {
+      await trpcUtils.faultpedia.list.invalidate();
+      toast.success("Faultpedia card updated.");
+      clearCardEditor();
+    },
+    onError: (err) => toast.error(err.message || "Failed to update this card."),
   });
 
   const deleteMutation = trpc.faultpedia.delete.useMutation({
@@ -169,9 +187,9 @@ export default function TroubleshootWiki() {
         };
       });
 
-    // The supplied reference cards remain available as a starter library. Saved
-    // site records appear first and remain visible together with those references.
-    return [...savedCards, ...INITIAL_TROUBLE_FAULTS];
+    // Faultpedia is an operator-owned library. Seed examples are intentionally
+    // excluded so the list only contains records entered by the team.
+    return savedCards;
   }, [dbCards]);
 
   const displayedFaults = useMemo(
@@ -263,26 +281,45 @@ export default function TroubleshootWiki() {
       return;
     }
     const ride = WIKI_RIDES.find((item) => item.code === draft.rideCode);
-
-    createMutation.mutate({
+    const payload = {
       rideCode: draft.rideCode,
       rideName: ride?.subtitle || draft.rideCode,
       title: draft.title.trim(),
-      faultCode: "Reference",
-      severity: "Watch",
+      faultCode: editingFault?.faultCode || "Reference",
       category: draft.category,
       description: draft.symptom.trim(),
       rootCause: draft.rootCause.trim(),
-      correctiveAction:
-        draft.correctiveAction.trim() ||
-        "Review the incident and complete approved troubleshooting steps.",
+      correctiveAction: draft.correctiveAction.trim() || "Review the incident and complete approved troubleshooting steps.",
       preventiveAction: draft.preventiveAction.trim() || "Add a planned preventive action.",
-      referenceCount: 0,
       manualScreenshotName: manualUpload ? manualUpload.name : null,
       manualScreenshotUrl: manualUpload ? manualUpload.url : null,
       supportPhotoName: photoUpload ? photoUpload.name : null,
       supportPhotoUrl: photoUpload ? photoUpload.url : null,
+    };
+
+    if (editingFault?.dbId) {
+      updateMutation.mutate({ id: editingFault.dbId, ...payload });
+    } else {
+      createMutation.mutate({ ...payload, severity: "Watch", referenceCount: 0 });
+    }
+  };
+
+  const openFaultEditor = (fault: TroubleFault) => {
+    if (!fault.dbId) return;
+    setEditingFault(fault);
+    setDraft({
+      rideCode: fault.rideCode,
+      title: fault.title,
+      category: fault.category,
+      symptom: fault.symptom,
+      rootCause: fault.rootCause,
+      correctiveAction: fault.correctiveActions.map((action, index) => `${index + 1}. ${action}`).join("\n"),
+      preventiveAction: fault.preventiveAction,
     });
+    setManualUpload(fault.manualScreenshotUrl ? { name: fault.manualScreenshotName || "Manual screenshot", url: fault.manualScreenshotUrl } : null);
+    setPhotoUpload(fault.supportPhotoUrl ? { name: fault.supportPhotoName || "Supporting photo", url: fault.supportPhotoUrl } : null);
+    setDetailModalOpen(false);
+    setCreateModalOpen(true);
   };
 
   const openFaultDetail = (fault: TroubleFault) => {
@@ -306,11 +343,11 @@ export default function TroubleshootWiki() {
             </p>
           </div>
           <Button
-            onClick={() => setCreateModalOpen(true)}
+            onClick={() => { setEditingFault(null); setDraft(blankDraft); setManualUpload(null); setPhotoUpload(null); setCreateModalOpen(true); }}
             className="h-10 shrink-0 gap-2 bg-emerald-700 px-4 font-bold text-white shadow-lg shadow-emerald-900/15 hover:bg-emerald-800"
           >
             <Plus className="h-4 w-4" />
-            Create troubleshooting card
+            {editingFault ? "Edit troubleshooting card" : "Create troubleshooting card"}
           </Button>
         </header>
 
@@ -429,18 +466,24 @@ export default function TroubleshootWiki() {
 
             {/* Fault Cards Listing: Click opens Window Pop-Up, NO severity tag */}
             <section className="rounded-2xl border border-[#b3bfdc]/65 bg-white/95 shadow-[0_12px_30px_rgba(55,71,132,0.08)]">
-              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-5 py-4">
                 <div>
                   <p className="text-sm font-extrabold text-[#27345e]">
                     Fault cards · {visibleRideLabel}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Click any fault card to open its troubleshooting window pop-up with full details and photos.
+                    Click a saved fault to review or edit its troubleshooting details.
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-slate-500">
-                  {displayedFaults.length} card{displayedFaults.length === 1 ? "" : "s"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">
+                    {displayedFaults.length} card{displayedFaults.length === 1 ? "" : "s"}
+                  </span>
+                  <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" aria-label="Faultpedia view mode">
+                    <button type="button" onClick={() => setViewMode("list")} aria-label="List view" className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}><LayoutList className="h-4 w-4" /></button>
+                    <button type="button" onClick={() => setViewMode("cards")} aria-label="Large card view" className={`rounded-md p-1.5 ${viewMode === "cards" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}><PanelsTopLeft className="h-4 w-4" /></button>
+                  </div>
+                </div>
               </div>
 
               {isLoading ? (
@@ -448,62 +491,33 @@ export default function TroubleshootWiki() {
                   Loading Faultpedia records...
                 </div>
               ) : displayedFaults.length ? (
-                <div className="divide-y divide-slate-100 p-2 sm:p-4">
+                <div className={viewMode === "cards" ? "grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3" : "divide-y divide-slate-300 p-2 sm:p-4"}>
                   {displayedFaults.map((fault) => (
                     <div
                       key={fault.id}
-                      className="group flex items-center gap-1 rounded-xl transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-emerald-500"
+                      className={`group flex gap-1 rounded-xl border border-transparent transition hover:border-emerald-200 hover:bg-emerald-50/30 focus-within:ring-2 focus-within:ring-emerald-500 ${viewMode === "cards" ? "min-h-[180px] flex-col bg-slate-50/65 p-1" : "items-center"}`}
                     >
-                    <button
-                      onClick={() => openFaultDetail(fault)}
-                      className="flex w-full min-w-0 flex-1 items-center justify-between gap-3 rounded-xl p-3.5 text-left transition focus:outline-none"
-                    >
-                      <div className="flex min-w-0 flex-1 items-start gap-3">
-                        <RideGlyph rideCode={fault.rideCode} />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-extrabold text-slate-800 group-hover:text-emerald-800">
-                            {fault.title}
-                          </p>
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            Fault code · <span className="font-mono font-semibold text-slate-700">{fault.faultCode}</span>
-                            <span className="mx-1.5 text-slate-300">•</span>
-                            <span className="font-semibold text-slate-600">{fault.rideCode}</span>
-                            <span className="text-slate-400"> ({fault.rideName})</span>
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center gap-2">
-                        {/* Only category badge, NO severity tag as requested */}
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-                          {fault.category}
-                        </span>
-                        {(fault.supportPhotoUrl || fault.manualScreenshotUrl) && (
-                          <span
-                            title="Has photo attachment"
-                            className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"
-                          >
-                            <Camera className="h-3.5 w-3.5" />
-                          </span>
-                        )}
-                        <span className="text-xs font-bold text-emerald-700 group-hover:translate-x-0.5 transition-transform">
-                          Open →
-                        </span>
-                      </div>
-                    </button>
-                    {fault.dbId && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => requestFaultDeletion(fault)}
-                        aria-label={`Delete ${fault.title}`}
-                        title="Delete saved card"
-                        className="mr-2 h-9 w-9 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                      <button
+                        onClick={() => openFaultDetail(fault)}
+                        className={`flex min-w-0 flex-1 gap-3 rounded-xl p-3.5 text-left transition focus:outline-none ${viewMode === "cards" ? "flex-col justify-between" : "items-center justify-between"}`}
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                          <RideGlyph rideCode={fault.rideCode} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-extrabold text-slate-800 group-hover:text-emerald-800">{fault.title}</p>
+                            <p className="mt-0.5 text-xs text-slate-500">Fault code · <span className="font-mono font-semibold text-slate-700">{fault.faultCode}</span></p>
+                            {viewMode === "cards" && <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-slate-600">{fault.symptom}</p>}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{fault.category}</span>
+                          {(fault.supportPhotoUrl || fault.manualScreenshotUrl) && <span title="Has photo attachment" className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"><Camera className="h-3.5 w-3.5" /></span>}
+                          <ChevronRight className="h-4 w-4 text-emerald-700" aria-hidden="true" />
+                        </div>
+                      </button>
+                      {fault.dbId && (
+                        <Button type="button" variant="ghost" size="icon" onClick={() => requestFaultDeletion(fault)} aria-label={`Delete ${fault.title}`} title="Delete saved card" className={`h-9 w-9 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-700 ${viewMode === "cards" ? "mb-2 mr-2 self-end" : "mr-2"}`}><Trash2 className="h-4 w-4" /></Button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -540,7 +554,7 @@ export default function TroubleshootWiki() {
               />
               <MetricTile
                 icon={Wrench}
-                value={String(allFaults.filter((f) => !!f.dbId).length || "6")}
+                value={String(allFaults.filter((f) => !!f.dbId).length)}
                 label="Saved records"
                 tone="text-emerald-700 bg-emerald-50"
               />
@@ -688,23 +702,12 @@ export default function TroubleshootWiki() {
                 </div>
               </div>
 
-              <DialogFooter className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5">
-                {activeFault.dbId ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDetailModalOpen(false);
-                      requestFaultDeletion(activeFault);
-                    }}
-                    className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                  >
-                    <Trash2 className="mr-1.5 h-4 w-4" />
-                    Delete card
-                  </Button>
-                ) : <span />}
-                <Button onClick={() => setDetailModalOpen(false)} className="bg-slate-700 text-white hover:bg-slate-800">
-                  Close window
-                </Button>
+              <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+                <div className="flex gap-2">
+                  {activeFault.dbId && <Button variant="outline" onClick={() => openFaultEditor(activeFault)} className="border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50"><Pencil className="mr-1.5 h-4 w-4" />Edit details</Button>}
+                  {activeFault.dbId && <Button variant="outline" onClick={() => { setDetailModalOpen(false); requestFaultDeletion(activeFault); }} className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"><Trash2 className="mr-1.5 h-4 w-4" />Delete card</Button>}
+                </div>
+                <Button onClick={() => setDetailModalOpen(false)} className="bg-slate-700 text-white hover:bg-slate-800">Close window</Button>
               </DialogFooter>
             </div>
           )}
@@ -744,7 +747,7 @@ export default function TroubleshootWiki() {
       </AlertDialog>
 
       {/* CREATE TROUBLESHOOTING CARD MODAL */}
-      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+      <Dialog open={createModalOpen} onOpenChange={(open) => { if (!open && !createMutation.isPending && !updateMutation.isPending) clearCardEditor(); else setCreateModalOpen(open); }}>
         <DialogContent
           showCloseButton={false}
           className="max-h-[92vh] max-w-5xl overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl sm:max-w-5xl"
@@ -754,14 +757,14 @@ export default function TroubleshootWiki() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <DialogTitle className="text-xl font-black text-[#24325e]">
-                  Create troubleshooting card
+                  {editingFault ? "Edit troubleshooting card" : "Create troubleshooting card"}
                 </DialogTitle>
                 <DialogDescription id="troubleshoot-card-subtitle" className="mt-1 text-sm">
-                  Turn a recurring downtime incident into a permanent troubleshooting reference in Faultpedia.
+                  {editingFault ? "Update the saved fault details, actions, and attached references." : "Turn a recurring downtime incident into a permanent troubleshooting reference in Faultpedia."}
                 </DialogDescription>
               </div>
               <button
-                onClick={() => setCreateModalOpen(false)}
+                onClick={clearCardEditor}
                 aria-label="Close create troubleshooting card modal"
                 className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
               >
@@ -906,17 +909,17 @@ export default function TroubleshootWiki() {
             <div className="flex w-full gap-2 sm:w-auto">
               <Button
                 variant="outline"
-                onClick={() => setCreateModalOpen(false)}
+                onClick={clearCardEditor}
                 className="flex-1 bg-white sm:flex-none"
               >
                 Cancel
               </Button>
               <Button
                 onClick={saveCard}
-                disabled={createMutation.isPending || isUploading}
+                disabled={createMutation.isPending || updateMutation.isPending || isUploading}
                 className="flex-1 bg-emerald-700 text-white hover:bg-emerald-800 sm:flex-none"
               >
-                {createMutation.isPending ? "Saving to database..." : "Save troubleshooting card"}
+                {createMutation.isPending || updateMutation.isPending ? "Saving to database..." : editingFault ? "Save changes" : "Save troubleshooting card"}
               </Button>
             </div>
           </DialogFooter>

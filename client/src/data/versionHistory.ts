@@ -9,9 +9,32 @@ export type VersionRecord = {
   isCurrent?: boolean;
 };
 
-export const CURRENT_VERSION = "v1.43";
+export const CURRENT_VERSION = "v1.44";
 
 export const VERSION_HISTORY: VersionRecord[] = [
+  {
+    version: "v1.44",
+    commit: "pending",
+    date: "2026-10-16",
+    time: "12:33 GMT+8",
+    timestamp: "2026-10-16 12:33:41",
+    title: "Summary Executive Scoping, Faultpedia & PM Re-editing, Chronological Ordering & Export Scoping",
+    tasks: [
+      "Removed the separate Executive in Charge card from above the Downtime Summary workspace columns.",
+      "Embedded scoped Executive in Charge controls directly within the Today's Downtime panel beneath the zone tabs, allowing clear AM and PM executive assignments per zone.",
+      "Enforced chronological morning-to-afternoon ordering (earliest downtime start first, followed by ride code) for daily downtime summary incidents.",
+      "Restricted incident zone classification to the official operational zone allocation, correcting historical records where attractions appeared under the opposite zone.",
+      "Shortened the summary download button label to 'Download Report ({n} ready)'.",
+      "Corrected the summary data-merge pipeline to retain every daily downtime incident in the workspace after export while including only ticked ready records in the generated report.",
+      "Moved the Downtime Summary entry button from the Ride Incident Logs dropdown to the top right of the Analysis Studio header, displayed whenever a single date is selected.",
+      "Added re-editing capability for saved Faultpedia cards via an 'Edit details' action that reloads stored parameters, descriptions, and uploaded reference attachments.",
+      "Added a view mode toggle in Faultpedia to switch between compact list view and large card layout, and removed starter seed cards so only operator-entered records are presented.",
+      "Added re-editing capability for saved PM Tracker entries via an 'Edit log' action in the log detail dialogue.",
+      "Repositioned the PM Tracker 'Export Excel' button directly beside the Status dropdown filter, and scoped export output to the active calendar month and active search/status filters.",
+      "Passed all 52 Vitest unit tests, verified clean TypeScript compilation, and completed production build verification.",
+    ],
+    isCurrent: true,
+  },
   {
     version: "v1.43",
     commit: "pending",
@@ -29,7 +52,7 @@ export const VERSION_HISTORY: VersionRecord[] = [
       "Applied the supplied SkyWorlds park-map artwork as a fixed, light-blue and lavender layered workspace background behind cards across all dashboard pages.",
       "Verified exact calendar selections in both Analysis and Compare browser workflows, passed TypeScript checks and all 51 active regression tests, and completed a production build.",
     ],
-    isCurrent: true,
+    isCurrent: false,
   },
   {
     version: "v1.42",

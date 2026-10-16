@@ -454,12 +454,14 @@ export const appRouter = router({
           rideCode: z.string().optional(),
           status: z.enum(["Completed", "Pending", "In Progress"]).optional(),
           query: z.string().optional(),
+          monthKey: z.string().regex(/^\d{4}-\d{2}$/),
         })
       )
       .mutation(async ({ input }) => {
         const keyword = input.query?.trim().toLowerCase();
         const logs = (await listPmTrackerLogs()).filter((log) => {
           if (log.zone !== input.zone) return false;
+          if (!log.logDate.startsWith(input.monthKey)) return false;
           if (input.rideCode && log.rideCode !== input.rideCode) return false;
           if (input.status && log.status !== input.status) return false;
           if (!keyword) return true;

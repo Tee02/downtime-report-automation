@@ -1040,31 +1040,18 @@ function IncidentLogs({
   analysis,
   copied,
   onCopy,
-  singleSelectedDate,
-  isAllRidesSelected,
 }: {
   analysis: AnalysisResult;
   copied: boolean;
   onCopy: () => void;
-  singleSelectedDate?: string;
-  isAllRidesSelected: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const canOpenSummary = Boolean(singleSelectedDate && isAllRidesSelected);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={`${CARD_CLASS} overflow-hidden rounded-xl border bg-white/90`}>
       <CollapsibleTrigger className="flex w-full items-center gap-3 px-5 py-4 text-left"><span className="rounded-lg bg-blue-50 p-2 text-[#1e4ca1]"><FileText className="h-4 w-4" /></span><span className="min-w-0 flex-1"><EditableText contentKey="overview_incidents_title" defaultText="Ride Incident Logs" as="span" className="block text-base font-extrabold tracking-tight text-[#172c5b]" /><EditableText contentKey="overview_incidents_desc" defaultText="Scroll to review chronological incident remarks." as="span" className="mt-0.5 block text-xs text-slate-500" /></span><ChevronDown className={`h-4 w-4 text-[#1e4ca1] transition-transform ${open ? "rotate-180" : ""}`} /></CollapsibleTrigger>
       <CollapsibleContent className="border-t border-slate-100 px-5 pb-5 pt-4 sm:px-6">
         <div className="flex items-center justify-end gap-2.5">
-          {canOpenSummary && (
-            <Link href={`/summary?date=${singleSelectedDate}`}>
-              <Button size="sm" className="h-8 bg-[#1e4ca1] hover:bg-[#163a7d] text-white text-xs font-bold shadow-xs gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-yellow-300" />
-                Downtime Summary Page
-              </Button>
-            </Link>
-          )}
           <Button size="sm" onClick={onCopy} className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs gap-1.5">
             <Copy className="h-3.5 w-3.5" />
             {copied ? "Copied!" : "Copy for Excel"}
@@ -1623,25 +1610,25 @@ export default function AnalysisStudio() {
   };
 
   const singleSelectedDate = selectedDateKeys.size === 1 ? Array.from(selectedDateKeys)[0] : undefined;
-  const isAllRidesSelected = selectedRideCodes.length === 0;
 
   return (
     <DashboardLayout>
       <div className="min-h-[calc(100vh-2rem)] text-slate-900">
-        <header className="px-1 pt-1">
-          <EditableText
-            contentKey="analysis_page_title"
-            defaultText="Downtime Analysis Studio"
-            as="h1"
-            className="block text-3xl font-extrabold tracking-[-0.04em] text-[#162b5b] sm:text-4xl"
-          />
-          <EditableText
-            contentKey="analysis_page_subtitle"
-            defaultText={tab === "overview" ? "Find patterns, prioritise risk, and act on technical downtime." : "Compare operating periods and ride groups side by side."}
-            as="p"
-            className="mt-1 block text-sm text-slate-600"
-          />
-          <div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-lg bg-slate-200 p-1">
+        <header className="flex flex-col gap-4 px-1 pt-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <EditableText
+              contentKey="analysis_page_title"
+              defaultText="Downtime Analysis Studio"
+              as="h1"
+              className="block text-3xl font-extrabold tracking-[-0.04em] text-[#162b5b] sm:text-4xl"
+            />
+            <EditableText
+              contentKey="analysis_page_subtitle"
+              defaultText={tab === "overview" ? "Find patterns, prioritise risk, and act on technical downtime." : "Compare operating periods and ride groups side by side."}
+              as="p"
+              className="mt-1 block text-sm text-slate-600"
+            />
+            <div role="tablist" aria-label="Analysis views" className="mt-3 inline-flex rounded-lg bg-slate-200 p-1">
             <button
               role="tab"
               aria-selected={tab === "overview"}
@@ -1662,7 +1649,16 @@ export default function AnalysisStudio() {
             >
               Compare
             </button>
+            </div>
           </div>
+          {tab === "overview" && singleSelectedDate && (
+            <Link href={`/summary?date=${singleSelectedDate}`} className="shrink-0">
+              <Button size="sm" className="h-9 gap-1.5 bg-[#1e4ca1] px-3.5 text-xs font-bold text-white shadow-sm hover:bg-[#163a7d]">
+                <Sparkles className="h-3.5 w-3.5 text-yellow-200" />
+                Downtime Summary
+              </Button>
+            </Link>
+          )}
         </header>
 
         {reportsLoading ? (
@@ -1826,8 +1822,6 @@ export default function AnalysisStudio() {
                   analysis={analysis}
                   copied={copied}
                   onCopy={copyIncidentCards}
-                  singleSelectedDate={singleSelectedDate}
-                  isAllRidesSelected={isAllRidesSelected}
                 />
               </>
             ) : null}
