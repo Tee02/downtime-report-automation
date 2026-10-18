@@ -2,18 +2,38 @@
 // Uploads via Forge Server presigned URL to S3 (PUT direct).
 // Downloads return /manus-storage/{key} paths served via 307 redirect.
 
-import { head, put } from "@vercel/blob";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { awsCredentialsProvider } from "@vercel/functions/oidc";
 import { ENV } from "./_core/env";
 
-// Off Manus (e.g. on Vercel) there is no Forge storage; fall back to Vercel Blob
-// when BLOB_READ_WRITE_TOKEN is set. URLs keep the /manus-storage/{key} shape.
-export function useBlobStorage(): boolean {
-  return (!ENV.forgeApiUrl || !ENV.forgeApiKey) && !!process.env.BLOB_READ_WRITE_TOKEN;
+// Off Manus (e.g. on Vercel) there is no Forge storage; fall back to an S3 bucket
+// when S3_BUCKET_NAME is set. URLs keep the /manus-storage/{key} shape.
+export function useS3Storage(): boolean {
+  return (!ENV.forgeApiUrl || !ENV.forgeApiKey) && !!process.env.S3_BUCKET_NAME;
 }
 
-export async function blobSignedUrl(key: string): Promise<string> {
-  const blob = await head(key);
-  return blob.url;
+let _s3: S3Client | null = null;
+
+function getS3() {
+  if (!_s3) {
+    _s3 = new S3Client({
+      region: process.env.AWS_REGION,
+      // On Vercel's AWS integration, assume the role via OIDC; otherwise use the default AWS credential chain.
+      credentials: process.env.AWS_ROLE_ARN
+        ? awsCredentialsProvider({ roleArn: process.env.AWS_ROLE_ARN })
+        : undefined,
+    });
+  }
+  return _s3;
+}
+
+export async function s3SignedUrl(key: string): Promise<string> {
+  return getSignedUrl(
+    getS3(),
+    new GetObjectCommand({ Bucket: process.env.S3_BUCKET_NAME, Key: key }),
+    { expiresIn: 3600 },
+  );
 }
 
 function getForgeConfig() {
@@ -45,13 +65,16 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
-  if (useBlobStorage()) {
+  if (useS3Storage()) {
     const key = appendHashSuffix(normalizeKey(relKey));
-    await put(key, typeof data === "string" ? data : Buffer.from(data), {
-      access: "public",
-      contentType,
-      addRandomSuffix: false,
-    });
+    await getS3().send(
+      new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET_NAME,
+        Key: key,
+        Body: typeof data === "string" ? data : Buffer.from(data),
+        ContentType: contentType,
+      }),
+    );
     return { key, url: `/manus-storage/${key}` };
   }
 
@@ -99,7 +122,7 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
-  if (useBlobStorage()) return blobSignedUrl(normalizeKey(relKey));
+  if (useS3Storage()) return s3SignedUrl(normalizeKey(relKey));
 
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = normalizeKey(relKey);

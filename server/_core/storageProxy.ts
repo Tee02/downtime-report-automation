@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { ENV } from "./env";
-import { blobSignedUrl, useBlobStorage } from "../storage";
+import { s3SignedUrl, useS3Storage } from "../storage";
 
 export function registerStorageProxy(app: Express) {
   app.get("/manus-storage/*", async (req, res) => {
@@ -10,13 +10,14 @@ export function registerStorageProxy(app: Express) {
       return;
     }
 
-    if (useBlobStorage()) {
+    if (useS3Storage()) {
       try {
-        const url = await blobSignedUrl(key);
+        const url = await s3SignedUrl(key);
         res.set("Cache-Control", "no-store");
         res.redirect(307, url);
-      } catch {
-        res.status(404).send("File not found");
+      } catch (err) {
+        console.error("[StorageProxy] S3 failed:", err);
+        res.status(502).send("Storage proxy error");
       }
       return;
     }

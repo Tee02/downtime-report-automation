@@ -5,7 +5,7 @@ The app still runs on Manus unchanged. On Vercel, the Manus-only pieces are swap
 | Manus feature | On Vercel |
 | --- | --- |
 | Manus OAuth login | Operator passcode login (already in the sidebar) |
-| Forge file storage | Vercel Blob (`BLOB_READ_WRITE_TOKEN`) |
+| Forge file storage | AWS S3 bucket (`S3_BUCKET_NAME`) |
 | Manus MySQL | Any MySQL-compatible database (`DATABASE_URL`) |
 
 ## 1. Create a MySQL database
@@ -25,7 +25,9 @@ Any MySQL-compatible host works. TiDB Cloud Serverless has a free tier:
 
 ## 3. Add storage
 
-In the project, open **Storage → Create → Blob** and connect it. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
+In the project, open **Storage** and connect an **AWS S3** bucket through the Vercel AWS integration. It adds `S3_BUCKET_NAME`, `AWS_REGION` and `AWS_ROLE_ARN` automatically, and the app signs in to AWS with Vercel OIDC (no access keys needed).
+
+Outside Vercel, set `S3_BUCKET_NAME` and `AWS_REGION` plus the usual `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` instead of `AWS_ROLE_ARN`.
 
 ## 4. Environment variables
 
@@ -42,5 +44,5 @@ Redeploy after adding the variables. Each build runs the database migrations fir
 ## Known limits on Vercel
 
 - Uploads larger than about 4.5 MB are rejected by Vercel before they reach the app.
-- Files stored by Manus (including the sidebar logo at `/manus-storage/skyworldslogo_4b1f1436.jpg`) are not on Vercel. Upload them to the Blob store with the same file name to restore them.
-- Blob files are stored with unguessable URLs but are not access-controlled.
+- Files stored by Manus (including the sidebar logo at `/manus-storage/skyworldslogo_4b1f1436.jpg`) are not on Vercel. Upload them to the S3 bucket with the same file name (at the bucket root) to restore them.
+- The bucket stays private; the app hands out download links that expire after one hour.
