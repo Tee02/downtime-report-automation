@@ -1,11 +1,23 @@
 import type { Express } from "express";
 import { ENV } from "./env";
+import { blobSignedUrl, useBlobStorage } from "../storage";
 
 export function registerStorageProxy(app: Express) {
   app.get("/manus-storage/*", async (req, res) => {
     const key = (req.params as Record<string, string>)[0];
     if (!key) {
       res.status(400).send("Missing storage key");
+      return;
+    }
+
+    if (useBlobStorage()) {
+      try {
+        const url = await blobSignedUrl(key);
+        res.set("Cache-Control", "no-store");
+        res.redirect(307, url);
+      } catch {
+        res.status(404).send("File not found");
+      }
       return;
     }
 

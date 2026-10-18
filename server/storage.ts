@@ -2,7 +2,19 @@
 // Uploads via Forge Server presigned URL to S3 (PUT direct).
 // Downloads return /manus-storage/{key} paths served via 307 redirect.
 
+import { head, put } from "@vercel/blob";
 import { ENV } from "./_core/env";
+
+// Off Manus (e.g. on Vercel) there is no Forge storage; fall back to Vercel Blob
+// when BLOB_READ_WRITE_TOKEN is set. URLs keep the /manus-storage/{key} shape.
+export function useBlobStorage(): boolean {
+  return (!ENV.forgeApiUrl || !ENV.forgeApiKey) && !!process.env.BLOB_READ_WRITE_TOKEN;
+}
+
+export async function blobSignedUrl(key: string): Promise<string> {
+  const blob = await head(key);
+  return blob.url;
+}
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
@@ -33,6 +45,16 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
+  if (useBlobStorage()) {
+    const key = appendHashSuffix(normalizeKey(relKey));
+    await put(key, typeof data === "string" ? data : Buffer.from(data), {
+      access: "public",
+      contentType,
+      addRandomSuffix: false,
+    });
+    return { key, url: `/manus-storage/${key}` };
+  }
+
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
 
@@ -77,6 +99,8 @@ export async function storageGet(relKey: string): Promise<{ key: string; url: st
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
+  if (useBlobStorage()) return blobSignedUrl(normalizeKey(relKey));
+
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = normalizeKey(relKey);
 
